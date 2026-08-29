@@ -1,0 +1,28 @@
+# Keep this fast. A hook that makes committing slow gets bypassed, and a
+# bypassed hook protects nothing. Type checking, tests and the layering gate
+# run in CI.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.5
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      # A sync run writes the owner's whole corpus into a folder, and a trace
+      # map names the private file every character came from. Both are one
+      # `git add .` away from a public repository.
+      - id: check-added-large-files
+      # ADR-0008 says a credential stops a run. It should also stop a commit.
+      - id: detect-private-key

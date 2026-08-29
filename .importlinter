@@ -1,0 +1,111 @@
+[importlinter]
+include_external_packages = True
+root_packages =
+    musubi
+
+# The direction, asserted. The stdlib-only rule for the domain is a separate
+# check in tests/test_architecture.py, because import-linter cannot express
+# "everything except the standard library".
+#
+# The parentheses mark a layer as optional. Layers are named here before the
+# package exists so that the first module to appear in one is already governed
+# -- a layering rule written after the code is a rule written around it.
+[importlinter:contract:layers]
+name = Layer dependency direction
+type = layers
+layers =
+    (musubi.interfaces)
+    (musubi.evaluation)
+    (musubi.application)
+    (musubi.infrastructure)
+    (musubi.ports)
+    (musubi.domain)
+exhaustive = false
+
+# ADR-0007: musubi reads exports the owner already has, and never a service.
+# That is the whole boundary, and it is why there is no token store, no OAuth
+# flow and no API version to chase. A tool that cannot reach a network cannot
+# leak to one, and unlike tsumugi there is no adapter to carve out -- there is
+# nothing musubi needs from anywhere else.
+[importlinter:contract:no-network]
+name = Nothing in musubi touches the network
+type = forbidden
+source_modules =
+    musubi
+forbidden_modules =
+    socket
+    ssl
+    http
+    urllib
+    ftplib
+    smtplib
+    asyncio
+
+# ADR-0010: musubi writes what its consumers publish as contracts and imports
+# neither of them. The conformance tests read schemas; nothing under src/ may
+# name either package.
+[importlinter:contract:the-consumers-are-never-imported]
+name = musubi imports neither tsumugi nor kiseki, anywhere
+type = forbidden
+source_modules =
+    musubi
+forbidden_modules =
+    tsumugi
+    kiseki
+
+# --- Parked until the packages they name exist. ------------------------------
+# import-linter refuses a contract whose modules it cannot resolve, so these
+# stay commented until their first module lands. tests/test_layering_config.py
+# turns the build red the moment one of them could be switched on and has not
+# been -- a comment is exactly the kind of promise that gets forgotten.
+
+# ADR-0001 and the layer table in AGENTS.md. The domain knows about no layer
+# above it, which is what makes it testable with nothing else constructed.
+# [importlinter:contract:domain-purity]
+# name = The domain layer knows nothing below it
+# type = forbidden
+# source_modules =
+#     musubi.domain
+# forbidden_modules =
+#     musubi.ports
+#     musubi.application
+#     musubi.infrastructure
+#     musubi.interfaces
+#     musubi.evaluation
+
+# The domain does its own I/O nowhere. Opening an export is a source adapter's
+# job; where a synced folder lives is configuration's job. The domain is handed
+# bytes and hands back records, which is what lets the whole conversion be
+# tested without a filesystem -- and what makes ADR-0003's reproducibility
+# claim mean something.
+# [importlinter:contract:domain-no-io]
+# name = The domain layer does not touch the filesystem
+# type = forbidden
+# source_modules =
+#     musubi.domain
+# forbidden_modules =
+#     pathlib
+#     os
+#     sqlite3
+#     zipfile
+#     tomllib
+#     argparse
+
+# ADR-0008: a credential stops the run. The screener that decides what a
+# credential is has a conservative stdlib implementation in the core and an
+# optional adapter that asks the real `mamori`. Only the adapter may know
+# mamori exists; everything above is handed a screener or the default. Listed
+# layer by layer rather than by excluding the adapters, so that a new
+# infrastructure package has to be added here -- the same maintenance
+# obligation as the layer table, and the same reason for it.
+# [importlinter:contract:the-screener-is-optional]
+# name = Only the adapters may know about mamori
+# type = forbidden
+# source_modules =
+#     musubi.domain
+#     musubi.ports
+#     musubi.application
+#     musubi.evaluation
+#     musubi.interfaces
+# forbidden_modules =
+#     mamori

@@ -1,0 +1,113 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "musubi"
+version = "0.1.0.dev0"
+description = "Local-first ingestion for generative AI. Turn exports and folders into clean, normalized documents that can still point back at the byte they came from."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Nananananana" }]
+keywords = ["ingestion", "etl", "provenance", "connectors", "privacy", "rag", "local-first", "japanese"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Natural Language :: Japanese",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Text Processing :: Filters",
+    "Typing :: Typed",
+]
+
+# Zero. Not "few". See docs/adr/0001-the-domain-depends-on-nothing.md -- musubi
+# is pointed at the folder that holds everything the owner has ever written,
+# and every runtime dependency is code with unsupervised read access to it.
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-cov",
+    "hypothesis>=6.90",
+    "ruff>=0.16",
+    "mypy>=1.10",
+    "import-linter>=2",
+    "pre-commit",
+    # Validates real manifests and trace maps against the published contracts.
+    # There is no pydantic in the core (ADR-0001), so the schema and the
+    # dataclasses are kept in step by a test rather than derived from one
+    # another.
+    "jsonschema>=4",
+]
+
+# There is deliberately no `siblings` extra yet. The only sibling musubi ever
+# imports is `mamori`, in one optional adapter (ADR-0008), and that seam test
+# lands in v0.6. `tsumugi` and `kiseki` are never imported at all -- musubi
+# writes their published contracts (ADR-0010), so the tests that check
+# conformance read schemas rather than packages. Neither project is published
+# to an index, so declaring an extra now would make it unresolvable for
+# everyone including CI.
+
+[project.urls]
+Homepage = "https://github.com/Nananananana/musubi"
+Repository = "https://github.com/Nananananana/musubi"
+Issues = "https://github.com/Nananananana/musubi/issues"
+Changelog = "https://github.com/Nananananana/musubi/blob/main/CHANGELOG.md"
+
+[project.scripts]
+musubi = "musubi.interfaces.cli.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/musubi"]
+
+# The contracts will ship inside the wheel: a consumer validating a manifest or
+# a trace map should not have to fetch a schema from the internet, and an
+# offline tool whose schema lives on someone else's server is not offline.
+#
+# `schemas/` is empty until v0.2 writes `sync-manifest-1.json` and
+# `trace-map-1.json`, and hatchling refuses to build against a force-include
+# that resolves to nothing -- so the block below is commented rather than
+# written later from memory. `tests/test_documentation.py` turns the build red
+# the moment a schema exists without it.
+#
+# [tool.hatch.build.targets.wheel.force-include]
+# "schemas" = "musubi/schemas"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "C4", "S", "RUF"]
+ignore = [
+    "S101",   # assert: this is a test suite convention
+    # Full-width and CJK characters are the subject matter, not a typo. A
+    # Notion export written on a Japanese machine mixes ＵＲＬ and URL in the
+    # same paragraph, and offset-preserving normalization exists precisely
+    # because those are the same string and different lengths. Both forms
+    # appear in code, docstrings and fixtures on purpose.
+    "RUF001",
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S105", "S106", "S108"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src/musubi"]
+strict = true
+warn_unreachable = true
+
+[tool.coverage.run]
+source = ["src/musubi"]
