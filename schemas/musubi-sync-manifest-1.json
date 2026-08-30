@@ -1,0 +1,267 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Nananananana/musubi/schemas/musubi-sync-manifest-1.json",
+  "title": "SyncManifest",
+  "description": "What one run of musubi did, or -- when kind is 'plan' -- what it would have done. musubi is the reference producer, not required to be the only one. THIS SCHEMA DESCRIBES SHAPE ONLY: it cannot check that run_id re-derives, that the coverage totals add up, or that a removal names a unit that was emitted. See docs/contracts.md, section 'What these schemas cannot say'.",
+  "type": "object",
+  "required": [
+    "contract",
+    "run_id",
+    "kind",
+    "created_at",
+    "musubi_version",
+    "sources",
+    "rulesets",
+    "converters",
+    "screener",
+    "emitter",
+    "artefacts",
+    "removals",
+    "skipped",
+    "findings",
+    "allowed",
+    "coverage",
+    "limits"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "contract": {
+      "description": "Not yet frozen. A consumer that does not recognise this refuses the manifest rather than guessing at it (ADR-0002).",
+      "type": "string",
+      "pattern": "^musubi\\.sync-manifest/1(-draft)?$"
+    },
+    "run_id": {
+      "description": "sha256 over exactly the inputs that determined the output, canonicalized by RFC 8785 (ADR-0015). NOT created_at, so two runs of the same input share an id. NOT the source's root path, so the same corpus on two machines has the same id. NOT CHECKED HERE: that it re-derives -- that is what `musubi verify` is for, and no schema can do it.",
+      "$ref": "#/$defs/hash"
+    },
+    "kind": {
+      "description": "'plan' wrote nothing (ADR-0012); 'sync' promoted what it staged. Both run the same pipeline and share a run_id, because the kind is metadata about which command was typed rather than about what the run would produce.",
+      "enum": ["plan", "sync"]
+    },
+    "created_at": {
+      "description": "When the run happened. Metadata, and deliberately excluded from run_id.",
+      "type": "string"
+    },
+    "musubi_version": { "type": "string", "minLength": 1 },
+    "sources": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/source" }
+    },
+    "rulesets": {
+      "description": "The cleansing packs in force. Every rule in them carries its own evidence and review date (ADR-0009); this names which packs, at which version.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "version"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "version": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "converters": {
+      "description": "Which implementations built this corpus, so that a re-derivation can use the same ones.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "screener": {
+      "description": "The instrument that looked for credentials. Its recall is a property of that instrument, and this names it so a reader can go and look it up (ADR-0017).",
+      "type": "string",
+      "minLength": 1
+    },
+    "emitter": { "type": "string", "minLength": 1 },
+    "artefacts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/artefact" }
+    },
+    "removals": {
+      "description": "Every firing of every cleansing rule. Long and boring on purpose: an account nobody reads is still an account somebody CAN read, and the alternative is an artefact that cannot be appealed (ADR-0005).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/removal" }
+    },
+    "skipped": {
+      "description": "Everything seen and not carried, with its reason. A run that says '412 documents' and nothing else cannot be told apart from one that quietly excluded half the folder.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/skip" }
+    },
+    "findings": {
+      "description": "Everything the screener matched, including hits that were allowed. A hit that was waved through is still a hit somebody should be able to find later.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    },
+    "allowed": {
+      "description": "rule:unit_key pairs the owner looked at and decided against. Recorded because an exemption nobody can see is an exemption that outlives its reason (ADR-0008).",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "coverage": {
+      "description": "The denominators, published beside the numerators. `emitted` alone would let a reader compute a ratio against the wrong total, and they would.",
+      "type": "object",
+      "required": [
+        "units_read",
+        "emitted",
+        "skipped",
+        "characters",
+        "traceable_characters"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "units_read": { "type": "integer", "minimum": 0 },
+        "emitted": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 },
+        "characters": { "type": "integer", "minimum": 0 },
+        "traceable_characters": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "limits": {
+      "description": "What this document does not say, carried IN the document rather than in the documentation, because the artefact travels and the documentation does not. A manifest with none is a manifest claiming it has none.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+
+    "span": {
+      "description": "A half-open range, [start, end). NOT CHECKED HERE: that end is at least start.",
+      "type": "array",
+      "items": { "type": "integer", "minimum": 0 },
+      "minItems": 2,
+      "maxItems": 2
+    },
+
+    "source": {
+      "type": "object",
+      "required": ["source_id", "adapter", "key_derivation", "root", "units", "caps"],
+      "additionalProperties": false,
+      "properties": {
+        "source_id": { "type": "string", "minLength": 1 },
+        "adapter": { "type": "string", "minLength": 1 },
+        "key_derivation": {
+          "description": "How this source derived its keys (ADR-0006). 'path' is the weak form -- moving a file looks like a delete plus an add -- and is declared rather than left to be discovered.",
+          "type": "string",
+          "minLength": 1
+        },
+        "root": {
+          "description": "Where the source read from, for a reader. Excluded from run_id: an id embedding an absolute path is an id nobody else can re-derive.",
+          "type": "string"
+        },
+        "units": { "type": "integer", "minimum": 0 },
+        "caps": {
+          "description": "Every bound that shortened what this source offered. A cap that shortens coverage appears here rather than being inferred from a shortfall (ADR-0005).",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+
+    "artefact": {
+      "type": "object",
+      "required": [
+        "path",
+        "content_hash",
+        "trace_map",
+        "source",
+        "converter",
+        "layer",
+        "characters",
+        "traceable_characters"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "content_hash": { "$ref": "#/$defs/hash" },
+        "trace_map": {
+          "description": "Where this artefact's TraceMap was written. Outside the folder a consumer ingests, so that a map is not itself ingested as a document.",
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "object",
+          "required": ["source_id", "unit_key"],
+          "additionalProperties": false,
+          "properties": {
+            "source_id": { "type": "string", "minLength": 1 },
+            "unit_key": { "type": "string", "minLength": 1 }
+          }
+        },
+        "converter": { "type": "string", "minLength": 1 },
+        "layer": {
+          "description": "What kind of statement this document is, in kiseki's vocabulary. musubi emits 'fact' and 'measure' and never 'interpretation': an interpretation needs a reading, a reading needs a model, and musubi has none (ADR-0010).",
+          "enum": ["fact", "measure"]
+        },
+        "characters": { "type": "integer", "minimum": 0 },
+        "traceable_characters": { "type": "integer", "minimum": 0 }
+      }
+    },
+
+    "removal": {
+      "type": "object",
+      "required": [
+        "unit_key",
+        "rule",
+        "kind",
+        "span",
+        "removed_characters",
+        "removed_sha256"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "unit_key": { "type": "string", "minLength": 1 },
+        "rule": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "minLength": 1 },
+        "span": { "$ref": "#/$defs/span" },
+        "removed_characters": { "type": "integer", "minimum": 0 },
+        "removed_sha256": {
+          "description": "The hash of what was taken, and NEVER the value. The removed thing is usually the sensitive thing, and a manifest that quoted it would re-publish, into a file people commit, exactly what the run was for (ADR-0005).",
+          "$ref": "#/$defs/hash"
+        }
+      }
+    },
+
+    "skip": {
+      "type": "object",
+      "required": ["source_id", "origin", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "source_id": { "type": "string", "minLength": 1 },
+        "origin": { "type": "string", "minLength": 1 },
+        "reason": {
+          "description": "A stable token a reader can count and filter on: unknown_format, machinery, too_large, undecodable, no_converter, credential, outside_the_root, directory_symlink.",
+          "type": "string",
+          "minLength": 1
+        },
+        "detail": {
+          "description": "The sentence a person needs. Empty when the reason says it all.",
+          "type": "string"
+        }
+      }
+    },
+
+    "finding": {
+      "description": "What the screener matched, by unit and by kind, and DELIBERATELY NOT WHERE (ADR-0019). A finding points at a credential still in the owner's source file and still valid; an offset and a length in a file people commit is the targeting information an attacker would want, and the owner does not need it to act. The terminal report has both, because a person looking at their own screen is who ADR-0008 stops the run for.",
+      "type": "object",
+      "required": ["unit_key", "rule", "label", "matched_sha256"],
+      "additionalProperties": false,
+      "properties": {
+        "unit_key": { "type": "string", "minLength": 1 },
+        "rule": { "type": "string", "minLength": 1 },
+        "label": {
+          "description": "What to call it in a message: 'an AWS access key id'. 'signature 14 matched' is not actionable.",
+          "type": "string",
+          "minLength": 1
+        },
+        "matched_sha256": {
+          "description": "The hash, and never the value. The run stops so that the secret does not travel; a manifest quoting it would send it to a file instead of a corpus, which is not an improvement.",
+          "$ref": "#/$defs/hash"
+        }
+      }
+    }
+  }
+}

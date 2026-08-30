@@ -64,18 +64,11 @@ musubi = "musubi.interfaces.cli.main:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/musubi"]
 
-# The contracts will ship inside the wheel: a consumer validating a manifest or
-# a trace map should not have to fetch a schema from the internet, and an
-# offline tool whose schema lives on someone else's server is not offline.
-#
-# `schemas/` is empty until v0.2 writes `sync-manifest-1.json` and
-# `trace-map-1.json`, and hatchling refuses to build against a force-include
-# that resolves to nothing -- so the block below is commented rather than
-# written later from memory. `tests/test_documentation.py` turns the build red
-# the moment a schema exists without it.
-#
-# [tool.hatch.build.targets.wheel.force-include]
-# "schemas" = "musubi/schemas"
+# The contracts ship inside the wheel: a consumer validating a manifest or a
+# trace map should not have to fetch a schema from the internet, and an offline
+# tool whose schema lives on someone else's server is not offline.
+[tool.hatch.build.targets.wheel.force-include]
+"schemas" = "musubi/schemas"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

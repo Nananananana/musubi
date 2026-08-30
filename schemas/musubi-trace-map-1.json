@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Nananananana/musubi/schemas/musubi-trace-map-1.json",
+  "title": "TraceMap",
+  "description": "Where every character of one artefact came from. musubi is the reference producer, not required to be the only one. THIS SCHEMA DESCRIBES SHAPE ONLY: the invariant the map exists for -- that the segments cover every character of the artefact exactly once -- is not expressible in JSON Schema. See docs/contracts.md, section 'What these schemas cannot say'.",
+  "type": "object",
+  "required": [
+    "contract",
+    "artefact",
+    "source",
+    "converter",
+    "source_unit",
+    "coverage",
+    "segments"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "contract": {
+      "description": "Not yet frozen. A consumer that does not recognise this refuses the map rather than guessing at it. The -draft suffix is what says the freeze has not happened; it is dropped when a second program has produced and consumed one (ADR-0002).",
+      "type": "string",
+      "pattern": "^musubi\\.trace-map/1(-draft)?$"
+    },
+    "artefact": {
+      "description": "The document this map is about, as musubi wrote it.",
+      "type": "object",
+      "required": ["path", "content_hash"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "description": "Relative to the destination, and derived from the unit_key rather than from the source's filename (ADR-0013).",
+          "type": "string",
+          "minLength": 1
+        },
+        "content_hash": { "$ref": "#/$defs/hash" }
+      }
+    },
+    "source": {
+      "description": "What the artefact was made from, and what it takes to read an offset in it.",
+      "type": "object",
+      "required": [
+        "source_id",
+        "unit_key",
+        "content_hash",
+        "media_type",
+        "encoding",
+        "bom_bytes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source_id": { "type": "string", "minLength": 1 },
+        "unit_key": {
+          "description": "Stable across exports of the same data (ADR-0006), NFC, '/'-joined (ADR-0014).",
+          "type": "string",
+          "minLength": 1
+        },
+        "content_hash": { "$ref": "#/$defs/hash" },
+        "media_type": { "type": "string", "minLength": 1 },
+        "encoding": {
+          "description": "How the source was decoded. With this, bom_bytes and the file, a character offset becomes a byte offset (ADR-0018). Without the file, nothing can.",
+          "type": "string",
+          "minLength": 1
+        },
+        "bom_bytes": {
+          "description": "Bytes a byte-order mark consumed. Three on a file a Windows producer wrote without being asked, and a real offset difference.",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "converter": {
+      "description": "Which implementation built the artefact: markdown@1, pdf_text@1.",
+      "type": "string",
+      "minLength": 1
+    },
+    "source_unit": {
+      "description": "What a source offset indexes. Only 'characters' exists (ADR-0018). A future locator -- a PDF page plus an offset within it -- is a different value, and an old validator REFUSING it is the intended behaviour: seeing that it is not a character map is better than reading one field as another.",
+      "enum": ["characters"]
+    },
+    "coverage": {
+      "description": "The numerator and the denominator, published together so that a reader aggregating over a corpus uses the right total rather than averaging ratios.",
+      "type": "object",
+      "required": ["characters", "traceable"],
+      "additionalProperties": false,
+      "properties": {
+        "characters": { "type": "integer", "minimum": 0 },
+        "traceable": {
+          "description": "Characters in a verbatim or transformed segment. NOT CHECKED HERE: that this is at most `characters`, or that it equals the sum of the traceable segments' lengths.",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "segments": {
+      "description": "Ordered by output offset. Source ranges need NOT be monotonic: a two-column page read in reading order produces a map whose source ranges jump, and the jump is information rather than a defect. NOT CHECKED HERE: the ordering, or that the segments tile the artefact.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/segment" }
+    }
+  },
+
+  "$defs": {
+    "hash": {
+      "description": "Names its own algorithm, so a future change is a data change an old reader can refuse rather than a silent reinterpretation (ADR-0015).",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+
+    "span": {
+      "description": "A half-open range, [start, end). NOT CHECKED HERE: that end is at least start. JSON Schema 2020-12 cannot compare two members of the same array.",
+      "type": "array",
+      "items": { "type": "integer", "minimum": 0 },
+      "minItems": 2,
+      "maxItems": 2
+    },
+
+    "segment": {
+      "description": "One run of the artefact, and the run of the source it accounts for.",
+      "type": "object",
+      "required": ["out", "src", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "out": { "$ref": "#/$defs/span" },
+        "src": { "$ref": "#/$defs/span" },
+        "kind": {
+          "description": "verbatim: the source's own characters. transformed: the same content in different characters; the correspondence holds at the ends and nowhere inside. synthetic: musubi wrote it, and src is where it was put rather than where it came from. removal: something was taken out; occupies no output and a real stretch of source (ADR-0005).",
+          "enum": ["verbatim", "transformed", "synthetic", "removal"]
+        },
+        "rule": {
+          "description": "Why this is not verbatim: a cleansing rule id, a converter's reason, the name of what musubi inserted.",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "allOf": [
+        {
+          "description": "A verbatim run names no rule: nothing happened to it, so there is nothing to attribute.",
+          "if": {
+            "properties": { "kind": { "const": "verbatim" } },
+            "required": ["kind"]
+          },
+          "then": { "not": { "required": ["rule"] } },
+          "else": { "required": ["rule"] }
+        }
+      ]
+    }
+  }
+}

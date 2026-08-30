@@ -8,7 +8,7 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- The design, before the code: `docs/proposals/0001-the-design.md`, eighteen
+- The design, before the code: `docs/proposals/0001-the-design.md`, nineteen
   architecture decision records, `docs/concept.md`, and the documentation rules
   that keep current state, history and plans apart.
 - The tooling that will enforce the design: the layering asserted by AST over
@@ -102,7 +102,20 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   dry run cannot drift from the thing it predicts. The manifest is
   `musubi.sync-manifest/1-draft`, publishes its denominators, carries its own
   limits, and its `run_id` excludes the clock and the folder's path.
-- ADR-0014, ADR-0015, ADR-0016, ADR-0017 and ADR-0018.
+- `schemas/musubi-sync-manifest-1.json` and `schemas/musubi-trace-map-1.json`,
+  shipped inside the wheel and checked there by CI, with worked examples and
+  sixteen counter-examples in `tests/contracts/`. The examples are **real
+  emitter output**, and the conformance suite validates what the emitter writes
+  to a disk and what the command prints rather than anything a test assembled.
+- `docs/contracts.md`: the contracts for producers and consumers, including an
+  enumeration of what the schemas **cannot** say — starting with the invariant
+  the trace map exists for, which JSON Schema cannot express in any form.
+- ADR-0019: a record inherits the classification of what it describes. The whole
+  destination is one secret and `traces/` is not the safe half of it, so a
+  finding in the manifest now carries no offset and no length — it points at a
+  credential still in the owner's file and still valid, and the owner does not
+  need an offset to act.
+- ADR-0014 through ADR-0019.
 - `span.resolve`, shared by `Rewritten` and `TraceMap`, and `Span.__bool__`,
   which is `True` always: `__len__` had made an empty span falsy, and
   `resolve(...) or Span(0, 0)` silently replaced a correct `[3:3]` with `[0:0]`.
