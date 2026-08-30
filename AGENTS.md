@@ -209,6 +209,18 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   front matter, and the front matter's reasoning is unchanged. Putting a
   timestamp in a document is a claim; keeping the file's own is declining to
   destroy one. A `stat` that fails is not a failed run.
+- **Two checks exist only where two halves meet** (`tests/test_links_and_bindings.py`).
+  Every local markdown link is **resolved**, not pattern-matched — which closes
+  the gap ADR-0023 recorded as open, because a redirect whose target directory
+  moves breaks a link the filesystem can answer about (measured: renaming
+  `src/musubi/schemas/` breaks five). And an identifier in
+  `musubi.schemas.CONTRACTS` must be accepted by the `contract` pattern of the
+  schema it maps to: rename one side and **every other test still passes**,
+  because the conformance tests validate against whatever file they were handed
+  and the documents carry whatever the code writes. Each half agrees with
+  itself. From `akashi`, whose warning travels with it — **every project binds
+  the two differently, so the rule has to be written for musubi rather than
+  copied**, or it passes vacuously.
 - **The schemas live in `src/musubi/schemas/`, and the conformance tests load
   them the way `docs/contracts.md` tells a consumer to** (ADR-0023). They used
   to sit at the repository root with a build-time `force-include`, which made
