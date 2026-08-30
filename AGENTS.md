@@ -156,7 +156,7 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
 
 - Version `0.1.0.dev0`. **v0.1 is done**: `plan`, `sync` and `trace` over a
   vault, both contracts with schemas, and the invariants asserted rather than
-  only enumerated. Twenty-one ADRs. Nothing is released and the public API is not
+  only enumerated. Twenty-two ADRs. Nothing is released and the public API is not
   stable. **v0.2 is under way** — `docs/proposals/0001-the-design.md` §9, with
   `musubi verify` built. **The freeze is not**, and `verify` does not advance
   it: the roadmap guesses `verify` is the second program for
@@ -179,6 +179,16 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   every output character came from falls out of the one code path rather than
   being maintained beside it. Its `Piece`s tile **both** sides, checked on
   construction and by property tests.
+- **A document keeps its source's modification time; musubi's own records keep
+  the run's** (ADR-0022). `kiseki-notes` reads mtime as the day a note was
+  written, and musubi writing new files made every note in a corpus share the
+  conversion date — with `sync` returning 0, the manifest correct and `verify`
+  passing. Not silently wrong: **silently absent**, and a vault where everything
+  was written on one afternoon is a thing that can happen, so neither end could
+  see it. **The timestamp never reaches the content** — no `observed_at` in the
+  front matter, and the front matter's reasoning is unchanged. Putting a
+  timestamp in a document is a claim; keeping the file's own is declining to
+  destroy one. A `stat` that fails is not a failed run.
 - **`verify` checks a folder, not a run**, which is the only thing it is for.
   Every other check in this project runs while the corpus is being written, so
   the files have had no opportunity to change; `verify` reads a corpus that may

@@ -111,7 +111,7 @@ def run(source: Source, settings: Settings, emitter: Emitter, *, write: bool) ->
             content_hash=content_hash(content),
             media_type=found.media_type,
         )
-        document, struck = _cleanse(unit, converted, settings.ruleset)
+        document, struck = _cleanse(unit, converted, settings.ruleset, found.modified_at)
         removals.extend((key, record) for record in struck)
 
         artefacts.append(emitter.stage(document) if write else emitter.render(document).artefact)
@@ -144,7 +144,7 @@ def run(source: Source, settings: Settings, emitter: Emitter, *, write: bool) ->
 
 
 def _cleanse(
-    unit: Unit, converted: Converted, ruleset: Ruleset
+    unit: Unit, converted: Converted, ruleset: Ruleset, modified_at: float | None = None
 ) -> tuple[Document, Sequence[RemovalRecord]]:
     """Stages four and five: take the tracking out, and compose the two maps."""
     cleansed = cleanse(converted.text, ruleset)
@@ -157,6 +157,7 @@ def _cleanse(
             converter=converted.converter,
             source_encoding=converted.source_encoding,
             source_bom_bytes=converted.source_bom_bytes,
+            modified_at=modified_at,
         ),
         cleansed.removals,
     )

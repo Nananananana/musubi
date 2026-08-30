@@ -148,7 +148,8 @@ class FilesystemSource:
             skipped.append(Skipped(relative, "unknown_format", entry.suffix or "(no suffix)"))
             return
 
-        size = entry.stat().st_size
+        stat = entry.stat()
+        size = stat.st_size
         if size > self._maximum_bytes:
             skipped.append(Skipped(relative, "too_large", f"{size} bytes"))
             return
@@ -159,6 +160,9 @@ class FilesystemSource:
                 media_type=media_type,
                 size_bytes=size,
                 origin=relative,
+                # Taken from the stat already being made for the size, so
+                # discovery still opens nothing (ADR-0007).
+                modified_at=stat.st_mtime,
             )
         )
 

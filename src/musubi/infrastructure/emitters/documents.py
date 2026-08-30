@@ -60,7 +60,9 @@ artefact on every run, which is the incrementality [ADR-0006] exists to buy.
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import shutil
 from collections.abc import Iterable
 from pathlib import Path
@@ -145,6 +147,10 @@ class DocumentEmitter:
         rendered = self.render(document)
         relative = document.unit.unit_key
         self._write(Path(DOCUMENTS) / relative, rendered.text)
+        # The document keeps the source's timestamp; musubi's own records --
+        # the map and the manifest -- keep the run's (ADR-0022). `promote` is a
+        # rename, so what is set here is what lands.
+        self._keep_time(Path(DOCUMENTS) / relative, document.modified_at)
         self._write(
             Path(TRACES) / f"{relative}.json",
             _render_trace(document, rendered.text, rendered.trace, relative),
@@ -178,6 +184,26 @@ class DocumentEmitter:
         # ([ADR-0003]).
         target.write_text(body, encoding="utf-8", newline="\n")
         self._staged.append(relative.as_posix())
+
+    def _keep_time(self, relative: Path, modified_at: float | None) -> None:
+        """Put the source's timestamp back on the document musubi wrote.
+
+        A converted note whose mtime is the conversion date has lost the one
+        fact the filesystem was carrying about it, and every note in the corpus
+        then shares a single date. `kiseki-notes` reads that mtime as the day a
+        note was written, so the loss is silent on both sides: musubi succeeds,
+        the manifest is correct, `musubi verify` passes, and a decade of history
+        has become one afternoon.
+
+        Not an error when it fails. The corpus is written and correct; a
+        timestamp that would not set is a worse corpus, not a failed run, and a
+        read-only or exotic filesystem is not a reason to throw away a sync.
+        """
+        if modified_at is None:
+            return
+        target = self.staging / relative
+        with contextlib.suppress(OSError):  # a filesystem, not a state
+            os.utime(target, (modified_at, modified_at))
 
     # -- promoting ---------------------------------------------------------
 

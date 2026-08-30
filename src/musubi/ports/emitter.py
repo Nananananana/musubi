@@ -35,6 +35,9 @@ class Document:
     source_encoding: str = "utf-8"
     source_bom_bytes: int = 0
     layer: str = "fact"
+    #: The source's own timestamp, to be put back on the written file
+    #: (ADR-0022). ``None`` from a source that does not know.
+    modified_at: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
