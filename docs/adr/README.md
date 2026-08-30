@@ -30,6 +30,7 @@ later ADR supersedes it and says so.
 | [0013](0013-one-output-contract-and-the-consumer-adapts.md) | One output contract, and the consumer adapts |
 | [0014](0014-the-key-is-normalized-the-content-never-is.md) | The key is normalized, the content never is |
 | [0015](0015-a-hash-names-its-algorithm.md) | A hash names its own algorithm, and the algorithm is SHA-256 |
+| [0016](0016-a-rule-is-a-matcher-not-a-regular-expression.md) | A cleansing rule is a matcher, not a regular expression |
 
 [0004](0004-a-conversion-carries-a-map-back-to-its-source.md) is the one to read
 first. The rest of the design is arranged around it, and

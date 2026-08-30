@@ -147,11 +147,12 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
 ## Current state
 
 - Version `0.1.0.dev0`. **v0.1 is in progress**, one issue at a time against the
-  milestone. The design and fifteen ADRs are in `docs/`; nothing is released
+  milestone. The design and sixteen ADRs are in `docs/`; nothing is released
   and there is no public API to speak of yet.
 - **License: Apache-2.0. Python: 3.12+. Runtime dependencies: 0**, checked in CI
   by installing the wheel with no extras and asserting nothing came along.
-- **Built:** `domain/` — `span`, `text`, `trace`, `hashing`, `record`. A `Span`
+- **Built:** `domain/` — `span`, `text`, `trace`, `hashing`, `record`, `removal`,
+  `cleansing`; `infrastructure/rules/` holds the first pack. A `Span`
   is a half-open range of integer positions and deliberately does not decide
   what a position indexes — the holder says, and the trace map records it. `text.rewrite()` is
   the primitive everything else is made of: deleting is replacing with the
@@ -173,6 +174,17 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   clauses musubi's inputs reach. Floats are **refused**, which removes the one
   clause of the specification that is hard to get exactly right and which
   nothing determining a run needs.
+- `domain/cleansing.py` + `domain/removal.py`: a rule matches a **parsed
+  parameter name** by `exact` or `prefix`, and there is no regular expression
+  anywhere in the cleanser (ADR-0016). Python's `re` backtracks and has no
+  timeout, and rules are data users may edit running over documents nobody
+  vetted, unattended — restricting the language removes the failure class
+  instead of mitigating it. URL finding is a linear scan for the same reason.
+  One `Replacement` per query and one `RemovalRecord` per parameter: a query cut
+  by three rules is one discontinuity and three things somebody may appeal.
+- `infrastructure/rules/core.py` is derived from ClearURLs' `globalRules`, with
+  the provenance and the two entries deliberately **not** adopted written down
+  in the module. Every rule states `evidence` and `since`.
 - `domain/record.py`: identity is `(source_id, unit_key)` and change is
   `content_hash`. `unit_key()` takes *parts*, not a path string, normalizes each
   to NFC and refuses `.`, `..`, an embedded separator and an empty part. Keys are

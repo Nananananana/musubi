@@ -8,7 +8,7 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- The design, before the code: `docs/proposals/0001-the-design.md`, fifteen
+- The design, before the code: `docs/proposals/0001-the-design.md`, sixteen
   architecture decision records, `docs/concept.md`, and the documentation rules
   that keep current state, history and plans apart.
 - The tooling that will enforce the design: the layering asserted by AST over
@@ -52,7 +52,18 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   back composed ones, so a key derived from a raw name makes one vault into two
   corpora. Content is never normalized: that would be an unrequested rewrite of
   what the owner wrote, and it would move every offset the trace map reports.
-- ADR-0014 and ADR-0015.
+- `domain/removal.py` and `domain/cleansing.py`: the cleanser, and the record of
+  what it took. A rule matches a parsed parameter name by `exact` or `prefix`
+  (ADR-0016) — no regular expression runs over anybody's corpus, because
+  Python's engine backtracks with no timeout and rules are user-editable data
+  meeting arbitrary documents in an unattended loop. Finding a URL is a linear
+  scan for the same reason. Every firing produces a `RemovalRecord` with the
+  rule, the span and a hash — never the value (ADR-0005).
+- `infrastructure/rules/core.py`: the first pack, derived from ClearURLs'
+  `globalRules` with attribution, the date it was taken, and the entries
+  deliberately not adopted — `[a-z]?mc` would strip `amc` and `bmc` from
+  somebody's links.
+- ADR-0014, ADR-0015 and ADR-0016.
 - `span.resolve`, shared by `Rewritten` and `TraceMap`, and `Span.__bool__`,
   which is `True` always: `__len__` had made an empty span falsy, and
   `resolve(...) or Span(0, 0)` silently replaced a correct `[3:3]` with `[0:0]`.
