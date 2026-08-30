@@ -122,6 +122,15 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   keep it honest — every command the docs call built must answer `--help`, every
   command they call missing must not, and the rule and signature counts must be
   the code's.
+- `application/sync.py` and `musubi sync`: the run that writes. Everything is
+  staged and promoted together, so a credential means nothing is written at all
+  rather than the offending unit skipped (ADR-0008) — and a previous corpus is
+  left standing, because failing to build is not the same as unbuilding.
+- A sync **withdraws** an artefact whose unit is no longer in the source, and
+  the manifest gains a `withdrawn` field saying which. A corpus that keeps a
+  document its owner deleted goes on answering questions from something they
+  withdrew. The previous manifest is the ledger, so there is no second store to
+  keep in step, and musubi removes only what it recorded writing.
 - ADR-0014 through ADR-0019.
 - `span.resolve`, shared by `Rewritten` and `TraceMap`, and `Span.__bool__`,
   which is `True` always: `__len__` had made an empty span falsy, and

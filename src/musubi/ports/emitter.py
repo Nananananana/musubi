@@ -11,6 +11,7 @@ that is a property of the *decision* rather than of any one write.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -56,6 +57,10 @@ class Emitter(Protocol):
 
     name: str
 
+    def begin(self) -> None:
+        """Clear whatever a previous run left behind and start again."""
+        ...
+
     def render(self, document: Document) -> Rendered:
         """What this document would become. Touches nothing."""
         ...
@@ -64,10 +69,33 @@ class Emitter(Protocol):
         """Write one document where it will wait, and say what it became."""
         ...
 
+    def stage_manifest(self, body: str) -> None:
+        """The run's own account, written last and promoted with the rest."""
+        ...
+
     def promote(self) -> tuple[str, ...]:
         """Move everything staged into place. Returns what moved."""
         ...
 
     def discard(self) -> None:
         """Throw the staging area away. Nothing reaches the destination."""
+        ...
+
+    def previously_written(self) -> frozenset[str]:
+        """What the last run recorded writing here, from its own manifest.
+
+        The previous manifest is the ledger. There is no separate store,
+        because a corpus that already says what is in it does not need one --
+        and a ledger that can disagree with the corpus is a second source of
+        truth to keep in step.
+        """
+        ...
+
+    def withdraw(self, paths: Iterable[str]) -> tuple[str, ...]:
+        """Take these out of the corpus. Returns what was actually removed.
+
+        Only ever a path a previous manifest recorded writing. musubi deletes
+        what it wrote and never what it merely found, so a folder somebody put
+        something else in survives a sync intact.
+        """
         ...

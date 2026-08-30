@@ -81,6 +81,7 @@
   ],
   "findings": [],
   "allowed": [],
+  "withdrawn": [],
   "coverage": {
     "units_read": 3,
     "emitted": 2,

@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from collections.abc import Iterable
 from pathlib import Path
 
 from ...domain.frontmatter import FrontMatter, replacements
@@ -44,7 +45,7 @@ from ...domain.hashing import content_hash
 from ...domain.manifest import Artefact
 from ...domain.text import rewrite
 from ...domain.trace import TraceMap
-from ...errors import ConversionError
+from ...errors import ContractError, ConversionError
 from ...ports.emitter import Document, Rendered
 
 __all__ = ["DOCUMENTS", "MANIFEST", "STAGING", "TRACES", "TRACE_CONTRACT", "DocumentEmitter"]
@@ -178,6 +179,60 @@ class DocumentEmitter:
         """What is waiting, in a fixed order."""
         return tuple(sorted(self._staged))
 
+    # -- withdrawing -------------------------------------------------------
+
+    def previously_written(self) -> frozenset[str]:
+        """What the last run recorded writing here, read from its manifest.
+
+        The previous manifest is the ledger. There is no separate store,
+        because a corpus that already says what is in it does not need one, and
+        a ledger that can disagree with the corpus is a second source of truth
+        to keep in step.
+
+        A manifest naming a contract this does not recognise stops the run
+        rather than being parsed hopefully: guessing at it would produce a list
+        of files to delete.
+        """
+        manifest = self.destination / MANIFEST
+        if not manifest.is_file():
+            return frozenset()
+        try:
+            body = json.loads(manifest.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise ContractError(f"{manifest} is not readable as a manifest: {error}") from error
+        if not isinstance(body, dict) or not str(body.get("contract", "")).startswith(
+            "musubi.sync-manifest/1"
+        ):
+            raise ContractError(
+                f"{manifest} declares contract {body.get('contract')!r}, which this does "
+                f"not recognise. Refusing rather than guessing at a list of files to delete."
+            )
+        written: set[str] = set()
+        for artefact in body.get("artefacts") or []:
+            for key in ("path", "trace_map"):
+                value = artefact.get(key)
+                if isinstance(value, str) and value:
+                    written.add(value)
+        return frozenset(written)
+
+    def withdraw(self, paths: Iterable[str]) -> tuple[str, ...]:
+        """Take these out of the corpus. Returns what was actually removed.
+
+        Only a path a previous manifest recorded writing, checked again here
+        against the destination: musubi deletes what it wrote and never what it
+        merely found, so a folder somebody put something else in survives a
+        sync intact.
+        """
+        removed: list[str] = []
+        for relative in sorted(paths):
+            target = self.destination / relative
+            if not _inside(target, self.destination) or not target.is_file():
+                continue
+            target.unlink()
+            removed.append(relative)
+            _prune(target.parent, self.destination)
+        return tuple(removed)
+
 
 def _render_trace(document: Document, text: str, trace: TraceMap, relative: str) -> str:
     """The sidecar, as `musubi trace` will read it back.
@@ -223,3 +278,17 @@ def _inside(target: Path, root: Path) -> bool:
     except (OSError, ValueError):
         return False
     return True
+
+
+def _prune(directory: Path, stop: Path) -> None:
+    """Remove directories a withdrawal emptied, and stop at the destination.
+
+    ``rmdir`` refuses a directory that is not empty, which is what makes this
+    safe: it cannot take anything with it.
+    """
+    while directory != stop and _inside(directory, stop):
+        try:
+            directory.rmdir()
+        except OSError:
+            return
+        directory = directory.parent

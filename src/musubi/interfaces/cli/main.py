@@ -2,12 +2,11 @@
 
 A misclassified photograph can be looked at again; a corpus built from rules
 that had not yet met this particular vault cannot be un-built without noticing
-first. So the command that writes nothing is the one that exists, and it prints
-what a sync *would* do -- every removal, every refusal, every skip, and the
-coverage it would achieve.
+first. So the command that writes nothing comes first and is the one to reach
+for, and `sync` is the same run with the writing switched on.
 
-The report leads with what would **not** happen. That is a deliberate reversal
-of what every ingestion tool prints, and it is why the page can be handed to
+Both reports lead with what did **not** happen. That is a deliberate reversal of
+what every ingestion tool prints, and it is why the page can be handed to
 somebody deciding whether to trust this with their notes.
 """
 
@@ -22,7 +21,8 @@ from pathlib import Path
 
 from ... import __version__
 from ...application.pipeline import Outcome, Settings, run
-from ...domain.manifest import render
+from ...application.sync import Synced, sync
+from ...domain.manifest import Manifest, render
 from ...errors import MusubiError
 from ...infrastructure.converters import converter_for
 from ...infrastructure.emitters import DocumentEmitter
@@ -42,7 +42,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.print_help()
         return 2
     try:
-        return _plan(arguments)
+        return _plan(arguments) if arguments.command == "plan" else _sync(arguments)
     except MusubiError as error:
         print(f"musubi: {error}", file=sys.stderr)
         return 1
@@ -62,49 +62,73 @@ def _parser() -> argparse.ArgumentParser:
             "where none of the rules have met this corpus yet."
         ),
     )
-    plan.add_argument("root", type=Path, help="the folder you are naming")
+    _shared(plan)
     plan.add_argument(
+        "--show-removals",
+        action="store_true",
+        help="print the values that would be removed, to the terminal and never to a file",
+    )
+
+    synchronise = commands.add_parser(
+        "sync",
+        help="build the corpus, or refuse and build nothing",
+        description=(
+            "The same run as `plan`, with the writing switched on. Everything is staged "
+            "and promoted together: a credential means nothing is written at all, not "
+            "the offending unit skipped. An artefact whose unit is no longer in the "
+            "source is taken back out, because a corpus that keeps a document its owner "
+            "deleted goes on answering questions from it."
+        ),
+    )
+    _shared(synchronise)
+
+    return parser
+
+
+def _shared(command: argparse.ArgumentParser) -> None:
+    """The options both commands take.
+
+    One function rather than two lists, so that a flag cannot exist on the dry
+    run and not on the real one -- which is the one way the shared pipeline
+    cannot stop a plan from ceasing to predict a sync.
+    """
+    command.add_argument("root", type=Path, help="the folder you are naming")
+    command.add_argument(
         "--as",
         dest="kind",
         choices=sorted(_SOURCES),
         default="obsidian",
         help="what kind of folder this is (default: obsidian)",
     )
-    plan.add_argument(
+    command.add_argument(
         "--into",
         type=Path,
         default=Path("synced"),
-        help="where a sync would write (nothing is written by plan)",
+        help="where the corpus goes (default: ./synced)",
     )
-    plan.add_argument(
+    command.add_argument(
         "--source-id",
         default=None,
         help="what to call this source in keys and in the manifest",
     )
-    plan.add_argument(
+    command.add_argument(
         "--screen-entropy",
         action="store_true",
         # argparse expands `%` in a help string, and the number this tier
         # exists to publish contains two of them.
         help="add the opt-in entropy tier. " + EntropyScreener.MEASURED.replace("%", "%%"),
     )
-    plan.add_argument(
+    command.add_argument(
         "--allow",
         action="append",
         default=[],
         metavar="RULE:UNIT_KEY",
         help="a credential hit you have looked at and decided against",
     )
-    plan.add_argument(
-        "--show-removals",
-        action="store_true",
-        help="print the values that would be removed, to the terminal and never to a file",
-    )
-    plan.add_argument("--json", action="store_true", help="print the manifest instead")
-    return parser
+    command.add_argument("--json", action="store_true", help="print the manifest instead")
 
 
-def _plan(arguments: argparse.Namespace) -> int:
+def _prepare(arguments: argparse.Namespace) -> tuple[FilesystemSource, Settings, DocumentEmitter]:
     source_class = _SOURCES[arguments.kind]
     source = (
         source_class(arguments.root, source_id=arguments.source_id)
@@ -119,18 +143,33 @@ def _plan(arguments: argparse.Namespace) -> int:
         allowed=frozenset(arguments.allow),
         created_at=datetime.now(UTC).isoformat(),
     )
-    outcome = run(source, settings, DocumentEmitter(arguments.into), write=False)
+    return source, settings, DocumentEmitter(arguments.into)
+
+
+def _plan(arguments: argparse.Namespace) -> int:
+    source, settings, emitter = _prepare(arguments)
+    outcome = run(source, settings, emitter, write=False)
 
     if arguments.json:
         print(render(outcome.manifest), end="")
     else:
-        _report(outcome, show_removals=arguments.show_removals)
+        _report_plan(outcome, show_removals=arguments.show_removals)
     return 1 if outcome.refused else 0
 
 
-def _report(outcome: Outcome, *, show_removals: bool) -> None:
+def _sync(arguments: argparse.Namespace) -> int:
+    source, settings, emitter = _prepare(arguments)
+    result = sync(source, settings, emitter)
+
+    if arguments.json:
+        print(render(result.manifest), end="")
+    else:
+        _report_sync(result, arguments.into)
+    return 0
+
+
+def _report_plan(outcome: Outcome, *, show_removals: bool) -> None:
     manifest = outcome.manifest
-    coverage = manifest.coverage
 
     print(f"musubi plan — {manifest.summary()}")
     print(f"  nothing was written. run id {manifest.run_id}")
@@ -140,26 +179,52 @@ def _report(outcome: Outcome, *, show_removals: bool) -> None:
         for key, finding in outcome.refusals:
             print(f"  {finding.describe(key)}")
 
+    _account(manifest, "Would not be read", "Would be removed")
+    if manifest.removals and show_removals:
+        # The one place a removed value is printed. To the terminal, never to a
+        # file ([ADR-0005]) -- the removed thing is usually the sensitive thing.
+        print("\n  values (terminal only, never written)")
+        for key, removal in manifest.removals:
+            print(f"    {key} {removal.span}  {removal.rule}")
+
+    _coverage(manifest, "would be written")
+    _limits(manifest)
+
+
+def _report_sync(result: Synced, destination: Path) -> None:
+    manifest = result.manifest
+
+    print(f"musubi sync — {manifest.summary()}")
+    print(f"  {destination}. run id {manifest.run_id}")
+
+    _account(manifest, "Not read", "Removed")
+
+    if result.withdrawn:
+        print("\nTaken back out, because the source no longer has them")
+        for path in result.withdrawn:
+            print(f"  {path}")
+
+    _coverage(manifest, "written")
+    _limits(manifest)
+
+
+def _account(manifest: Manifest, skipped_heading: str, removed_heading: str) -> None:
     if manifest.skipped:
-        print("\nWould not be read")
+        print(f"\n{skipped_heading}")
         for skip in manifest.skipped:
             detail = f" ({skip.detail})" if skip.detail else ""
             print(f"  {skip.origin}  {skip.reason}{detail}")
 
     if manifest.removals:
-        print("\nWould be removed")
+        print(f"\n{removed_heading}")
         for rule, count in sorted(Counter(r.rule for _, r in manifest.removals).items()):
             print(f"  {rule}  {count}x")
-        if show_removals:
-            # The one place a removed value is printed. To the terminal, never
-            # to a file ([ADR-0005]) -- the removed thing is usually the
-            # sensitive thing.
-            print("\n  values (terminal only, never written)")
-            for key, removal in manifest.removals:
-                print(f"    {key} {removal.span}  {removal.rule}")
 
+
+def _coverage(manifest: Manifest, verb: str) -> None:
+    coverage = manifest.coverage
     print("\nCoverage")
-    print(f"  {coverage.emitted} documents would be written, {coverage.skipped} skipped")
+    print(f"  {coverage.emitted} documents {verb}, {coverage.skipped} skipped")
     print(
         f"  {coverage.traceable_characters} of {coverage.characters} characters traceable "
         f"({coverage.traceable_coverage:.1%})"
@@ -168,6 +233,8 @@ def _report(outcome: Outcome, *, show_removals: bool) -> None:
         for cap in source_record.caps:
             print(f"  cap: {cap}")
 
+
+def _limits(manifest: Manifest) -> None:
     print("\nLimits")
     for limit in manifest.limits:
         print(f"  {limit}")

@@ -20,6 +20,7 @@
     "skipped",
     "findings",
     "allowed",
+    "withdrawn",
     "coverage",
     "limits"
   ],
@@ -92,6 +93,11 @@
     },
     "allowed": {
       "description": "rule:unit_key pairs the owner looked at and decided against. Recorded because an exemption nobody can see is an exemption that outlives its reason (ADR-0008).",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "withdrawn": {
+      "description": "Artefacts taken out of the corpus because the unit they came from is no longer in the source. A corpus keeping a document its owner deleted answers questions from something they withdrew, so removing it is correctness rather than tidiness -- and naming which ones is the same obligation as naming what was skipped. Only ever a path the previous manifest listed: musubi deletes what it recorded writing, and never what it merely found.",
       "type": "array",
       "items": { "type": "string", "minLength": 1 }
     },

@@ -147,6 +147,12 @@ class Manifest:
     #: Allowances the owner granted, recorded because an exemption nobody can
     #: see is an exemption that outlives its reason ([ADR-0008]).
     allowed: tuple[str, ...] = ()
+    #: Artefacts taken *out* of the corpus, because the unit they came from is
+    #: no longer in the source. A corpus that keeps a document its owner
+    #: deleted is a corpus that answers questions from something they withdrew,
+    #: so removing it is correctness rather than tidiness -- and saying which
+    #: ones is the same obligation as saying what was skipped.
+    withdrawn: tuple[str, ...] = ()
     limits: tuple[str, ...] = LIMITS
     #: Metadata, and deliberately not part of the id.
     created_at: str = ""
@@ -292,6 +298,7 @@ def render(manifest: Manifest) -> str:
             for key, finding in manifest.findings
         ],
         "allowed": list(manifest.allowed),
+        "withdrawn": list(manifest.withdrawn),
         "coverage": {
             "units_read": coverage.units_read,
             "emitted": coverage.emitted,
