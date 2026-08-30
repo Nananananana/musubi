@@ -25,6 +25,14 @@ import pytest
 
 from musubi.schemas import CONTRACTS, load, schemas
 
+
+def _validator(schema: dict):  # type: ignore[no-untyped-def]
+    """jsonschema is a dev dependency (ADR-0001); a consumer brings its own."""
+    from jsonschema import Draft202012Validator
+
+    return Draft202012Validator(schema).validate
+
+
 ROOT = Path(__file__).resolve().parent.parent
 
 #: `[text](target)`. Bare autolinks and reference definitions are not used here.
@@ -101,6 +109,59 @@ def test_a_schema_says_it_is_about_the_contract_it_is_reached_by(contract: str) 
         f"{CONTRACTS[contract]} does not accept the -draft form of {contract}. The "
         f"suffix is what says the freeze has not happened, and documents carry it."
     )
+
+
+@pytest.mark.parametrize("contract", sorted(CONTRACTS))
+def test_a_schemas_own_id_agrees_with_the_name_it_is_filed_under(contract: str) -> None:
+    """`$id` takes no part in validation, so nothing else would notice.
+
+    Reported by `akashi`, who measured it: a schema validates a document just as
+    happily when its `$id` names a different file, because `$id` is for `$ref`
+    resolution and registries. **A consumer selects a schema by label before it
+    validates anything**, so a label that disagrees with the file is a wrong
+    schema chosen confidently.
+
+    `$id` is an identity, not a location. It did not change when these files
+    moved into the package (ADR-0023) and must not: it names the contract, not
+    the directory. What is checked is that it agrees with the name it is filed
+    under.
+    """
+    identifier = load(contract)["$id"]
+    assert identifier.rsplit("/", 1)[-1] == CONTRACTS[contract], (
+        f"{CONTRACTS[contract]} declares $id {identifier!r}, whose last segment is not "
+        f"the name it is filed under. One of the two was renamed."
+    )
+
+
+def test_the_draft_suffix_is_not_a_property_of_the_document(tmp_path: Path) -> None:
+    """A draft and a frozen document of one contract have the same shape.
+
+    Asked by `mamori` through `manager`: should something change when `-draft`
+    comes off, and if so the schema should say it with `if`/`then`. It should
+    not. `docs/contracts.md` says freezing constrains **what future versions may
+    do** — a field may be added, none removed or changed in meaning — which is a
+    promise about the next schema, not a difference in this one.
+
+    So the suffix is a state of the register. This is the executable form of
+    that: the same document validates with it and without it.
+    """
+    import contextlib
+    import io
+
+    from musubi.interfaces.cli.main import main
+
+    root, into = tmp_path / "vault", tmp_path / "synced"
+    root.mkdir(parents=True)
+    (root / "a.md").write_text("# a\n", encoding="utf-8", newline="\n")
+    with contextlib.redirect_stdout(io.StringIO()):
+        main(["sync", str(root), "--into", str(into)])
+
+    written = json.loads((into / "manifest.json").read_text(encoding="utf-8"))
+    assert written["contract"].endswith("-draft"), "this fixture assumes the register says draft"
+
+    validate = _validator(load("musubi.sync-manifest/1"))
+    validate(written)
+    validate({**written, "contract": written["contract"].removesuffix("-draft")})
 
 
 def test_no_two_contracts_share_a_schema() -> None:
