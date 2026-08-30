@@ -152,8 +152,9 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
 - **License: Apache-2.0. Python: 3.12+. Runtime dependencies: 0**, checked in CI
   by installing the wheel with no extras and asserting nothing came along.
 - **Built:** `domain/` — `span`, `text`, `trace`, `hashing`, `record`, `removal`,
-  `cleansing`, `screening`; `ports/` (`screener`, `source`, `converter`);
-  `infrastructure/` (`rules`, `screeners`, `sources`, `converters`). A `Span`
+  `cleansing`, `screening`, `frontmatter`; `ports/` (`screener`, `source`,
+  `converter`, `emitter`); `infrastructure/` (`rules`, `screeners`, `sources`,
+  `converters`, `emitters`). A `Span`
   is a half-open range of integer positions and deliberately does not decide
   what a position indexes — the holder says, and the trace map records it. `text.rewrite()` is
   the primitive everything else is made of: deleting is replacing with the
@@ -208,6 +209,25 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   that constant counts characters. The decoding travels beside the map instead,
   and the command that opens the file converts. Compose in characters; there is
   no re-measure step to get the order of wrong.
+- **The destination is three folders**: `documents/` (what a consumer ingests),
+  `traces/`, `manifest.json`. Not sidecars beside the documents —
+  `tsumugi`'s corpus walk does not skip `.musubi` and its parser registry claims
+  `.json`, so a sidecar beside a document *is* a document, and a corpus would
+  end up holding a per-character index of itself.
+- Front matter carries `layer` and `producer` and **nothing else**. No `title`:
+  `tsumugi` takes a better one from the first heading. No `observed_at`: musubi
+  does not know when a note was written, and an mtime there would make a
+  re-sync that changed nothing rewrite the corpus. `producer` is
+  `musubi.sync/1` — a contract name, not a version, or every release would
+  rewrite every artefact.
+- A key the owner already stated is left alone; `tsumugi`'s parser uses
+  `setdefault`, so writing a second would be musubi arguing with a document
+  about itself.
+- Staging is what ADR-0008 hangs on. **What is atomic is the decision**, not the
+  set: one `os.replace` per file, no half-written document ever readable, and no
+  claim that a reader sees the whole corpus appear at once — that would need a
+  directory swap, which would mean rewriting every unchanged artefact on every
+  run.
 - Markdown and plaintext are the **same** conversion, and saying so beats
   inventing a difference. Wikilinks, `%%comments%%` and reference links are all
   rewrites of somebody's writing and each needs its own argument.

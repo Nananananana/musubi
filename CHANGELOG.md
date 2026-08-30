@@ -90,6 +90,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   beside the map; the command that opens the file converts. The verbatim
   equal-length check moved from `Segment` to `TraceMap` on the way, which is
   where it belonged.
+- `domain/frontmatter.py`, `ports/emitter.py` and
+  `infrastructure/emitters/`: the corpus gets written. The destination is
+  `documents/`, `traces/` and `manifest.json`; front matter carries `layer` and
+  `producer` and nothing musubi cannot honestly state; and everything is staged
+  and promoted by atomic per-file replace, so ADR-0008's gate has a mechanism.
+  The trace sidecar is `musubi.trace-map/1-draft` until v0.2 freezes it.
 - ADR-0014, ADR-0015, ADR-0016, ADR-0017 and ADR-0018.
 - `span.resolve`, shared by `Rewritten` and `TraceMap`, and `Span.__bool__`,
   which is `True` always: `__len__` had made an empty span falsy, and
