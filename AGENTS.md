@@ -176,7 +176,7 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
 
 - Version `0.1.0.dev0`. **v0.1 is done**: `plan`, `sync` and `trace` over a
   vault, both contracts with schemas, and the invariants asserted rather than
-  only enumerated. Twenty-three ADRs. Nothing is released and the public API is not
+  only enumerated. Twenty-four ADRs. Nothing is released and the public API is not
   stable. **v0.2 is under way** — `docs/proposals/0001-the-design.md` §9, with
   `musubi verify` built. **The freeze is not**, and `verify` does not advance
   it: the roadmap guesses `verify` is the second program for
@@ -390,6 +390,17 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   right thing and is handed nothing to measure, with nothing broken either
   time. **When a property test hands you a counterexample, pin it as an
   `@example` in the commit that fixes it.** The database will not carry it.
+- **A field added to a published contract is a new identifier** (ADR-0024), not
+  a wider old one. Every object is `additionalProperties: false`, so measured:
+  a manifest with one extra field and a manifest that is genuinely malformed are
+  **both rejected, both as `ValidationError`** — a consumer holding the older
+  schema cannot tell *I am out of date* from *this document is wrong*, and those
+  want opposite responses. Bumping the identifier moves the signal to step 1 of
+  *Writing a consumer*, the `contract` check, which runs **before** validation.
+  Same defect as the trace map's fourth resolution rule: one value carrying two
+  situations that need different handling. Free to fix now and not after a
+  freeze — `tsumugi` measured that loosening a frozen schema does not help,
+  because consumers ship a vendored strict copy that goes on refusing.
 - **The previous manifest is the ledger.** A sync withdraws an artefact whose
   unit is no longer in the source, by reading `<destination>/manifest.json` —
   there is no separate store, because a corpus that already says what is in it
