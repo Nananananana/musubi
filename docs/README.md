@@ -90,20 +90,20 @@ request as the code it describes.
 | The tiling | Segments, composition, merging, coverage ([ADR-0004](adr/0004-a-conversion-carries-a-map-back-to-its-source.md)) |
 | Cleansing | 65 rules derived from ClearURLs, matched structurally and never by regex ([ADR-0016](adr/0016-a-rule-is-a-matcher-not-a-regular-expression.md)) |
 | Screening | 21 credential signatures; the entropy tier exists and is opt-in ([ADR-0017](adr/0017-entropy-is-a-tier-not-a-default.md)) |
-| The emitter | Front matter, the trace sidecar, staging and atomic promotion |
+| `musubi sync` | The same run with the writing on: staged, promoted together, and a credential means nothing is written at all ([ADR-0008](adr/0008-a-credential-stops-the-run.md)) |
+| The emitter | Front matter, the trace sidecar, staging, atomic promotion, and withdrawal |
 | The contracts | Both schemas, shipped in the wheel, validated against real output ([`contracts.md`](contracts.md)) |
 
 **Not built, and named rather than implied:**
 
-- **`musubi sync`.** The pipeline runs with `write=True` and the emitter stages
-  and promotes — but no command drives it, and nothing yet removes an artefact
-  whose unit has gone.
 - **`musubi trace`.** The maps are written and the resolution is implemented and
   tested; there is no command that takes `file:start-end` and answers.
 - **`musubi verify`**, `musubi rules`, `musubi eval`, `musubi doctor`. Named in
   the design, none written.
-- **The incremental path.** `Change` compares a re-read against what was held;
-  nothing stores what was held, so every run is a cold one.
+- **The incremental path.** A sync withdraws an artefact whose unit is gone, by
+  reading the previous manifest as its ledger — but it still re-reads, converts
+  and rewrites every unit that *is* there. `Change` exists and nothing calls it,
+  so every run is a cold one.
 - **Notion, Slack, HTML, PDF.** v0.3, and the milestone where traceable coverage
   stops being 1.0 by construction and starts being a measurement.
 - **Every number in `docs/measurements.md`**, because that file does not exist.

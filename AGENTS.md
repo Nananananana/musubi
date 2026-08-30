@@ -155,7 +155,8 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   `cleansing`, `screening`, `frontmatter`, `manifest`; `ports/` (`screener`,
   `source`, `converter`, `emitter`); `infrastructure/` (`rules`, `screeners`,
   `sources`, `converters`, `emitters`); `application/pipeline.py`;
-  `interfaces/cli` with **`musubi plan`**. A `Span`
+  `application/sync.py`; `interfaces/cli` with **`musubi plan`** and
+  **`musubi sync`**. A `Span`
   is a half-open range of integer positions and deliberately does not decide
   what a position indexes — the holder says, and the trace map records it. `text.rewrite()` is
   the primitive everything else is made of: deleting is replacing with the
@@ -229,6 +230,18 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   claim that a reader sees the whole corpus appear at once — that would need a
   directory swap, which would mean rewriting every unchanged artefact on every
   run.
+- **The previous manifest is the ledger.** A sync withdraws an artefact whose
+  unit is no longer in the source, by reading `<destination>/manifest.json` —
+  there is no separate store, because a corpus that already says what is in it
+  does not need one, and a ledger that can disagree with the corpus is a second
+  source of truth to keep in step. musubi deletes what it *recorded writing* and
+  never what it merely found, so a folder somebody put something else in
+  survives a sync intact.
+- Withdrawal happens **after** promotion. Deleting first and failing to promote
+  would leave the corpus missing documents that nothing replaced.
+- Both commands take their options from one `_shared()` function. A flag that
+  exists on the dry run and not on the real one is the one way the shared
+  pipeline cannot stop a plan from ceasing to predict a sync.
 - **One pipeline, two entry points.** `plan` and `sync` are `run(..., write=)`
   over the same module. Two implementations of one walk is exactly how a dry run
   stops predicting the real one, and a test asserts the run ids match.
