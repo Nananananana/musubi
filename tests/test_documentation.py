@@ -162,7 +162,30 @@ def _exists(command: str) -> bool:
     return True
 
 
-@pytest.mark.parametrize("command", sorted(_commands(_section("**Built,"))))
+def _built_commands() -> set[str]:
+    """The commands `docs/README.md` claims are built.
+
+    Asserted non-empty for the same reason `_adr_files` and `_refusals` are, and
+    against a failure the others cannot have. Those two lose their subject when
+    a *file* disappears, which is loud in other ways. This one loses its subject
+    when the section survives and merely stops matching -- rewrite ```musubi
+    plan`` as **musubi plan** and the checks below collect zero cases and pass.
+
+    Measured: doing exactly that took this file from 60 collected tests to 58,
+    green both times. The guard did not break. It stopped being handed anything
+    to guard, which is the failure iriguchi found by renaming a CI job and
+    watching seven guards die in one line.
+    """
+    found = _commands(_section("**Built,"))
+    assert found, (
+        "docs/README.md's Built section names no `musubi <command>`; the check "
+        "below would run zero times and pass. Either the section stopped using "
+        "backticks or the heading moved."
+    )
+    return found
+
+
+@pytest.mark.parametrize("command", sorted(_built_commands()))
 def test_a_command_the_docs_call_built_is_built(command: str) -> None:
     assert _exists(command), (
         f"docs/README.md lists `musubi {command}` as built and the CLI does not have it. "
@@ -170,6 +193,11 @@ def test_a_command_the_docs_call_built_is_built(command: str) -> None:
     )
 
 
+# Deliberately not asserted non-empty, unlike the Built section above: this one
+# is *supposed* to reach zero. When the last unbuilt thing is built the section
+# empties, and a guard that failed then would be demanding the project stay
+# unfinished. An empty collection here is a legitimate answer; there it is a
+# missing question.
 @pytest.mark.parametrize("command", sorted(_commands(_section("**Not built,"))))
 def test_a_command_the_docs_call_missing_is_missing(command: str) -> None:
     assert not _exists(command), (
