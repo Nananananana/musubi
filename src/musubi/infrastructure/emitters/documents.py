@@ -41,10 +41,11 @@ from pathlib import Path
 
 from ...domain.frontmatter import FrontMatter, replacements
 from ...domain.hashing import content_hash
+from ...domain.manifest import Artefact
 from ...domain.text import rewrite
 from ...domain.trace import TraceMap
 from ...errors import ConversionError
-from ...ports.emitter import Artefact, Document
+from ...ports.emitter import Document, Rendered
 
 __all__ = ["DOCUMENTS", "MANIFEST", "STAGING", "TRACES", "TRACE_CONTRACT", "DocumentEmitter"]
 
@@ -88,26 +89,41 @@ class DocumentEmitter:
         self.staging.mkdir(parents=True)
         self._staged = []
 
-    def stage(self, document: Document) -> Artefact:
-        """Write one document and its map into the staging area."""
+    def render(self, document: Document) -> Rendered:
+        """What this document would become. Touches nothing.
+
+        `plan` needs every number a `sync` would produce and needs them without
+        writing anything ([ADR-0012]), so the arithmetic lives here and the only
+        thing `stage` adds is the disk.
+        """
         text, trace = self._with_front_matter(document)
         relative = document.unit.unit_key
-        trace_relative = f"{relative}.json"
+        return Rendered(
+            text=text,
+            trace=trace,
+            artefact=Artefact(
+                path=f"{DOCUMENTS}/{relative}",
+                content_hash=content_hash(text),
+                trace_path=f"{TRACES}/{relative}.json",
+                source_id=document.unit.source_id,
+                unit_key=relative,
+                converter=document.converter,
+                traceable_characters=trace.traceable_characters,
+                characters=trace.artefact_length,
+                layer=document.layer,
+            ),
+        )
 
-        self._write(Path(DOCUMENTS) / relative, text)
+    def stage(self, document: Document) -> Artefact:
+        """Write one document and its map into the staging area."""
+        rendered = self.render(document)
+        relative = document.unit.unit_key
+        self._write(Path(DOCUMENTS) / relative, rendered.text)
         self._write(
-            Path(TRACES) / trace_relative,
-            _render_trace(document, text, trace, relative),
+            Path(TRACES) / f"{relative}.json",
+            _render_trace(document, rendered.text, rendered.trace, relative),
         )
-
-        return Artefact(
-            path=f"{DOCUMENTS}/{relative}",
-            content_hash=content_hash(text),
-            trace_path=f"{TRACES}/{trace_relative}",
-            traceable_characters=trace.traceable_characters,
-            characters=trace.artefact_length,
-            layer=document.layer,
-        )
+        return rendered.artefact
 
     def stage_manifest(self, body: str) -> None:
         """The run's own account, written last and promoted with the rest."""

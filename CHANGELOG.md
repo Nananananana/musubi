@@ -96,6 +96,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `producer` and nothing musubi cannot honestly state; and everything is staged
   and promoted by atomic per-file replace, so ADR-0008's gate has a mechanism.
   The trace sidecar is `musubi.trace-map/1-draft` until v0.2 freezes it.
+- `domain/manifest.py`, `application/pipeline.py` and `musubi plan`. The six
+  stages assembled, and the command that runs them and writes nothing
+  (ADR-0012). `plan` and `sync` are the same `run()` with `write` flipped, so a
+  dry run cannot drift from the thing it predicts. The manifest is
+  `musubi.sync-manifest/1-draft`, publishes its denominators, carries its own
+  limits, and its `run_id` excludes the clock and the folder's path.
 - ADR-0014, ADR-0015, ADR-0016, ADR-0017 and ADR-0018.
 - `span.resolve`, shared by `Rewritten` and `TraceMap`, and `Span.__bool__`,
   which is `True` always: `__len__` had made an empty span falsy, and

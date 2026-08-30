@@ -74,6 +74,10 @@ class Source(Protocol):
     adapter: str
     #: How a key is derived, stated for the manifest ([ADR-0006]).
     key_derivation: str
+    #: Where this source reads from, for a reader of the manifest. **Excluded
+    #: from the run id**: an id that embedded an absolute path would differ
+    #: between two machines holding the same corpus ([ADR-0003]).
+    origin: str
 
     def discover(self) -> Discovery:
         """Everything here, without opening any of it."""
