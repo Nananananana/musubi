@@ -16,6 +16,7 @@ __all__ = [
     "ContractError",
     "ConversionError",
     "CredentialFoundError",
+    "EmptySourceError",
     "MusubiError",
     "SourceError",
     "TraceError",
@@ -52,6 +53,26 @@ class TraceError(MusubiError):
     Every downstream citation is resolved through this map, so a map that does
     not hold is not a degraded map -- it is a source of confident wrong
     answers, and it stops the run.
+    """
+
+
+class EmptySourceError(MusubiError):
+    """A source produced nothing, and a corpus built from it already exists.
+
+    musubi cannot tell "the owner deleted everything" from "the source has
+    become unreadable": a path that resolves and holds nothing looks the same
+    either way. An unmounted drive, a cloud folder that has not populated, a
+    drive letter reassigned under a configured path -- each yields zero units
+    from a directory that exists.
+
+    Withdrawal deletes what the manifest recorded writing, so on zero units it
+    deletes all of it. That is right in one reading and destroys the corpus in
+    the other, so the run stops and the operator looks.
+
+    Zero is not a threshold chosen for caution. It is the only count at which
+    the two readings cannot be separated: **one surviving unit proves the
+    source is readable**, and every withdrawal beside it is a deletion somebody
+    asked for.
     """
 
 

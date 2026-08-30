@@ -21,12 +21,12 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from ..domain.manifest import Manifest, render
-from ..errors import CredentialFoundError
+from ..errors import CredentialFoundError, EmptySourceError
 from ..ports.emitter import Emitter
 from ..ports.source import Source
 from .pipeline import Settings, run
 
-__all__ = ["Synced", "sync"]
+__all__ = ["Synced", "empties_the_corpus", "sync", "withdrawals"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,13 +38,41 @@ class Synced:
     withdrawn: tuple[str, ...]
 
 
-def sync(source: Source, settings: Settings, emitter: Emitter) -> Synced:
+def withdrawals(held: frozenset[str] | set[str], manifest: Manifest) -> tuple[str, ...]:
+    """What a sync producing ``manifest`` would take back out of a corpus.
+
+    Shared with ``plan`` rather than computed inside ``sync``. A dry run that
+    reports what will be written and stays silent about what will be deleted is
+    not a dry run of the same command, and deletion is the half an operator
+    would want the warning about.
+    """
+    written = {artefact.path for artefact in manifest.artefacts}
+    written |= {artefact.trace_path for artefact in manifest.artefacts}
+    return tuple(sorted(held - written))
+
+
+def empties_the_corpus(held: frozenset[str] | set[str], manifest: Manifest) -> bool:
+    """Whether this run read nothing and would delete a corpus that exists.
+
+    The ambiguous case, and only that one: see
+    :class:`~musubi.errors.EmptySourceError`.
+    """
+    return not manifest.artefacts and bool(held)
+
+
+def sync(
+    source: Source, settings: Settings, emitter: Emitter, *, withdraw_all: bool = False
+) -> Synced:
     """Read a source and build the corpus, or refuse and build nothing.
 
     Raises :class:`~musubi.errors.CredentialFoundError` when the screener found
     something nobody allowed. The message names the unit and the kind and never
     the value: the run stops so that the secret does not travel, and an
     exception quoting it would send it to a log file instead of to a corpus.
+
+    Raises :class:`~musubi.errors.EmptySourceError` when the source produced
+    nothing and a corpus already exists, because withdrawal would then take all
+    of it. ``withdraw_all`` is the operator saying they have looked.
     """
     held = emitter.previously_written()
 
@@ -61,9 +89,17 @@ def sync(source: Source, settings: Settings, emitter: Emitter) -> Synced:
             f"--allow {finding.rule}:{key} if it is not what it looks like."
         )
 
-    written = {artefact.path for artefact in outcome.manifest.artefacts}
-    written |= {artefact.trace_path for artefact in outcome.manifest.artefacts}
-    withdrawn = tuple(sorted(held - written))
+    withdrawn = withdrawals(held, outcome.manifest)
+
+    if empties_the_corpus(held, outcome.manifest) and not withdraw_all:
+        emitter.discard()
+        raise EmptySourceError(
+            f"The source {source.source_id!r} produced no units, and {len(withdrawn)} files "
+            f"in the corpus would be taken back out -- all of it. An empty source and "
+            f"an unreadable one look the same from here. Nothing was written and "
+            f"nothing was deleted. Look at the source, then pass --withdraw-all if it "
+            f"really is empty."
+        )
 
     # Assembled before the manifest is staged, so that the document says what
     # the run did rather than what it did minus the last step.

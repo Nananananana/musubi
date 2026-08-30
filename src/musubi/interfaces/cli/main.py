@@ -17,12 +17,13 @@ import json
 import sys
 from collections import Counter
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
 from ... import __version__
 from ...application.pipeline import Outcome, Settings, run
-from ...application.sync import Synced, sync
+from ...application.sync import Synced, empties_the_corpus, sync, withdrawals
 from ...application.trace import Resolution, resolve
 from ...domain.manifest import Manifest, render
 from ...domain.span import Span
@@ -184,6 +185,13 @@ def _shared(command: argparse.ArgumentParser) -> None:
         metavar="RULE:UNIT_KEY",
         help="a credential hit you have looked at and decided against",
     )
+    # In _shared() and not only on `sync`: a flag that exists on the real run
+    # and not on the dry one is the way a plan stops predicting a sync.
+    command.add_argument(
+        "--withdraw-all",
+        action="store_true",
+        help="proceed when the source is empty and the whole corpus would be taken back out",
+    )
     command.add_argument("--json", action="store_true", help="print the manifest instead")
 
 
@@ -207,18 +215,25 @@ def _prepare(arguments: argparse.Namespace) -> tuple[FilesystemSource, Settings,
 
 def _plan(arguments: argparse.Namespace) -> int:
     source, settings, emitter = _prepare(arguments)
+    held = emitter.previously_written()
     outcome = run(source, settings, emitter, write=False)
 
+    # A dry run that reports what would be written and stays silent about what
+    # would be deleted is not a dry run of the same command.
+    taken = withdrawals(held, outcome.manifest)
+    stops = empties_the_corpus(held, outcome.manifest) and not arguments.withdraw_all
+
     if arguments.json:
-        _document(render(outcome.manifest))
+        _document(render(replace(outcome.manifest, withdrawn=taken)))
     else:
         _report_plan(outcome, show_removals=arguments.show_removals)
-    return 1 if outcome.refused else 0
+        _report_withdrawals(taken, stops=stops)
+    return 1 if outcome.refused or stops else 0
 
 
 def _sync(arguments: argparse.Namespace) -> int:
     source, settings, emitter = _prepare(arguments)
-    result = sync(source, settings, emitter)
+    result = sync(source, settings, emitter, withdraw_all=arguments.withdraw_all)
 
     if arguments.json:
         _document(render(result.manifest))
@@ -333,6 +348,22 @@ def _report_plan(outcome: Outcome, *, show_removals: bool) -> None:
 
     _coverage(manifest, "would be written")
     _limits(manifest)
+
+
+def _report_withdrawals(taken: tuple[str, ...], *, stops: bool) -> None:
+    """What a sync would take back out, and whether it would refuse to."""
+    if not taken:
+        return
+    print()
+    if stops:
+        print(f"This would take back out all {len(taken)} files in the corpus, and")
+        print("the source produced nothing, so `musubi sync` will refuse to run.")
+        print("An empty source and an unreadable one look the same from here.")
+        print("Look at the source, then pass --withdraw-all if it really is empty.")
+    else:
+        print("Would be taken back out, because the source no longer has them")
+    for path in taken:
+        print(f"  {path}")
 
 
 def _report_sync(result: Synced, destination: Path) -> None:

@@ -203,6 +203,7 @@ _NUMBERS = {
     18: "Eighteen",
     19: "Nineteen",
     20: "Twenty",
+    21: "Twenty-one",
 }
 
 
