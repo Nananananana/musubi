@@ -102,13 +102,13 @@ def test_there_is_no_architecture_document_yet() -> None:
 def test_a_published_schema_is_packaged_with_the_wheel() -> None:
     """ADR-0002: the contract ships inside the wheel.
 
-    The ``force-include`` block in ``pyproject.toml`` is commented out while
-    ``schemas/`` is empty, because hatchling refuses to build against a
-    force-include that resolves to nothing. This is what stops that comment
-    from outliving its reason.
+    This asserts the ``force-include`` block is live. It does **not** assert the
+    files are in a built wheel, which is a different question and which the
+    "the schemas ship inside the wheel" CI job answers by building one and
+    opening it -- ``force-include`` does not apply to an editable install, so
+    nothing a developer runs locally would notice if the block were deleted.
     """
-    if not list((ROOT / "schemas").glob("*.json")):
-        pytest.skip("no schema published yet; v0.2")
+    assert list((ROOT / "schemas").glob("*.json")), "both contracts have schemas since #24"
 
     pyproject = ROOT / "pyproject.toml"
     live = [
@@ -131,3 +131,90 @@ def test_the_forbidden_vocabulary_is_absent_from_the_readme(word: str) -> None:
         f"what its screener recognises, and neither is a guarantee about what is left. "
         f"See docs/adr/0008-a-credential-stops-the-run.md"
     )
+
+
+# -- what exists, checked against what exists -------------------------------
+
+WHAT_EXISTS = ROOT / "docs" / "README.md"
+
+
+def _section(heading: str) -> str:
+    """The text between one bold heading in `docs/README.md` and the next."""
+    body = WHAT_EXISTS.read_text(encoding="utf-8")
+    start = body.index(heading) + len(heading)
+    rest = body[start:]
+    end = rest.find("\n**")
+    return rest if end == -1 else rest[:end]
+
+
+def _commands(section: str) -> set[str]:
+    return set(re.findall(r"`musubi ([a-z]+)`", section))
+
+
+def _exists(command: str) -> bool:
+    """Whether the CLI knows this command, asked the way a user would."""
+    from musubi.interfaces.cli import main
+
+    try:
+        main([command, "--help"])
+    except SystemExit as exit_code:
+        return exit_code.code == 0
+    return True
+
+
+@pytest.mark.parametrize("command", sorted(_commands(_section("**Built,"))))
+def test_a_command_the_docs_call_built_is_built(command: str) -> None:
+    assert _exists(command), (
+        f"docs/README.md lists `musubi {command}` as built and the CLI does not have it. "
+        f"This project's whole claim is that its documents and its code do not diverge."
+    )
+
+
+@pytest.mark.parametrize("command", sorted(_commands(_section("**Not built,"))))
+def test_a_command_the_docs_call_missing_is_missing(command: str) -> None:
+    assert not _exists(command), (
+        f"`musubi {command}` now exists and docs/README.md still lists it as not built. "
+        f"Update 'What exists' in the same pull request as the code it describes."
+    )
+
+
+def test_the_counts_in_the_docs_are_the_counts_in_the_code() -> None:
+    """The same discipline as asserting a schema's enums against the code's:
+    two statements of one fact, kept one by a test."""
+    from musubi.infrastructure.rules import CORE
+    from musubi.infrastructure.screeners.signatures import SIGNATURES
+
+    body = WHAT_EXISTS.read_text(encoding="utf-8")
+    assert f"{len(CORE.rules)} rules" in body, f"the pack has {len(CORE.rules)} rules"
+    assert f"{len(SIGNATURES)} credential signatures" in body, f"there are {len(SIGNATURES)}"
+
+    listed = len(_adr_files())
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert f"{_spelled(listed)} decisions" in readme, f"there are {listed} ADRs"
+
+
+_NUMBERS = {
+    12: "Twelve",
+    13: "Thirteen",
+    14: "Fourteen",
+    15: "Fifteen",
+    16: "Sixteen",
+    17: "Seventeen",
+    18: "Eighteen",
+    19: "Nineteen",
+    20: "Twenty",
+}
+
+
+def _spelled(count: int) -> str:
+    assert count in _NUMBERS, f"add {count} to _NUMBERS"
+    return _NUMBERS[count]
+
+
+def test_no_current_state_document_says_nothing_is_built() -> None:
+    """It was true for four days. A README saying it over a working command
+    costs more credibility than any other kind of staleness, which is why this
+    is a test and not a note."""
+    for name in ("README.md", "AGENTS.md", "docs/README.md"):
+        body = (ROOT / name).read_text(encoding="utf-8")
+        assert "Nothing is built" not in body, f"{name} still says nothing is built"
