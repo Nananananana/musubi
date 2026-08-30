@@ -32,7 +32,7 @@ from musubi.application.pipeline import Settings, run
 from musubi.domain.manifest import render
 from musubi.domain.trace import Kind
 from musubi.infrastructure.converters import converter_for
-from musubi.infrastructure.emitters import MANIFEST, TRACES, DocumentEmitter
+from musubi.infrastructure.emitters import DOCUMENTS, MANIFEST, TRACES, DocumentEmitter
 from musubi.infrastructure.rules import CORE
 from musubi.infrastructure.screeners import default_screener
 from musubi.infrastructure.sources import ObsidianSource
@@ -274,6 +274,35 @@ def test_the_layout_the_contract_promises_is_the_layout_the_emitter_writes() -> 
         assert f"`<destination>/{value}" in said or f"`{value}`" in said, (
             f"the emitter writes {value!r} for {name} and docs/contracts.md does not "
             f"say so. A consumer reading the contract would look in the wrong place."
+        )
+
+
+def test_an_artefact_path_is_documents_plus_its_unit_key(tmp_path: Path) -> None:
+    """The relationship the whole downstream chain rests on, and nothing pinned it.
+
+    `kiseki-notes` hashes the corpus-relative path to make a note's stable
+    reference, so that reference is a *function of* `unit_key` rather than a
+    second thing that could break independently. There is one degree of freedom
+    in the chain and it is musubi's key -- which is only true while this holds.
+
+    Break it, by putting a source's name or a date into the output path, and a
+    consumer's references move for a reason `key_derivation` does not describe
+    and nothing announces.
+    """
+    manifest = _real_manifest(tmp_path)
+    body = json.loads(manifest.read_text(encoding="utf-8"))
+    assert body["artefacts"], "the fixture should have produced an artefact"
+    for artefact in body["artefacts"]:
+        expected = f"{DOCUMENTS}/{artefact['source']['unit_key']}"
+        assert artefact["path"] == expected, (
+            f"the manifest puts it at {artefact['path']!r}, not {expected!r}. A consumer "
+            f"identifying documents by path no longer inherits key_derivation."
+        )
+        # And on the disk, not only in the manifest's own account of itself.
+        # Checking the manifest against the manifest would pass with the file
+        # written somewhere else entirely -- measured.
+        assert (manifest.parent / expected).is_file(), (
+            f"the manifest says {expected!r} and nothing is there"
         )
 
 
