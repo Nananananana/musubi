@@ -17,10 +17,11 @@ place it was inserted.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Self
 
-__all__ = ["Span"]
+__all__ = ["Span", "resolve"]
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -52,6 +53,16 @@ class Span:
     def __len__(self) -> int:
         return self.length
 
+    def __bool__(self) -> bool:
+        """Always true. A span is a place, and a place exists.
+
+        Without this, ``__len__`` makes an empty span falsy, and empty spans are
+        everywhere in this codebase -- an insertion's source, a removal's
+        output, a point query. ``resolve(...) or Span(0, 0)`` silently replaced
+        a correct ``[3:3]`` with ``[0:0]`` once already. Ask ``is_empty``.
+        """
+        return True
+
     def __str__(self) -> str:
         return f"[{self.start}:{self.end}]"
 
@@ -81,3 +92,40 @@ class Span:
 
     def slice(self, text: str) -> str:
         return text[self.start : self.end]
+
+
+def resolve(runs: Sequence[tuple[Span, Span, bool]], query: Span) -> Span | None:
+    """Map a range in one string back to the range of another it came from.
+
+    ``runs`` is ``(out, src, exact)`` in output order, where ``exact`` says the
+    correspondence inside that run is affine and may therefore be clipped. A run
+    that is not exact is taken whole: there is no character-level correspondence
+    inside a transformation, and a clipped answer would be a precision the
+    pipeline does not have.
+
+    A non-empty query takes the runs it overlaps; zero-length runs between them
+    are covered by the union without being matched. An empty query -- *what is
+    at this point?* -- takes every run the point touches, which is how a stretch
+    that was deleted in full still answers.
+
+    ``None`` when no run bears on the query at all, which happens only when
+    there are no runs.
+    """
+    starts: list[int] = []
+    ends: list[int] = []
+    for out, src, exact in runs:
+        if query.is_empty:
+            if not out.start <= query.start <= out.end:
+                continue
+        elif not out.overlaps(query):
+            continue
+        if exact:
+            delta = src.start - out.start
+            starts.append(max(out.start, query.start) + delta)
+            ends.append(min(out.end, query.end) + delta)
+        else:
+            starts.append(src.start)
+            ends.append(src.end)
+    if not starts:
+        return None
+    return Span(min(starts), max(ends))

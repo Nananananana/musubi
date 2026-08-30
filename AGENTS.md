@@ -151,14 +151,23 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   and there is no public API to speak of yet.
 - **License: Apache-2.0. Python: 3.12+. Runtime dependencies: 0**, checked in CI
   by installing the wheel with no extras and asserting nothing came along.
-- **Built:** `domain/span.py` and `domain/text.py`. A `Span` is a half-open
-  range of integer positions and deliberately does not decide what a position
-  indexes — the holder says, and the trace map records it. `text.rewrite()` is
+- **Built:** `domain/span.py`, `domain/text.py` and `domain/trace.py`. A `Span`
+  is a half-open range of integer positions and deliberately does not decide
+  what a position indexes — the holder says, and the trace map records it. `text.rewrite()` is
   the primitive everything else is made of: deleting is replacing with the
   empty string, inserting is replacing an empty span, and the account of where
   every output character came from falls out of the one code path rather than
   being maintained beside it. Its `Piece`s tile **both** sides, checked on
   construction and by property tests.
+- `domain/trace.py` is ADR-0004 in code. A `TraceMap` tiles the artefact
+  exactly, and `followed_by` composes two stages into one map from the artefact
+  back to the source. Composition never claims the stronger of two kinds, and
+  splits a run where the earlier stage changed kind rather than degrading the
+  whole of it. `merged()` collapses **only** verbatim runs: merging two
+  transformed runs would answer a query with the union of what they replaced,
+  which is a worse answer than either gave alone.
+- The domain raises built-in exceptions. `errors.TraceError` exists for the
+  layer that has a file path to put in the message; the domain has no file.
 - `decode()` reads UTF-8 (with or without a BOM) and UTF-16 that announces
   itself, and **refuses everything else rather than detecting**. A guessed
   legacy encoding writes mojibake into a corpus bound for a model and looks

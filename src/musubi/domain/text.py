@@ -25,7 +25,7 @@ import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
-from .span import Span
+from .span import Span, resolve
 
 __all__ = [
     "KEPT",
@@ -131,40 +131,11 @@ class Rewritten:
         if out.end > len(self.text):
             raise ValueError(f"{out} is outside the output [0:{len(self.text)}]")
 
-        starts: list[int] = []
-        ends: list[int] = []
-        for piece in self.pieces:
-            if not self._bears_on(piece, out):
-                continue
-            if piece.kind == KEPT:
-                delta = piece.src.start - piece.out.start
-                starts.append(max(piece.out.start, out.start) + delta)
-                ends.append(min(piece.out.end, out.end) + delta)
-            else:
-                starts.append(piece.src.start)
-                ends.append(piece.src.end)
-
-        if not starts:
-            # No pieces at all, which happens only for an empty source.
-            return Span(0, 0)
-        return Span(min(starts), max(ends))
-
-    @staticmethod
-    def _bears_on(piece: Piece, out: Span) -> bool:
-        """Does this piece account for any part of this output range?
-
-        A non-empty query takes the pieces it overlaps; the deletions sitting
-        between them are covered by the union without being matched, because
-        their source lies between their neighbours'.
-
-        An empty query -- *what is at this point?* -- takes every piece the
-        point touches, which is how a run deleted in full still answers. It is
-        the only case where a zero-length piece is reported, and it is the case
-        where somebody is asking about exactly that.
-        """
-        if out.is_empty:
-            return piece.out.start <= out.start <= piece.out.end
-        return piece.out.overlaps(out)
+        runs = [(piece.out, piece.src, piece.kind == KEPT) for piece in self.pieces]
+        found = resolve(runs, out)
+        # ``None`` only when there are no pieces, which happens only for an
+        # empty source -- and an empty source came from position zero.
+        return Span(0, 0) if found is None else found
 
 
 @dataclass(frozen=True, slots=True)
