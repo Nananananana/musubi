@@ -48,11 +48,19 @@ This convention is taken from the sibling projects `kiseki`, `tsumugi` and
 - **A number in a document is measured or it is not written.** Every table of
   scores names the script that produced it, the corpus it ran on, and what the
   number does not cover.
+- **"What exists" is updated in the same pull request as the code it describes.**
+  This project's whole claim is that its documents and its code do not diverge, so
+  a README saying *nothing is built* over a working command costs more credibility
+  than any other kind of staleness. It happened once, in the four days between the
+  design landing and the CLI working, and this line is the answer to it.
 
 ## Where the project is right now
 
-**Nothing is built.** This repository currently contains the design, the
-decisions behind it, and the tooling that will enforce them.
+**v0.1 is in progress, and `musubi plan` works.** It reads a folder, converts
+it, cleanses it, screens it for credentials, and says what a sync would do
+without writing anything. `musubi sync` and `musubi trace` are the next two
+issues; the full list of what does and does not exist is below, and it is the
+thing to trust over any sentence elsewhere in this repository.
 
 Read in this order:
 
@@ -66,6 +74,42 @@ Read in this order:
    that makes everything else checkable.
 5. [`adr/README.md`](adr/README.md) — the rest.
 
-`architecture.md` is deliberately absent. An ADR before the code is legitimate,
-because it records a decision that has been made. A current-state document before
-the code is fiction.
+## What exists
+
+This section is the one a reader should trust over any sentence elsewhere. It is
+the answer to *is this thing real yet*, and it is kept current in the same pull
+request as the code it describes.
+
+**Built, and exercised end to end by `musubi plan`:**
+
+| | |
+|---|---|
+| `musubi plan` | Reads a folder and reports what a sync would do, writing nothing ([ADR-0012](adr/0012-a-dry-run-comes-first.md)) |
+| Sources | `FilesystemSource`, `ObsidianSource`. Two stages: `discover()` opens nothing, `read()` opens one thing |
+| Converters | Markdown and plain text — decoding, line endings, and a trace map over both |
+| The tiling | Segments, composition, merging, coverage ([ADR-0004](adr/0004-a-conversion-carries-a-map-back-to-its-source.md)) |
+| Cleansing | 65 rules derived from ClearURLs, matched structurally and never by regex ([ADR-0016](adr/0016-a-rule-is-a-matcher-not-a-regular-expression.md)) |
+| Screening | 21 credential signatures; the entropy tier exists and is opt-in ([ADR-0017](adr/0017-entropy-is-a-tier-not-a-default.md)) |
+| The emitter | Front matter, the trace sidecar, staging and atomic promotion |
+| The contracts | Both schemas, shipped in the wheel, validated against real output ([`contracts.md`](contracts.md)) |
+
+**Not built, and named rather than implied:**
+
+- **`musubi sync`.** The pipeline runs with `write=True` and the emitter stages
+  and promotes — but no command drives it, and nothing yet removes an artefact
+  whose unit has gone.
+- **`musubi trace`.** The maps are written and the resolution is implemented and
+  tested; there is no command that takes `file:start-end` and answers.
+- **`musubi verify`**, `musubi rules`, `musubi eval`, `musubi doctor`. Named in
+  the design, none written.
+- **The incremental path.** `Change` compares a re-read against what was held;
+  nothing stores what was held, so every run is a cold one.
+- **Notion, Slack, HTML, PDF.** v0.3, and the milestone where traceable coverage
+  stops being 1.0 by construction and starts being a measurement.
+- **Every number in `docs/measurements.md`**, because that file does not exist.
+  No recall is claimed for the screener and no coverage is claimed for any
+  format; v0.4 owes both.
+- **`docs/architecture.md`**, deliberately. An ADR before the code is legitimate,
+  because it records a decision that has been made. A current-state document
+  before the code is fiction — and this table is the current-state document until
+  there is enough architecture to be worth describing on its own.

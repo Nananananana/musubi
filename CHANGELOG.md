@@ -115,6 +115,13 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   finding in the manifest now carries no offset and no length — it points at a
   credential still in the owner's file and still valid, and the owner does not
   need an offset to act.
+- `docs/README.md` gains a **What exists** section, and it is the one a reader
+  should trust over any sentence elsewhere: what is built, and what is *named*
+  as not built rather than left to be inferred. The README's status line said
+  "Nothing is built" over a working `musubi plan` for four days. Three tests now
+  keep it honest — every command the docs call built must answer `--help`, every
+  command they call missing must not, and the rule and signature counts must be
+  the code's.
 - ADR-0014 through ADR-0019.
 - `span.resolve`, shared by `Rewritten` and `TraceMap`, and `Span.__bool__`,
   which is `True` always: `__len__` had made an empty span falsy, and

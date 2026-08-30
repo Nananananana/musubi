@@ -5,10 +5,52 @@ already have — an Obsidian vault, a Notion zip, a Slack archive, a shelf of PD
 — into a clean corpus in which **every character still knows which byte of which
 original file it came from.** No network, no service tokens, no model.
 
-> **Status: the design, before the code.** Nothing is built. This repository
-> holds the design, twelve decision records, and the tooling that will enforce
-> them. Start with
+> **Status: v0.1 in progress.** `musubi plan` works: it reads a folder, converts
+> it, cleanses it, screens it for credentials, and tells you exactly what a sync
+> would do — **without writing anything**. `musubi sync` and `musubi trace` are
+> next. Nothing is released and the public API is not stable. What exists and
+> what does not is in [`docs/README.md`](docs/README.md); the design and the rest
+> of the roadmap are in
 > [`docs/proposals/0001-the-design.md`](docs/proposals/0001-the-design.md).
+
+---
+
+## Try it
+
+```bash
+musubi plan ~/notes
+```
+
+```text
+musubi plan — 1 emitted, 1 skipped, 1 removals, 56.9% traceable
+  nothing was written. run id sha256:50f5961ef9a75fdb75e4930527a0edace002d5b79…
+
+Would not be read
+  photo.png  unknown_format (.png)
+
+Would be removed
+  tracking.utm-family  1x
+
+Coverage
+  1 documents would be written, 1 skipped
+  58 of 102 characters traceable (56.9%)
+  cap: only these suffixes are read: .markdown, .md, .mdown, .mkd, .text, .txt
+
+Limits
+  A traceable character means an offset resolves to a place in the source. It
+  does not mean the conversion read the document in the right order.
+  …
+```
+
+It leads with what would **not** happen, and ends with what the run does not
+establish. That is a deliberate reversal of what every ingestion tool prints, and
+it is why the page can be handed to somebody deciding whether to trust this with
+their notes.
+
+The 56.9% is real and worth explaining: on a short note, the front matter musubi
+adds is a large share of the output, and musubi wrote it, so it does not count as
+traceable. Coverage publishes its numerator and its denominator rather than a
+ratio for exactly this reason.
 
 ---
 
@@ -118,11 +160,12 @@ only kind of seam that lets five projects release on five schedules.
 
 | | |
 |---|---|
+| [`docs/README.md`](docs/README.md) | **What exists and what does not**, and why the separation is structural |
 | [`docs/proposals/0001-the-design.md`](docs/proposals/0001-the-design.md) | The design, the roadmap, and what would falsify it |
+| [`docs/contracts.md`](docs/contracts.md) | The two contracts, for producers and consumers — including what the schemas cannot say |
 | [`docs/concept.md`](docs/concept.md) | The conceptual model, and the picture across five projects |
-| [`docs/adr/`](docs/adr/README.md) | Twelve decisions, with their reasons and their costs |
+| [`docs/adr/`](docs/adr/README.md) | Nineteen decisions, with their reasons and their costs |
 | [`AGENTS.md`](AGENTS.md) | The rules for anyone — human or model — changing this repository |
-| [`docs/README.md`](docs/README.md) | Which document is which, and why the separation is structural |
 
 ## License
 
