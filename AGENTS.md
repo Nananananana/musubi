@@ -146,9 +146,10 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
 
 ## Current state
 
-- Version `0.1.0.dev0`. **v0.1 is in progress**, one issue at a time against the
-  milestone. The design and twenty ADRs are in `docs/`; nothing is released
-  and there is no public API to speak of yet.
+- Version `0.1.0.dev0`. **v0.1 is done**: `plan`, `sync` and `trace` over a
+  vault, both contracts with schemas, and the invariants asserted rather than
+  only enumerated. Twenty ADRs. Nothing is released and the public API is not
+  stable. v0.2 is next — `docs/proposals/0001-the-design.md` §9.
 - **License: Apache-2.0. Python: 3.12+. Runtime dependencies: 0**, checked in CI
   by installing the wheel with no extras and asserting nothing came along.
 - **Built:** `domain/` — `span`, `text`, `trace`, `hashing`, `record`, `removal`,
@@ -258,6 +259,12 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   sixteen commits later, which is why #24 had to be filed. Half a contract is
   either "consumable-looking but not consumable" or "a published reading that
   disagrees with the implementation".
+- **`tests/test_invariants.py` is the executable form of `docs/contracts.md`'s
+  "What these schemas cannot say".** Not a reinforcement of it: an enumeration
+  nobody runs hands a consumer "written down but never checked". The tests are
+  named for the numbered entries, and a guard fails if the list grows an entry
+  nothing runs. Everything there is asserted against a **real sync** of a
+  generated vault, never against a document a test assembled.
 - **The console's encoding never reaches a document, and never fails a run**
   (ADR-0020). `--json` writes UTF-8 bytes to `sys.stdout.buffer`; the report
   streams are reconfigured with `errors="replace"` so a character a terminal

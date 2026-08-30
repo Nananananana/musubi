@@ -56,11 +56,15 @@ This convention is taken from the sibling projects `kiseki`, `tsumugi` and
 
 ## Where the project is right now
 
-**v0.1 is in progress, and `musubi plan` works.** It reads a folder, converts
-it, cleanses it, screens it for credentials, and says what a sync would do
-without writing anything. `musubi sync` and `musubi trace` are the next two
-issues; the full list of what does and does not exist is below, and it is the
-thing to trust over any sentence elsewhere in this repository.
+**v0.1 is done.** `musubi plan`, `musubi sync` and `musubi trace` work: a folder
+of notes becomes a corpus in which every character can be traced back to the
+byte it came from, nothing is written until the whole run has passed, and the
+invariants a schema cannot express are asserted against generated corpora rather
+than only enumerated.
+
+Nothing is released and the public API is not stable. The full list of what does
+and does not exist is below, and it is the thing to trust over any sentence
+elsewhere in this repository.
 
 Read in this order:
 
@@ -94,6 +98,7 @@ request as the code it describes.
 | `musubi trace` | A range of a synced document, resolved back through every transformation to a place in the file you have ([ADR-0004](adr/0004-a-conversion-carries-a-map-back-to-its-source.md)) |
 | The emitter | Front matter, the trace sidecar, staging, atomic promotion, and withdrawal |
 | The contracts | Both schemas, shipped in the wheel, validated against real output ([`contracts.md`](contracts.md)) |
+| The invariants | What the schemas cannot express, asserted against generated corpora — and a guard that fails if the enumeration grows an entry nothing runs |
 
 **Not built, and named rather than implied:**
 

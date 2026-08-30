@@ -51,6 +51,13 @@ dev = [
 # conformance read schemas rather than packages. Neither project is published
 # to an index, so declaring an extra now would make it unresolvable for
 # everyone including CI.
+#
+# When it does land, the direct reference belongs in the CI job and **not
+# here**. `pip install "mamori @ git+https://github.com/..."` resolves fine, and
+# putting that form in project metadata makes the distribution unuploadable to
+# PyPI -- silently, because `twine check` passes it. Measured by the `seam`
+# session, which also found that a direct reference wins even when the name on
+# PyPI belongs to somebody else.
 
 [project.urls]
 Homepage = "https://github.com/Nananananana/musubi"
