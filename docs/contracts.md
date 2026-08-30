@@ -247,6 +247,33 @@ wrong.
 the sense of [ADR-0002](adr/0002-the-sync-manifest-is-a-document.md) — read them
 as contracts — and they are not documents to *index*.
 
+**An artefact's path is exactly `documents/` followed by its `unit_key`**, and a
+consumer that derives anything from that path inherits the manifest's
+`key_derivation` whether it reads the field or not.
+
+That is the whole of what musubi can offer a consumer that identifies documents
+by where they sit. `kiseki-notes` hashes the corpus-relative path to make a
+note's stable reference, so its reference is a *function of* `unit_key` — not a
+second, independent thing that could break separately. **There is one degree of
+freedom in the chain, and it is musubi's key.**
+
+So `key_derivation` is not only a note for somebody auditing a corpus. It is the
+stability a path-identifying consumer is getting, stated in the one place
+musubi controls:
+
+- `key_derivation: path` — a vault, a shelf of PDFs, a directory of HTML. The
+  key is the path relative to the declared root, so **moving or renaming a file
+  looks like a delete plus an add**, and every reference a consumer derived from
+  the old path is a reference to a document that no longer exists. This is a
+  known weakness ([ADR-0006](adr/0006-the-unit-of-sync-is-the-record.md)) and not
+  a defect: a folder of files has no other identity to offer.
+- Any other derivation — a Notion page id, a Slack channel and timestamp, a
+  `Message-ID` — survives a rename, and so does everything downstream of it.
+
+A consumer that cannot tolerate the first case should read `key_derivation` and
+say so, rather than discovering it as a corpus that appears to have been
+rewritten.
+
 **The layout is part of `musubi.sync-manifest/1`, not a separate thing to
 check.** A consumer that reads `<destination>/documents` and
 `<destination>/traces/<unit_key>.json` is depending on those names, so moving
