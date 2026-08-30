@@ -14,10 +14,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+from ..domain.manifest import Artefact
 from ..domain.record import Unit
 from ..domain.trace import TraceMap
 
-__all__ = ["Artefact", "Document", "Emitter"]
+__all__ = ["Artefact", "Document", "Emitter", "Rendered"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,32 +37,28 @@ class Document:
 
 
 @dataclass(frozen=True, slots=True)
-class Artefact:
-    """One thing that was written, as the manifest will name it."""
+class Rendered:
+    """A document as it will be written, before anything has been written.
 
-    #: Relative to the destination, and derived from the ``unit_key`` rather
-    #: than from the source's filename ([ADR-0013]) -- `kiseki-notes` hashes the
-    #: path to make a note's stable reference, so a name that moved would make
-    #: every note look new.
-    path: str
-    content_hash: str
-    trace_path: str
-    traceable_characters: int
-    characters: int
-    layer: str
+    ``plan`` needs every number a ``sync`` would produce -- the artefact's path,
+    its hash, its traceable coverage -- and needs them without touching the
+    destination ([ADR-0012]). So rendering is separated from writing, and the
+    only thing ``stage`` adds is the disk.
+    """
 
-    @property
-    def traceable_coverage(self) -> float:
-        """1.0 for an empty artefact: no character fails the guarantee."""
-        if not self.characters:
-            return 1.0
-        return self.traceable_characters / self.characters
+    text: str
+    trace: TraceMap
+    artefact: Artefact
 
 
 class Emitter(Protocol):
     """Satisfied by anything that can stage documents and promote them."""
 
     name: str
+
+    def render(self, document: Document) -> Rendered:
+        """What this document would become. Touches nothing."""
+        ...
 
     def stage(self, document: Document) -> Artefact:
         """Write one document where it will wait, and say what it became."""

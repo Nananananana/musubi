@@ -97,6 +97,7 @@ class FilesystemSource:
         self._media_types = dict(MEDIA_TYPES if media_types is None else media_types)
         self._machinery = frozenset(machinery)
         self._maximum_bytes = maximum_bytes
+        self.origin = str(self.root)
 
     # -- stage one: what is there ------------------------------------------
 

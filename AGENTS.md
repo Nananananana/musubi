@@ -152,9 +152,10 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
 - **License: Apache-2.0. Python: 3.12+. Runtime dependencies: 0**, checked in CI
   by installing the wheel with no extras and asserting nothing came along.
 - **Built:** `domain/` — `span`, `text`, `trace`, `hashing`, `record`, `removal`,
-  `cleansing`, `screening`, `frontmatter`; `ports/` (`screener`, `source`,
-  `converter`, `emitter`); `infrastructure/` (`rules`, `screeners`, `sources`,
-  `converters`, `emitters`). A `Span`
+  `cleansing`, `screening`, `frontmatter`, `manifest`; `ports/` (`screener`,
+  `source`, `converter`, `emitter`); `infrastructure/` (`rules`, `screeners`,
+  `sources`, `converters`, `emitters`); `application/pipeline.py`;
+  `interfaces/cli` with **`musubi plan`**. A `Span`
   is a half-open range of integer positions and deliberately does not decide
   what a position indexes — the holder says, and the trace map records it. `text.rewrite()` is
   the primitive everything else is made of: deleting is replacing with the
@@ -228,6 +229,17 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   claim that a reader sees the whole corpus appear at once — that would need a
   directory swap, which would mean rewriting every unchanged artefact on every
   run.
+- **One pipeline, two entry points.** `plan` and `sync` are `run(..., write=)`
+  over the same module. Two implementations of one walk is exactly how a dry run
+  stops predicting the real one, and a test asserts the run ids match.
+- **Screening is stage two, before conversion.** A secret never reaches a file
+  musubi wrote, so a run that stops has nothing on disk to clean up. It also
+  means a secret in a file musubi cannot *convert* is still caught, which is why
+  the screener reads with `errors="replace"`.
+- `run_id` excludes `created_at` and the source's root path. An id embedding an
+  absolute path is an id nobody else can re-derive.
+- **argparse expands `%` in help strings.** The entropy tier's own number
+  contains two, so it is escaped at that boundary and nowhere else.
 - Markdown and plaintext are the **same** conversion, and saying so beats
   inventing a difference. Wikilinks, `%%comments%%` and reference links are all
   rewrites of somebody's writing and each needs its own argument.
