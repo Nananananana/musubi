@@ -51,6 +51,21 @@ dev = [
 # conformance read schemas rather than packages. Neither project is published
 # to an index, so declaring an extra now would make it unresolvable for
 # everyone including CI.
+#
+# When it does land, the direct reference belongs in the CI job and **not
+# here**. `pip install "mamori @ git+https://github.com/..."` resolves fine --
+# it even wins when the name on PyPI belongs to somebody else -- but the same
+# form in project metadata is a trap, and the trap has two steps:
+#
+#   1. hatchling refuses to build at all: "cannot be a direct reference unless
+#      `tool.hatch.metadata.allow-direct-references` is set to `true`". Loud,
+#      and measured here rather than taken on report.
+#   2. The shortest way to silence that is to set the flag -- after which the
+#      build succeeds, `twine check` passes, and PyPI rejects the upload. The
+#      failure has moved to release day.
+#
+# So the danger is not step 1. It is a pull request that adds the flag to make
+# step 1 go away. If one arrives, it is the wrong fix: the reference goes in CI.
 
 [project.urls]
 Homepage = "https://github.com/Nananananana/musubi"
