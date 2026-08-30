@@ -40,6 +40,7 @@ _SOURCES = {"obsidian": ObsidianSource, "filesystem": FilesystemSource}
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    _readable()
     parser = _parser()
     arguments = parser.parse_args(argv)
     if arguments.command is None:
@@ -51,6 +52,37 @@ def main(argv: Sequence[str] | None = None) -> int:
     except MusubiError as error:
         print(f"musubi: {error}", file=sys.stderr)
         return 1
+
+
+def _readable() -> None:
+    """Make the report streams incapable of failing a run ([ADR-0020]).
+
+    A `cp932` console -- the default on Japanese Windows -- cannot encode an em
+    dash, and `musubi sync` returned 1 with the corpus fully written because a
+    heading would not print. The exit code said nothing was written; the
+    destination was full.
+
+    The stream is configured rather than each string sanitised, because musubi's
+    subject is other people's documents: a skip line naming a file, an excerpt in
+    `trace`, a rule id somebody added. Avoiding non-ASCII in musubi's own strings
+    would fix one em dash and none of those.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(errors="replace")
+
+
+def _document(body: str) -> None:
+    """Write a machine-facing document, in UTF-8, whatever the console is.
+
+    JSON is UTF-8 by definition, and `--json` exists to be redirected or piped.
+    Passing it through the terminal's codec produced a file that was not valid
+    UTF-8, with exit 0 and no error anywhere ([ADR-0020]).
+    """
+    sys.stdout.flush()
+    sys.stdout.buffer.write(body.encode("utf-8"))
+    sys.stdout.buffer.flush()
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -178,7 +210,7 @@ def _plan(arguments: argparse.Namespace) -> int:
     outcome = run(source, settings, emitter, write=False)
 
     if arguments.json:
-        print(render(outcome.manifest), end="")
+        _document(render(outcome.manifest))
     else:
         _report_plan(outcome, show_removals=arguments.show_removals)
     return 1 if outcome.refused else 0
@@ -189,7 +221,7 @@ def _sync(arguments: argparse.Namespace) -> int:
     result = sync(source, settings, emitter)
 
     if arguments.json:
-        print(render(result.manifest), end="")
+        _document(render(result.manifest))
     else:
         _report_sync(result, arguments.into)
     return 0
@@ -214,7 +246,7 @@ def _trace(arguments: argparse.Namespace) -> int:
         corpus, key = Corpus(arguments.into), Path(target).as_posix()
     found = resolve(corpus, key, span)
     if arguments.json:
-        print(json.dumps(_as_document(found), ensure_ascii=False, indent=2))
+        _document(json.dumps(_traced(found), ensure_ascii=False, indent=2) + "\n")
     else:
         _report_trace(found)
     return 0
@@ -254,7 +286,7 @@ def _report_trace(found: Resolution) -> None:
         )
 
 
-def _as_document(found: Resolution) -> dict[str, object]:
+def _traced(found: Resolution) -> dict[str, object]:
     return {
         "artefact": found.artefact,
         "out": [found.out.start, found.out.end],
