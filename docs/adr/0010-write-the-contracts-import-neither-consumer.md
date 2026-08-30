@@ -1,6 +1,9 @@
 # 10. Write the consumers' contracts, import neither consumer
 
-**Status:** accepted
+**Status:** accepted. Its scope is narrowed by
+[ADR-0013](0013-one-output-contract-and-the-consumer-adapts.md): the rule below
+stands, but musubi ships no `kiseki` record emitter. This text is left as it was
+written.
 
 ## Context
 

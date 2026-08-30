@@ -27,6 +27,7 @@ later ADR supersedes it and says so.
 | [0010](0010-write-the-contracts-import-neither-consumer.md) | Write the consumers' contracts, import neither consumer |
 | [0011](0011-redundancy-is-marked-never-resolved.md) | Redundancy is marked, never resolved |
 | [0012](0012-a-dry-run-comes-first.md) | A dry run comes first |
+| [0013](0013-one-output-contract-and-the-consumer-adapts.md) | One output contract, and the consumer adapts |
 
 [0004](0004-a-conversion-carries-a-map-back-to-its-source.md) is the one to read
 first. The rest of the design is arranged around it, and
