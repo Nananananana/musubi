@@ -39,8 +39,9 @@ The constitution, to be enforced by construction rather than by promise:
   about where it ends, and `mamori` is the library for that (ADR-0008).
 - **Rules are data, and each names its evidence.** A rule with no stated reason
   cannot be reviewed by anyone who was not there (ADR-0009).
-- **Write the consumers' contracts, import neither consumer.** No module under
-  `src/` may name `tsumugi` or `kiseki` (ADR-0010).
+- **One output family, and the consumer adapts.** musubi publishes documents,
+  a sync manifest and a trace map, and ships no consumer-specific emitter
+  (ADR-0013). No module under `src/` may name `tsumugi` or `kiseki` (ADR-0010).
 - **Redundancy is marked, never resolved** (ADR-0011). **A dry run comes first**
   (ADR-0012).
 - **musubi emits `fact` and `measure`, never `interpretation`.** It has no model,
@@ -142,7 +143,7 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
 ## Current state
 
 - Version `0.1.0.dev0`. **Nothing is built.** The repository holds the design,
-  twelve ADRs, and the tooling that will enforce them.
+  thirteen ADRs, and the tooling that will enforce them.
 - **License: Apache-2.0. Python: 3.12+. Runtime dependencies: 0**, checked in CI
   by installing the wheel with no extras and asserting nothing came along.
 - `src/musubi/` holds `__init__.py`, `errors.py` and `py.typed`. Every other
@@ -150,9 +151,9 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   that the first module to appear in one is already governed.
 - Built: nothing. Planned, in order: v0.1 the spine (`plan`, `sync`, `trace` over
   a vault), v0.2 the contracts and `verify`, v0.3 Notion / Slack / HTML / PDF,
-  v0.4 the corpus and the measured floors, v0.5 `kiseki`'s records, v0.6
-  redundancy and the surfaces. `docs/proposals/0001-the-design.md` §9 is the
-  detail.
+  v0.4 the corpus and the measured floors, v0.5 the folder `kiseki-notes` can
+  read, v0.6 redundancy and the surfaces.
+  `docs/proposals/0001-the-design.md` §9 is the detail.
 - No schema exists yet. `pyproject.toml` carries the `force-include` block for
   `schemas/` **commented out**, because hatchling refuses to build against a
   force-include that resolves to nothing; `tests/test_documentation.py` turns the

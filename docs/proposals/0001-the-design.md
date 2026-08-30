@@ -153,7 +153,7 @@ src/musubi/
 │   ├── source.py        # yields raw units out of an export
 │   ├── converter.py     # (bytes, media type) -> (text, TraceMap)
 │   ├── screener.py      # ADR-0008 — is there a credential in here
-│   ├── emitter.py       # writes a consumer's contract
+│   ├── emitter.py       # writes the documents and their maps
 │   └── ledger.py        # what the last run saw, for incremental sync
 ├── application/
 │   ├── plan.py          # the dry run (ADR-0012)
@@ -165,7 +165,7 @@ src/musubi/
 │   ├── converters/      # markdown, plaintext, html, pdf_text
 │   ├── rules/           # the vendored cleansing packs (ADR-0009)
 │   ├── screeners/       # patterns + entropy, stdlib only
-│   ├── emitters/        # tsumugi_folder, kiseki_records
+│   ├── emitters/        # documents; one implementation (ADR-0013)
 │   ├── storage/         # the sync ledger, SQLite
 │   └── adapters/
 │       └── mamori.py    # optional; the only module that knows it exists
@@ -213,9 +213,10 @@ Six stages. Every one is a pure function of its inputs.
    artefact back to the source unit. Adjacent segments of the same kind and the
    same delta merge. Traceable coverage falls out of this stage as a number.
 
-6. **Emit.** An emitter writes a consumer's contract: Markdown with front matter
-   for `tsumugi`, records as JSON for `kiseki` (ADR-0010). It writes into a
-   staging area; a run promotes atomically or not at all.
+6. **Emit.** The emitter writes documents: Markdown with front matter, and a
+   trace map beside each one. One output family, and no consumer-specific
+   emitter (ADR-0013). It writes into a staging area; a run promotes atomically
+   or not at all.
 
 The manifest is assembled across all six and written last.
 
@@ -362,20 +363,32 @@ no model, so it has no reading to offer.
 
 ### With `kiseki`
 
-musubi is a **producer** for `kiseki`'s record contracts, which is a role
-`kiseki` documents precisely: PhotoRecord v1, ActivityRecord v1, NoteRecord v1,
-each with a schema and a gate of ten questions a new source must answer before it
-is added. musubi answers those ten questions, per source, in its own docs, and
-the answers are reviewed as part of the PR that adds the emitter.
+*Revised by [ADR-0013](../adr/0013-one-output-contract-and-the-consumer-adapts.md).
+This section was originally written as though musubi would emit `kiseki`'s
+records itself.*
 
-NoteRecord is the one that needs care. Its producer classifies a note and then
-keeps only a category and up to eight labels — the text is deliberately
-discarded, and `kiseki` requires a dry run first for exactly that reason.
-Classification wants a model, and musubi has none (ADR-0003), so the split is:
-musubi's rule-based classifier handles what rules can handle and marks the rest
-`other`, and a model-assisted classification is a separate, explicitly invoked
-step whose output musubi reads as an input. ADR-0012 makes the dry run mandatory
-rather than advisory.
+musubi emits **no** `kiseki` records. `kiseki` already ships its own producers —
+`kiseki-notes` for NoteRecord, `kiseki-ingest` for PhotoRecord — with zero
+dependencies, the plan-then-apply two-step its contract requires, and the
+category semantics that belong to `kiseki` and to nowhere else.
+
+`kiseki-notes` reads `.md`, `.txt` and `.markdown` and refuses everything else,
+on the stated grounds that a format needing parsing needs a library and every
+library is a dependency that reads the owner's notes. musubi is that library,
+running out of process, and the composition needs no adapter on either side:
+
+```bash
+musubi sync ~/notion-export --into ./synced
+kiseki-notes plan ./synced
+kiseki-notes read ./synced --apply --out note-records.json
+```
+
+One requirement falls out of that seam and is easy to miss. `kiseki-notes`
+derives a note's opaque `reference` by hashing its path, so **musubi's output
+filename must be a function of the `unit_key` and never of the source filename**
+— otherwise a Notion re-export regenerates its UUIDs, musubi renames the file,
+and `kiseki` sees a note it has never met, destroying the trail of returnings
+that NoteRecord exists to record.
 
 ### With `mamori`
 
@@ -485,15 +498,22 @@ narrower than planned, and the roadmap after this point gets rewritten from the
 measurement rather than from the plan. `tsumugi`'s proposal 0002 exists because
 that happened there; it is expected to happen here.
 
-### v0.5 — `kiseki`'s records
+### v0.5 — the folder `kiseki` can read
 
-- The NoteRecord emitter, with the mandatory dry run (ADR-0012) and the
-  rule-based classifier.
-- The ActivityRecord emitter, from the health exports people actually have.
-- The PhotoRecord emitter — a second implementation of `kiseki-ingest`'s job,
-  justified only if musubi's version adds the manifest and the refusal
-  behaviour; if it does not, this is dropped and the ADR says why.
-- The ten-question gate answered in `docs/` for each, reviewed as part of the PR.
+*Revised by [ADR-0013](../adr/0013-one-output-contract-and-the-consumer-adapts.md).
+This milestone was originally three record emitters; the answer to "should
+musubi implement `kiseki`'s contracts" turned out to be no, and it is a much
+smaller milestone now.*
+
+- Output filenames derived from the `unit_key`, so that `kiseki-notes`' path-hash
+  `reference` is stable across a re-export.
+- A seam test: run the real `kiseki-notes plan` over real musubi output and
+  assert it finds what it should. `pytest` skips it when `kiseki` is absent, and
+  an architecture test asserts nothing under `src/` imports it.
+- `docs/sources.md`: `kiseki`'s ten-question gate answered per source. musubi is
+  not adding a record type to `kiseki`, but the third question — what could this
+  reveal that the owner would not choose to reveal — is the one worth answering
+  for every source musubi reads, whoever consumes it.
 
 ### v0.6 — redundancy, the surfaces, and the seam
 
