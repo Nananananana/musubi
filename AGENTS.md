@@ -147,11 +147,11 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
 ## Current state
 
 - Version `0.1.0.dev0`. **v0.1 is in progress**, one issue at a time against the
-  milestone. The design and thirteen ADRs are in `docs/`; nothing is released
+  milestone. The design and fifteen ADRs are in `docs/`; nothing is released
   and there is no public API to speak of yet.
 - **License: Apache-2.0. Python: 3.12+. Runtime dependencies: 0**, checked in CI
   by installing the wheel with no extras and asserting nothing came along.
-- **Built:** `domain/span.py`, `domain/text.py` and `domain/trace.py`. A `Span`
+- **Built:** `domain/` — `span`, `text`, `trace`, `hashing`, `record`. A `Span`
   is a half-open range of integer positions and deliberately does not decide
   what a position indexes — the holder says, and the trace map records it. `text.rewrite()` is
   the primitive everything else is made of: deleting is replacing with the
@@ -168,6 +168,16 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   which is a worse answer than either gave alone.
 - The domain raises built-in exceptions. `errors.TraceError` exists for the
   layer that has a file path to put in the message; the domain has no file.
+- `domain/hashing.py`: every hash names its algorithm (`sha256:` + 64 lowercase
+  hex), and structured values hash over an RFC 8785 canonical form — for the
+  clauses musubi's inputs reach. Floats are **refused**, which removes the one
+  clause of the specification that is hard to get exactly right and which
+  nothing determining a run needs.
+- `domain/record.py`: identity is `(source_id, unit_key)` and change is
+  `content_hash`. `unit_key()` takes *parts*, not a path string, normalizes each
+  to NFC and refuses `.`, `..`, an embedded separator and an empty part. Keys are
+  normalized; **content never is**. `compare()` is the diff, ordered by key, and
+  it stops the run on a duplicate key or a mixed source rather than guessing.
 - `decode()` reads UTF-8 (with or without a BOM) and UTF-16 that announces
   itself, and **refuses everything else rather than detecting**. A guessed
   legacy encoding writes mojibake into a corpus bound for a model and looks

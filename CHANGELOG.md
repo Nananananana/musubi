@@ -8,7 +8,7 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- The design, before the code: `docs/proposals/0001-the-design.md`, thirteen
+- The design, before the code: `docs/proposals/0001-the-design.md`, fifteen
   architecture decision records, `docs/concept.md`, and the documentation rules
   that keep current state, history and plans apart.
 - The tooling that will enforce the design: the layering asserted by AST over
@@ -39,6 +39,20 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   two kinds, and it splits a run where the earlier stage changed kind rather
   than degrading the whole of it. `traceable_coverage` publishes its numerator
   and denominator beside it.
+- `domain/hashing.py`: `content_hash` and `hash_of`. Every hash names its own
+  algorithm (ADR-0015), so a later change is a data change an old reader can
+  refuse rather than a silent reinterpretation. Structured values are
+  canonicalized by RFC 8785's rules for the clauses musubi's inputs reach —
+  UTF-16 key ordering, minimal separators — and floats are refused, which is the
+  one clause the specification makes hard and musubi never needs.
+- `domain/record.py`: `Unit`, `unit_key` and `compare`. Identity is
+  `(source_id, unit_key)`; change is `content_hash` (ADR-0006). Keys are built
+  from parts, normalized to NFC, and refuse `.`, `..` and embedded separators
+  (ADR-0014) — macOS hands back decomposed filenames and everything else hands
+  back composed ones, so a key derived from a raw name makes one vault into two
+  corpora. Content is never normalized: that would be an unrequested rewrite of
+  what the owner wrote, and it would move every offset the trace map reports.
+- ADR-0014 and ADR-0015.
 - `span.resolve`, shared by `Rewritten` and `TraceMap`, and `Span.__bool__`,
   which is `True` always: `__len__` had made an empty span falsy, and
   `resolve(...) or Span(0, 0)` silently replaced a correct `[3:3]` with `[0:0]`.
