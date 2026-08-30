@@ -27,7 +27,7 @@
   "additionalProperties": false,
   "properties": {
     "contract": {
-      "description": "Not yet frozen. A consumer that does not recognise this refuses the manifest rather than guessing at it (ADR-0002).",
+      "description": "A consumer that does not recognise this value refuses the manifest rather than guessing at it (ADR-0002). The -draft suffix is a state of the contract register, not a property of this document: a draft and a frozen manifest of the same contract have the same shape, because freezing constrains what future versions may do. Whether the freeze has happened is in docs/contracts.md, which can be corrected; a schema saying so would go on saying it after the freeze.",
       "type": "string",
       "pattern": "^musubi\\.sync-manifest/1(-draft)?$"
     },

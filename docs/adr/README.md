@@ -37,6 +37,7 @@ later ADR supersedes it and says so.
 | [0020](0020-the-console-is-not-the-contract.md) | The console is not the contract, and the exit code reports the run |
 | [0021](0021-an-empty-source-is-not-a-deletion.md) | An empty source is not a deletion, and the plan says so too |
 | [0022](0022-the-document-keeps-the-day-it-was-written.md) | The document keeps the day it was written; musubi's own records keep the run's |
+| [0023](0023-the-schemas-live-where-the-instruction-says.md) | The schemas live where the loading instruction says they do |
 
 [0004](0004-a-conversion-carries-a-map-back-to-its-source.md) is the one to read
 first. The rest of the design is arranged around it, and

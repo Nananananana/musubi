@@ -36,13 +36,16 @@ from musubi.infrastructure.rules import CORE
 from musubi.infrastructure.screeners import default_screener
 from musubi.infrastructure.sources import ObsidianSource
 from musubi.interfaces.cli import main
+from musubi.schemas import path_to, schemas
 
 ROOT = Path(__file__).resolve().parent.parent
-SCHEMAS = ROOT / "schemas"
+#: Loaded the way `docs/contracts.md` tells a consumer to load them, so the
+#: published instruction is exercised rather than only published (ADR-0023).
+SCHEMAS = schemas()
 CONTRACTS = Path(__file__).resolve().parent / "contracts"
 
-TRACE_MAP = SCHEMAS / "musubi-trace-map-1.json"
-SYNC_MANIFEST = SCHEMAS / "musubi-sync-manifest-1.json"
+TRACE_MAP = path_to("musubi.trace-map/1")
+SYNC_MANIFEST = path_to("musubi.sync-manifest/1")
 
 #: A note with everything a document can have: its own front matter, a heading,
 #: CJK text whose characters are not its bytes, a tracking parameter to remove,
