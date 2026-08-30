@@ -16,7 +16,7 @@ import pytest
 from musubi import __version__
 from musubi.application.pipeline import Settings
 from musubi.application.sync import Synced, sync
-from musubi.errors import ContractError, CredentialFoundError
+from musubi.errors import ContractError, CredentialFoundError, EmptySourceError
 from musubi.infrastructure.converters import converter_for
 from musubi.infrastructure.emitters import DOCUMENTS, MANIFEST, STAGING, TRACES, DocumentEmitter
 from musubi.infrastructure.rules import CORE
@@ -47,7 +47,7 @@ def vault(root: Path, files: dict[str, str]) -> Path:
     return root
 
 
-def run_sync(root: Path, into: Path, **kwargs: object) -> Synced:
+def run_sync(root: Path, into: Path, *, withdraw_all: bool = False, **kwargs: object) -> Synced:
     settings = Settings(
         ruleset=CORE,
         screener=default_screener(),
@@ -56,7 +56,7 @@ def run_sync(root: Path, into: Path, **kwargs: object) -> Synced:
         created_at="2026-08-30T00:00:00+00:00",
         **kwargs,  # type: ignore[arg-type]
     )
-    return sync(ObsidianSource(root), settings, DocumentEmitter(into))
+    return sync(ObsidianSource(root), settings, DocumentEmitter(into), withdraw_all=withdraw_all)
 
 
 # -- what it writes ---------------------------------------------------------
@@ -329,3 +329,113 @@ def test_the_report_says_which_folder_to_ingest(
     out = capsys.readouterr().out
     assert f"Ingest {into / DOCUMENTS}" in out
     assert "not documents to index" in out
+
+
+# -- the source that yields nothing -----------------------------------------
+#
+# Withdrawal deletes what the manifest recorded writing, so a source that reads
+# as empty deletes all of it. "The owner deleted everything" and "the source
+# became unreadable" are the same observation from in here, and only one of
+# them means the corpus should go.
+
+
+def test_an_empty_source_does_not_take_the_corpus_with_it(tmp_path: Path) -> None:
+    """The bug this guards: two notes in, an unmounted drive, and the corpus is
+    gone with exit 0 and a report saying 0 written, 4 withdrawn."""
+    root = vault(tmp_path / "vault", {"a.md": "x\n", "b.md": "y\n"})
+    into = tmp_path / "synced"
+    run_sync(root, into)
+
+    vault(root, {})
+    with pytest.raises(EmptySourceError) as raised:
+        run_sync(root, into)
+
+    assert (into / DOCUMENTS / "a.md").is_file()
+    assert (into / DOCUMENTS / "b.md").is_file()
+    assert (into / MANIFEST).is_file()
+    assert "--withdraw-all" in str(raised.value)
+
+
+def test_the_refusal_leaves_no_staging_behind(tmp_path: Path) -> None:
+    root = vault(tmp_path / "vault", {"a.md": "x\n"})
+    into = tmp_path / "synced"
+    run_sync(root, into)
+
+    vault(root, {})
+    with pytest.raises(EmptySourceError):
+        run_sync(root, into)
+
+    assert not (into / STAGING).exists()
+
+
+def test_withdraw_all_is_the_operator_saying_they_looked(tmp_path: Path) -> None:
+    root = vault(tmp_path / "vault", {"a.md": "x\n"})
+    into = tmp_path / "synced"
+    run_sync(root, into)
+
+    vault(root, {})
+    result = run_sync(root, into, withdraw_all=True)
+
+    assert not (into / DOCUMENTS / "a.md").exists()
+    assert len(result.withdrawn) == 2
+
+
+def test_one_surviving_unit_is_enough_to_withdraw_the_rest(tmp_path: Path) -> None:
+    """Zero is not a threshold picked for caution. One unit proves the source is
+    readable, and every withdrawal beside it is a deletion somebody asked for."""
+    root = vault(tmp_path / "vault", {"keep.md": "x\n", "a.md": "y\n", "b.md": "z\n"})
+    into = tmp_path / "synced"
+    run_sync(root, into)
+
+    vault(root, {"keep.md": "x\n"})
+    result = run_sync(root, into)
+
+    assert (into / DOCUMENTS / "keep.md").is_file()
+    assert not (into / DOCUMENTS / "a.md").exists()
+    assert len(result.withdrawn) == 4
+
+
+def test_a_first_sync_into_nothing_is_not_the_ambiguous_case(tmp_path: Path) -> None:
+    """An empty source with no corpus behind it deletes nothing, so there is
+    nothing to be ambiguous about. Refusing here would mean musubi could not be
+    pointed at a folder before it had anything in it."""
+    root = vault(tmp_path / "vault", {})
+    result = run_sync(root, tmp_path / "synced")
+    assert result.manifest.artefacts == ()
+    assert result.withdrawn == ()
+
+
+def test_the_plan_says_the_sync_will_refuse(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A dry run that reports what would be written and stays silent about what
+    would be deleted is not a dry run of the same command."""
+    root = vault(tmp_path / "vault", {"a.md": "x\n"})
+    into = tmp_path / "synced"
+    main(["sync", str(root), "--into", str(into)])
+    capsys.readouterr()
+
+    vault(root, {})
+    code = main(["plan", str(root), "--into", str(into)])
+    out = capsys.readouterr().out
+
+    assert code == 1
+    assert "will refuse" in out
+    assert "--withdraw-all" in out
+
+
+def test_the_plan_predicts_a_sync_that_carries_the_flag(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = vault(tmp_path / "vault", {"a.md": "x\n"})
+    into = tmp_path / "synced"
+    main(["sync", str(root), "--into", str(into)])
+    capsys.readouterr()
+
+    vault(root, {})
+    code = main(["plan", str(root), "--into", str(into), "--withdraw-all"])
+    out = capsys.readouterr().out
+
+    assert code == 0
+    assert "Would be taken back out" in out
+    assert (into / DOCUMENTS / "a.md").is_file()

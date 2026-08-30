@@ -148,7 +148,7 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
 
 - Version `0.1.0.dev0`. **v0.1 is done**: `plan`, `sync` and `trace` over a
   vault, both contracts with schemas, and the invariants asserted rather than
-  only enumerated. Twenty ADRs. Nothing is released and the public API is not
+  only enumerated. Twenty-one ADRs. Nothing is released and the public API is not
   stable. v0.2 is next — `docs/proposals/0001-the-design.md` §9.
 - **License: Apache-2.0. Python: 3.12+. Runtime dependencies: 0**, checked in CI
   by installing the wheel with no extras and asserting nothing came along.
