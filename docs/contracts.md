@@ -53,11 +53,34 @@ as the pair — musubi produces, something else consumes — and the wording bel
 to `tsumugi`, so the family should settle it rather than each project deciding
 quietly.
 
-Once frozen: a field may be added; none will be removed or change meaning. A
-field addition is a schema revision, and an old validator will refuse a newer
-document because every object is `additionalProperties: false`. That is
-deliberate and fail-closed — a consumer that cannot see the whole of what it was
-handed should say so rather than read the part it recognises.
+Once frozen, **a field is never removed and never changes meaning**, and
+**adding one produces a new contract identifier** — `musubi.sync-manifest/2`,
+not a quietly wider `/1`.
+
+That is stricter than it first looks and it is the only coherent rule here.
+Every object is `additionalProperties: false`, deliberately: a consumer that
+cannot see the whole of what it was handed should say so rather than read the
+part it recognises. But that has a consequence, measured rather than reasoned
+about:
+
+```text
+today's manifest against today's schema : accepted
+a manifest with one added field         : REJECTED
+a manifest that is actually malformed   : REJECTED
+both arrive as ValidationError
+```
+
+**A consumer holding the older schema cannot tell *I am out of date* from *this
+document is malformed*.** The two need opposite responses — refresh, or refuse —
+and as one `ValidationError` they are indistinguishable. Adding a field inside
+`/1` would mean one identifier describing two shapes, and every consumer of the
+first one discovering it as a validation failure.
+
+Bumping the identifier moves the signal to where a consumer already looks. Step
+1 below is *check `contract`, refuse a value you do not recognise*, and that
+happens **before** validation: an unrecognised `/2` says *you are out of date* in
+the one place that cannot be confused with a malformed document. The rule that
+was already here does the work, once additions stop hiding from it.
 
 A reader that does not recognise a `contract` value refuses the document rather
 than parsing it hopefully.
