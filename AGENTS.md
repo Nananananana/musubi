@@ -102,8 +102,28 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   `uv run pre-commit run --all-files`. If pre-commit rewrites anything,
   `git add` and run it again — a commit whose hooks failed did not happen.
 - Checkpoints: after `git commit`, confirm the `[branch hash]` line; after
-  `gh pr merge`, confirm `Squashed and merged`; after pulling main, run pytest
-  once more.
+  pulling main, run pytest once more.
+- **After a merge, read the outcome and not the report.** `Squashed and merged`
+  says the merge command succeeded, which is a different claim from *the change
+  is on `main`* — #41 merged cleanly into a branch that had already been merged,
+  reported success, and left `main` without a line of it. Every merged PR in the
+  repository reports `MERGED`; only some of them are on `main`:
+
+      m=$(gh pr view <n> --json mergeCommit --jq .mergeCommit.oid)
+      git merge-base --is-ancestor "$m" main && echo on main || echo NOT on main
+
+  Measured: #37 and #39 pass, #41 fails, all three reporting `MERGED`. Then read
+  one file the PR changed **out of `main` itself** — `git show main:<path>` —
+  because ancestry says a commit arrived and not that it arrived intact.
+- **Take a PR's commits from `refs/pull/<n>/head`, never from its branch.** The
+  pull ref is pinned to `headRefOid`, so it survives the branch being deleted,
+  force-pushed, or pushed to *after* the merge — and a branch pushed to after
+  merging gives `git diff main <branch>` a diff against something that was never
+  merged, which looks exactly like verification. It exists for closed and
+  rejected PRs too, which makes it the way to read what a PR proposed after its
+  branch is gone. Verified here: #41's `refs/pull/41/head` is `97c055f` and its
+  `mergeCommit` is `a824e5c` — two different commits, and reading the wrong one
+  answers a question nobody asked.
 - **A backslash escape does not survive a bash heredoc here.** Writing a Python
   file with `python - <<'PY'` turns `\\n` inside the script into a real
   newline, so the generated source has an unterminated string literal. It is
