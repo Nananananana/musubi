@@ -250,6 +250,103 @@ def test_trace_6_a_reader_must_not_assume_the_source_ranges_are_monotonic() -> N
     assert reflowed.source_span_of(Span(0, 6)) == Span(0, 6), "the union covers both jumps"
 
 
+def test_trace_7_a_range_that_straddles_runs_resolves_by_the_four_rules() -> None:
+    """Reported by the `seam` session, whose resolver had to guess this and
+    guessed the dangerous way: it treated a straddling range as *did not
+    resolve* and printed it with the same `ok` as a range musubi had answered.
+
+    musubi's own reader already behaved correctly. What was missing was the
+    contract saying so, which is why a consumer had no way to know. So this
+    pins the behaviour rather than changing it — and the fourth rule is the one
+    that matters, because folding *musubi wrote this* and *this did not
+    resolve* into one return value turns an abstention into a pass.
+    """
+    #        0    5    10   15   20
+    #        [verbatim][transformed][synthetic]
+    mixed = TraceMap(
+        artefact_length=18,
+        source_length=12,
+        segments=(
+            Segment(out=Span(0, 6), src=Span(0, 6), kind=Kind.VERBATIM),
+            Segment(
+                out=Span(6, 12), src=Span(6, 12), kind=Kind.TRANSFORMED, rule="tracking.utm-family"
+            ),
+            Segment(out=Span(12, 18), src=Span(12, 12), kind=Kind.SYNTHETIC, rule="front-matter"),
+        ),
+    )
+
+    # Beginning inside a verbatim run: the corresponding position within it.
+    assert mixed.source_span_of(Span(2, 5)) == Span(2, 5)
+
+    # Touching a transformed run: the whole of it. Not just from its start --
+    # measured, and a correction to the rule as first proposed. A transformation
+    # has no correspondence inside it, so the run is the smallest answerable
+    # thing.
+    assert mixed.source_span_of(Span(8, 10)) == Span(6, 12)
+
+    # Crossing runs: the first resolvable run's start to the last one's end.
+    assert mixed.source_span_of(Span(3, 9)) == Span(3, 12)
+
+    # All synthetic: musubi wrote this. The span is empty, and `is_synthetic` on
+    # a Resolution is what separates it from "did not resolve" — the two must
+    # not arrive as one value.
+    assert mixed.source_span_of(Span(13, 17)).is_empty
+    assert all(
+        segment.kind is Kind.SYNTHETIC for segment in mixed.segments if segment.out.start >= 12
+    )
+
+
+@CORPUS
+@given(a_vault())
+def test_trace_7_straddling_is_the_normal_case_in_a_real_corpus(
+    files: dict[str, bytes],
+) -> None:
+    """The rule above, against output rather than a fixture.
+
+    Every artefact with front matter already straddles: musubi's own synthetic
+    header meets the verbatim body, and any anchor covering the first line of a
+    document crosses that boundary. So this is not an edge case waiting for a
+    PDF -- it is what a consumer hits on its first query.
+    """
+    _, into, _ = build(files)
+    try:
+        for body in maps(into):
+            segments = body["segments"]
+            if len(segments) < 2:
+                continue
+            trace = TraceMap(
+                artefact_length=body["coverage"]["characters"],
+                source_length=max((s["src"][1] for s in segments), default=0),
+                segments=tuple(
+                    Segment(
+                        out=Span(*s["out"]),
+                        src=Span(*s["src"]),
+                        kind=Kind(s["kind"]),
+                        rule=s.get("rule"),
+                    )
+                    for s in segments
+                ),
+            )
+            resolvable = [s for s in trace.segments if s.kind in {Kind.VERBATIM, Kind.TRANSFORMED}]
+            if not resolvable:
+                continue
+
+            # A range across the whole artefact spans every resolvable run.
+            whole = trace.source_span_of(Span(0, trace.artefact_length))
+            assert whole.start <= min(s.src.start for s in resolvable)
+            assert whole.end >= max(s.src.end for s in resolvable)
+
+            # A range inside one synthetic run answers with an empty span --
+            # `musubi wrote this`, which a reader must not read as a failure.
+            for segment in trace.segments:
+                if segment.kind is Kind.SYNTHETIC and len(segment.out) > 1:
+                    inside = Span(segment.out.start, segment.out.start + 1)
+                    assert trace.source_span_of(inside).is_empty
+                    break
+    finally:
+        shutil.rmtree(into.parent, ignore_errors=True)
+
+
 # -- the sync manifest -------------------------------------------------------
 
 

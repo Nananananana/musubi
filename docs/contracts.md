@@ -62,6 +62,29 @@ schema. A consumer that needs it checks it.
 6. **`src` ranges need not be monotonic**, and a reader must not assume they
    are. A two-column page read in reading order produces a map whose source
    ranges jump, and the jump is information rather than a defect.
+7. **A range that straddles runs resolves by these four rules**, and nothing in
+   the schema states them. An anchor has no obligation to line up with a segment
+   boundary — a consumer selects a range of text, musubi cuts where a
+   transformation began, and neither knows about the other, so straddling is the
+   normal case rather than the exceptional one:
+   - a range beginning inside a **verbatim** run begins at the corresponding
+     position within that run;
+   - a range touching a **transformed** run covers the whole of that run — not
+     just from its start — because a transformation has no correspondence
+     inside it and the run is the smallest thing that can be pointed at;
+   - a range **crossing runs** spans from the start of its first resolvable run
+     to the end of its last;
+   - a range whose runs are **all synthetic** resolved to *musubi wrote this*,
+     which is **not** *this did not resolve*. Collapsing those two into one
+     return value turns an abstention into a pass, which is the failure this
+     rule exists to prevent: the consumer prints `ok` for a range nothing ever
+     answered.
+
+   *Synthetic, and not "synthetic or removal".* A removal occupies no output
+   (4 above), so no range with any width can be covered by removals alone. The
+   omission is deliberate and is recorded here only so that it is not restored
+   as a fix — the case cannot arise, and describing it would have the next
+   implementer writing a branch for it.
 
 `tests/test_trace_map.py` and `tests/test_contract_conformance.py` assert 1, 2,
 4 and 5 against real output. Property tests over generated documents are what
