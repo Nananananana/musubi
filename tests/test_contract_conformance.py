@@ -256,6 +256,27 @@ def _real_manifest(tmp_path: Path) -> Path:
     return into / "manifest.json"
 
 
+def test_the_layout_the_contract_promises_is_the_layout_the_emitter_writes() -> None:
+    """`docs/contracts.md` names three paths and a consumer depends on them.
+
+    They are part of `musubi.sync-manifest/1` rather than a separate thing to
+    check, so moving one is a contract change (ADR-0024). Nothing enforced the
+    document against the code, which means a rename would have left the contract
+    describing a layout musubi no longer writes -- and the consumer discovering
+    it as a missing file rather than as a version it does not recognise.
+    """
+    from musubi.infrastructure.emitters import DOCUMENTS, MANIFEST, TRACES
+
+    said = (Path(__file__).resolve().parent.parent / "docs" / "contracts.md").read_text(
+        encoding="utf-8"
+    )
+    for name, value in (("documents", DOCUMENTS), ("traces", TRACES), ("manifest", MANIFEST)):
+        assert f"`<destination>/{value}" in said or f"`{value}`" in said, (
+            f"the emitter writes {value!r} for {name} and docs/contracts.md does not "
+            f"say so. A consumer reading the contract would look in the wrong place."
+        )
+
+
 def _refusals(prefix: str) -> list[Path]:
     found = sorted(CONTRACTS.glob(f"{prefix}-invalid-*.json"))
     assert found, f"no {prefix} counter-examples; a schema nothing fails is a schema"
