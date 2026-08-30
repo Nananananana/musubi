@@ -275,6 +275,28 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   so the patch is silently undone, the test passes under `-s` and fails without
   it, and what is being measured is pytest. `tests/test_console_encoding.py`
   patches inside the test body.
+- **Every gate in CI has been seen red** (2026-08-30, on a throwaway
+  `proving-the-gates` branch dispatched with `workflow_dispatch`, never
+  merged). Nine jobs, six distinct checks, each broken on purpose and watched
+  failing at its own step: an unused import for Ruff; a return not matching its
+  annotation for Types; `domain` importing `infrastructure` for Layering; a
+  false assertion for Test, across all six matrix jobs; `force-include`
+  commented out for the wheel; `dependencies = ["idna"]` for the dependency
+  count. Before that day CI had 35 successes and **no failure ever** — the
+  gates were all working and nothing had shown that they were. **Ruff, Types
+  and Layering are sequential inside one job, so each masks the next**: proving
+  all three takes three runs, and the later breakages must survive the checks
+  ahead of them — the type error is invisible to ruff, and the layering
+  violation is import-sorted and typed so Ruff and Types both pass and Layering
+  is reached at all. An exit code is evidence only once something has been
+  shown that makes it non-zero.
+- **`gh` resolves the repository from the working directory, and an empty
+  result is not an answer.** `gh run list --branch X` returned nothing with
+  exit 0 while the shell had reset to a sibling checkout; empty output reads
+  exactly like "no such run". What exposed it was `gh workflow run`, which
+  failed loudly and named the repository it was asking. **Pass
+  `-R Nananananana/musubi` explicitly, and treat an empty result as unproven
+  rather than as a negative answer.**
 - **A Hypothesis counterexample is not kept anywhere.** The example database is
   keyed by the test function, so editing the test — including adding a message
   to an assertion so you can see the failing input — changes the key and the

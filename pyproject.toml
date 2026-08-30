@@ -73,6 +73,13 @@ dev = [
 #
 # So the danger is not step 1. It is a pull request that adds the flag to make
 # step 1 go away. If one arrives, it is the wrong fix: the reference goes in CI.
+#
+# Delete this whole note when `mamori` is resolvable from an index, because a
+# plain `mamori>=x.y` is then not a direct reference and none of the above
+# applies. Nothing else closes it -- not musubi being published, not the
+# distribution being renamed, not the seam test landing in v0.6. Those change
+# who reads this and when; they do not change what happens to a `git+https`
+# reference in project metadata.
 
 [project.urls]
 Homepage = "https://github.com/Nananananana/musubi"
