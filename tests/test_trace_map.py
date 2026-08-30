@@ -262,8 +262,15 @@ def test_a_tiling_that_stops_short_of_the_artefact_is_refused() -> None:
 
 
 def test_a_verbatim_segment_of_unequal_lengths_is_refused() -> None:
+    """Checked by the map rather than by the segment, because it holds only
+    while both sides count the same thing. A map measured in bytes has verbatim
+    runs of five characters and fifteen bytes."""
     with pytest.raises(ValueError, match="same length"):
-        Segment(out=Span(0, 4), src=Span(0, 9), kind=Kind.VERBATIM)
+        TraceMap(
+            artefact_length=4,
+            source_length=9,
+            segments=(Segment(out=Span(0, 4), src=Span(0, 9), kind=Kind.VERBATIM),),
+        )
 
 
 def test_a_verbatim_segment_may_not_name_a_rule() -> None:

@@ -32,6 +32,7 @@ later ADR supersedes it and says so.
 | [0015](0015-a-hash-names-its-algorithm.md) | A hash names its own algorithm, and the algorithm is SHA-256 |
 | [0016](0016-a-rule-is-a-matcher-not-a-regular-expression.md) | A cleansing rule is a matcher, not a regular expression |
 | [0017](0017-entropy-is-a-tier-not-a-default.md) | Entropy is a tier, not a default |
+| [0018](0018-the-map-is-in-characters-and-the-file-says-what-a-byte-is.md) | The map is in characters, and the file says what a byte is |
 
 [0004](0004-a-conversion-carries-a-map-back-to-its-source.md) is the one to read
 first. The rest of the design is arranged around it, and

@@ -8,7 +8,7 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- The design, before the code: `docs/proposals/0001-the-design.md`, seventeen
+- The design, before the code: `docs/proposals/0001-the-design.md`, eighteen
   architecture decision records, `docs/concept.md`, and the documentation rules
   that keep current state, history and plans apart.
 - The tooling that will enforce the design: the layering asserted by AST over
@@ -79,7 +79,18 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   weak `path` derivation (ADR-0006). Pointing at a home directory or a
   filesystem root is refused (ADR-0007), a file symlink is followed only if it
   resolves inside the root, and a directory symlink is never followed.
-- ADR-0014, ADR-0015, ADR-0016 and ADR-0017.
+- `ports/converter.py` and `infrastructure/converters/`: `MarkdownConverter`,
+  `PlainTextConverter` and the media-type registry. Bytes in; text and a
+  `TraceMap` out, or an `Unconvertible` value with its reason. Decoding and line
+  endings are both real transformations and the map says so.
+- A `TraceMap` now carries `source_unit`, and it is `characters` (ADR-0018). The
+  byte version was implemented first and a test caught why it cannot work: an
+  interior query shifts an offset by a character delta, which on a byte-measured
+  map is wrong by every multi-byte character before it. The decoding travels
+  beside the map; the command that opens the file converts. The verbatim
+  equal-length check moved from `Segment` to `TraceMap` on the way, which is
+  where it belonged.
+- ADR-0014, ADR-0015, ADR-0016, ADR-0017 and ADR-0018.
 - `span.resolve`, shared by `Rewritten` and `TraceMap`, and `Span.__bool__`,
   which is `True` always: `__len__` had made an empty span falsy, and
   `resolve(...) or Span(0, 0)` silently replaced a correct `[3:3]` with `[0:0]`.

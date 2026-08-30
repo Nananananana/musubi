@@ -149,6 +149,11 @@ class Decoded:
     #: byte offset in the file is that much further along than the character
     #: index suggests.
     bom_length: int
+    #: The codec that turns ``text`` back into the bytes it came from, without
+    #: adding a mark of its own. ``utf-8`` for both UTF-8 forms; ``utf-16-le``
+    #: or ``utf-16-be`` and never ``utf-16``, which would write a fresh
+    #: byte-order mark every time it was asked to measure something.
+    codec: str = "utf-8"
 
 
 def rewrite(source: str, replacements: Iterable[Replacement]) -> Rewritten:
@@ -250,10 +255,16 @@ def decode(data: bytes) -> Decoded:
             text=data[len(codecs.BOM_UTF8) :].decode("utf-8"),
             encoding="utf-8-sig",
             bom_length=len(codecs.BOM_UTF8),
+            codec="utf-8",
         )
-    for bom in (codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE):
+    for bom, codec in ((codecs.BOM_UTF16_LE, "utf-16-le"), (codecs.BOM_UTF16_BE, "utf-16-be")):
         if data.startswith(bom):
-            return Decoded(text=data.decode("utf-16"), encoding="utf-16", bom_length=len(bom))
+            return Decoded(
+                text=data.decode("utf-16"),
+                encoding="utf-16",
+                bom_length=len(bom),
+                codec=codec,
+            )
     try:
         return Decoded(text=data.decode("utf-8"), encoding="utf-8", bom_length=0)
     except UnicodeDecodeError as error:

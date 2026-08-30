@@ -33,7 +33,7 @@ from enum import Enum
 from .span import Span, resolve
 from .text import KEPT, Rewritten
 
-__all__ = ["TRACEABLE", "Kind", "Segment", "TraceMap"]
+__all__ = ["CHARACTERS", "OPAQUE", "TRACEABLE", "Kind", "Segment", "TraceMap"]
 
 
 class Kind(Enum):
@@ -77,12 +77,12 @@ class Segment:
     rule: str | None = None
 
     def __post_init__(self) -> None:
+        # The equal-length rule for a verbatim run belongs to the map, not to
+        # the segment: it holds only while both sides count the same thing, and
+        # a map whose source side is measured in bytes has verbatim runs of
+        # five characters and fifteen bytes. TraceMap checks it, knowing its
+        # own unit.
         if self.kind is Kind.VERBATIM:
-            if self.out.length != self.src.length:
-                raise ValueError(
-                    f"a verbatim segment is the same length on both sides, but "
-                    f"{self.out} and {self.src} are not"
-                )
             if self.rule is not None:
                 raise ValueError("a verbatim segment names no rule; nothing happened to it")
         elif self.rule is None:
@@ -95,6 +95,17 @@ class Segment:
         return self.kind in TRACEABLE
 
 
+#: A source side measured in characters of the decoded text. Both sides count
+#: the same thing, so a verbatim run is the same length on each.
+CHARACTERS = "characters"
+
+#: A source side measured in something else. No converter produces one yet; a
+#: PDF's locator will be a page and an offset within it, and the field exists so
+#: that an old reader can *see* it is not looking at a character map rather than
+#: reading one field as another ([ADR-0018]).
+OPAQUE = "opaque"
+
+
 @dataclass(frozen=True, slots=True)
 class TraceMap:
     """Where every character of an artefact came from."""
@@ -102,6 +113,19 @@ class TraceMap:
     segments: tuple[Segment, ...]
     artefact_length: int
     source_length: int
+    #: What a source offset indexes: characters of the decoded text
+    #: ([ADR-0018]). ``span.py`` deliberately refuses to decide this, and here is
+    #: where it gets decided -- the holder of a span says what it is over, and
+    #: the map is the holder.
+    #:
+    #: **Not bytes**, and the reason is worth knowing: ``source_span_of`` answers
+    #: an interior query by shifting an offset by a constant inside a verbatim
+    #: run, and that constant is a count of characters. On a byte-measured map
+    #: the arithmetic is silently wrong by however many multi-byte characters
+    #: came before -- which in a Japanese corpus is all of them. The decoding is
+    #: recorded beside the map instead, and the command that opens the file
+    #: converts.
+    source_unit: str = CHARACTERS
 
     def __post_init__(self) -> None:
         at = 0
@@ -111,6 +135,15 @@ class TraceMap:
                     f"the tiling has a gap or an overlap at {at}: the next segment is {segment.out}"
                 )
             at = segment.out.end
+            if (
+                self.source_unit == CHARACTERS
+                and segment.kind is Kind.VERBATIM
+                and segment.out.length != segment.src.length
+            ):
+                raise ValueError(
+                    f"a verbatim segment is the same length on both sides while both count "
+                    f"characters, but {segment.out} and {segment.src} are not"
+                )
         if at != self.artefact_length:
             raise ValueError(
                 f"the tiling covers [0:{at}] but the artefact is [0:{self.artefact_length}]"
@@ -227,6 +260,7 @@ class TraceMap:
             segments=tuple(merged),
             artefact_length=self.artefact_length,
             source_length=self.source_length,
+            source_unit=self.source_unit,
         )
 
     def followed_by(self, later: TraceMap) -> TraceMap:
@@ -238,6 +272,14 @@ class TraceMap:
         two transformations, one answer, no hop the reader has to make
         themselves.
         """
+        if self.source_unit != CHARACTERS:
+            # Projecting a verbatim run through this map shifts an offset by a
+            # constant, which is only true while both sides count characters
+            # ([ADR-0018]).
+            raise ValueError(
+                f"composition needs both sides in characters, and this map's source is "
+                f"measured in {self.source_unit}"
+            )
         if later.source_length != self.artefact_length:
             raise ValueError(
                 f"the later map describes a source of {later.source_length} characters, "
