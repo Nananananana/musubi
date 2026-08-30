@@ -131,6 +131,14 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   document its owner deleted goes on answering questions from something they
   withdrew. The previous manifest is the ledger, so there is no second store to
   keep in step, and musubi removes only what it recorded writing.
+- `ports/corpus.py`, `infrastructure/corpus.py`, `application/trace.py` and
+  `musubi trace`: a range of a synced document, resolved back through every
+  transformation to a place in the file the owner has — in characters, and in
+  bytes when the file is still there to measure against (ADR-0018). It says when
+  musubi wrote the range rather than inventing a source for it, names what was
+  taken out of the range, and reports when the source has changed since the
+  sync. A decomposed filename is found by searching, which is ADR-0014's stated
+  cost being paid.
 - ADR-0014 through ADR-0019.
 - `span.resolve`, shared by `Rewritten` and `TraceMap`, and `Span.__bool__`,
   which is `True` always: `__len__` had made an empty span falsy, and
