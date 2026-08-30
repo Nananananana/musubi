@@ -106,6 +106,41 @@ class Corpus:
             converter=str(body.get("converter", "")),
         )
 
+    def manifest_document(self) -> dict[str, Any]:
+        """The manifest as it is on disk.
+
+        Raises rather than returning ``{}`` when it is missing: ``roots()``
+        degrades because a trace still answers without it, and a verification
+        with no manifest has nothing to verify against.
+        """
+        path = self.destination / MANIFEST
+        if not path.is_file():
+            raise ContractError(
+                f"{self.destination} holds no {MANIFEST}. A destination without one is "
+                f"not a corpus musubi wrote, and there is nothing to check it against."
+            )
+        return _document(path)
+
+    def artefact_bytes(self, key: str) -> bytes:
+        return (self.destination / DOCUMENTS / key).read_bytes()
+
+    def key_of(self, artefact_path: str, trace_path: str) -> str:
+        document = f"{DOCUMENTS}/"
+        traces = f"{TRACES}/"
+        if not artefact_path.startswith(document):
+            raise ContractError(
+                f"the manifest puts a document at {artefact_path!r}, which is not under "
+                f"{document}. This is not the layout musubi writes."
+            )
+        key = artefact_path[len(document) :]
+        expected = f"{traces}{key}.json"
+        if trace_path != expected:
+            raise ContractError(
+                f"the document {artefact_path!r} names its map as {trace_path!r} and the "
+                f"layout puts it at {expected!r}"
+            )
+        return key
+
     def roots(self) -> dict[str, str]:
         """Where each source read from, as the manifest recorded it.
 

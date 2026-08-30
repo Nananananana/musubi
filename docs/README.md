@@ -99,11 +99,12 @@ request as the code it describes.
 | The emitter | Front matter, the trace sidecar, staging, atomic promotion, and withdrawal |
 | The contracts | Both schemas, shipped in the wheel, validated against real output ([`contracts.md`](contracts.md)) |
 | The invariants | What the schemas cannot express, asserted against generated corpora — and a guard that fails if the enumeration grows an entry nothing runs |
+| `musubi verify` | The same invariants, run against a folder rather than a run — plus the one no test can make, that each document still hashes to what the manifest recorded |
 
 **Not built, and named rather than implied:**
 
-- **`musubi verify`**, `musubi rules`, `musubi eval`, `musubi doctor`. Named in
-  the design, none written.
+- **`musubi rules`**, `musubi eval`, `musubi doctor`. Named in the design, none
+  written.
 - **The incremental path.** A sync withdraws an artefact whose unit is gone, by
   reading the previous manifest as its ledger — but it still re-reads, converts
   and rewrites every unit that *is* there. `Change` exists and nothing calls it,

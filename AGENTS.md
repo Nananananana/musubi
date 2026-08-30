@@ -157,15 +157,21 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
 - Version `0.1.0.dev0`. **v0.1 is done**: `plan`, `sync` and `trace` over a
   vault, both contracts with schemas, and the invariants asserted rather than
   only enumerated. Twenty-one ADRs. Nothing is released and the public API is not
-  stable. v0.2 is next — `docs/proposals/0001-the-design.md` §9.
+  stable. **v0.2 is under way** — `docs/proposals/0001-the-design.md` §9, with
+  `musubi verify` built. **The freeze is not**, and `verify` does not advance
+  it: the roadmap guesses `verify` is the second program for
+  `musubi.sync-manifest/1`, and it is not, for the reason already accepted for
+  `tests/test_invariants.py` — the producer checking itself, in the same
+  package. A contract freezes when something else needed it.
 - **License: Apache-2.0. Python: 3.12+. Runtime dependencies: 0**, checked in CI
   by installing the wheel with no extras and asserting nothing came along.
 - **Built:** `domain/` — `span`, `text`, `trace`, `hashing`, `record`, `removal`,
   `cleansing`, `screening`, `frontmatter`, `manifest`; `ports/` (`screener`,
   `source`, `converter`, `emitter`); `infrastructure/` (`rules`, `screeners`,
   `sources`, `converters`, `emitters`); `application/pipeline.py`;
-  `application/sync.py` and `application/trace.py`; `interfaces/cli` with
-  **`musubi plan`**, **`musubi sync`** and **`musubi trace`**. A `Span`
+  `application/sync.py`, `application/trace.py` and `application/verify.py`;
+  `interfaces/cli` with **`musubi plan`**, **`musubi sync`**, **`musubi trace`**
+  and **`musubi verify`**. A `Span`
   is a half-open range of integer positions and deliberately does not decide
   what a position indexes — the holder says, and the trace map records it. `text.rewrite()` is
   the primitive everything else is made of: deleting is replacing with the
@@ -173,6 +179,21 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   every output character came from falls out of the one code path rather than
   being maintained beside it. Its `Piece`s tile **both** sides, checked on
   construction and by property tests.
+- **`verify` checks a folder, not a run**, which is the only thing it is for.
+  Every other check in this project runs while the corpus is being written, so
+  the files have had no opportunity to change; `verify` reads a corpus that may
+  have been copied, synced, restored from a backup or opened by an editor since.
+  Hence the one check nothing else can make: each document still hashes to what
+  the manifest recorded. **Its checks are a second implementation on purpose** —
+  `tests/test_invariants.py` keeps its own arithmetic rather than asserting on
+  `verify`'s output, because a single mistake in `verify` would otherwise make
+  both agree. **No `jsonschema` at runtime** (ADR-0001): shape is for consumers
+  who have it, and `verify` checks what a schema cannot say.
+- **Where a corpus keeps its files is the reader's business.** `verify` asks
+  `CorpusReader.key_of()` rather than stripping `documents/` itself — an
+  application that knew the layout would be a second place that knows it, and
+  the two would drift. A path that is not where the layout says is reported as
+  a fault rather than raised past the checker.
 - `domain/trace.py` is ADR-0004 in code. A `TraceMap` tiles the artefact
   exactly, and `followed_by` composes two stages into one map from the artefact
   back to the source. Composition never claims the stronger of two kinds, and

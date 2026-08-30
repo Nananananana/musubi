@@ -20,11 +20,13 @@ from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from ... import __version__
 from ...application.pipeline import Outcome, Settings, run
 from ...application.sync import Synced, empties_the_corpus, sync, withdrawals
 from ...application.trace import Resolution, resolve
+from ...application.verify import Verified, verify
 from ...domain.manifest import Manifest, render
 from ...domain.span import Span
 from ...errors import MusubiError, TraceError
@@ -47,7 +49,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if arguments.command is None:
         parser.print_help()
         return 2
-    commands = {"plan": _plan, "sync": _sync, "trace": _trace}
+    commands = {"plan": _plan, "sync": _sync, "trace": _trace, "verify": _verify}
     try:
         return commands[arguments.command](arguments)
     except MusubiError as error:
@@ -141,6 +143,26 @@ def _parser() -> argparse.ArgumentParser:
         help="the destination, when the target is given as a key rather than a path",
     )
     following.add_argument("--json", action="store_true", help="print the answer as a document")
+
+    checking = commands.add_parser(
+        "verify",
+        help="check a corpus that is already on a disk",
+        description=(
+            "Every other command checks a corpus while writing it. This one checks a "
+            "folder, with no run in sight: a corpus is written once and read for years, "
+            "and in between it is copied, synced, restored from a backup and opened by "
+            "editors. It checks what the published schemas cannot say, and the one thing "
+            "no test can -- that each document still hashes to what the manifest recorded."
+        ),
+    )
+    checking.add_argument(
+        "destination",
+        type=Path,
+        nargs="?",
+        default=Path("synced"),
+        help="the corpus to check (default: ./synced)",
+    )
+    checking.add_argument("--json", action="store_true", help="print the findings as a document")
 
     return parser
 
@@ -240,6 +262,44 @@ def _sync(arguments: argparse.Namespace) -> int:
     else:
         _report_sync(result, arguments.into)
     return 0
+
+
+def _verify(arguments: argparse.Namespace) -> int:
+    checked = verify(Corpus(arguments.destination))
+
+    if arguments.json:
+        _document(json.dumps(_checked(checked), ensure_ascii=False, indent=2) + "\n")
+    else:
+        _report_verify(checked)
+    return 0 if checked.holds else 1
+
+
+def _checked(checked: Verified) -> dict[str, Any]:
+    return {
+        "destination": checked.destination,
+        "run_id": checked.run_id,
+        "artefacts": checked.artefacts,
+        "checks": checked.checks,
+        "holds": checked.holds,
+        "faults": [
+            {"invariant": fault.invariant, "subject": fault.subject, "detail": fault.detail}
+            for fault in checked.faults
+        ],
+    }
+
+
+def _report_verify(checked: Verified) -> None:
+    print(f"musubi verify — {checked.summary()}")
+    print(f"  {checked.destination}. run id {checked.run_id}")
+    if checked.holds:
+        return
+    print()
+    print("Did not hold")
+    for fault in checked.faults:
+        print(f"  {fault.describe()}")
+    print()
+    print("Each name is an entry in docs/contracts.md under")
+    print("  'What these schemas cannot say', which says why it matters.")
 
 
 def _trace(arguments: argparse.Namespace) -> int:
