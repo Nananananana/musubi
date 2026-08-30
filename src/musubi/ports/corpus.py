@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from ..domain.trace import TraceMap
 
@@ -58,5 +58,30 @@ class CorpusReader(Protocol):
 
         ``None`` rather than a raise: the map alone is still an answer, and a
         missing source degrades a report rather than failing it.
+        """
+        ...
+
+    def manifest_document(self) -> dict[str, Any]:
+        """The manifest as it is on disk, parsed and not interpreted.
+
+        A dict rather than a :class:`~musubi.domain.manifest.Manifest`, because
+        the domain renders manifests and does not read them, and because a
+        checker that reconstructs the producer's object can only find faults the
+        producer's object can represent. ``verify`` reads what is written.
+        """
+        ...
+
+    def artefact_bytes(self, key: str) -> bytes:
+        """The document as bytes, for hashing it as it sits on the disk."""
+        ...
+
+    def key_of(self, artefact_path: str, trace_path: str) -> str:
+        """The key a manifest's two paths refer to, in this corpus's layout.
+
+        Where a corpus puts its documents and its maps is the reader's business
+        and not the checker's -- an application that stripped ``documents/``
+        itself would be a second place that knows the layout, and the two would
+        drift. Raises :class:`~musubi.errors.ContractError` when the paths are
+        not where the layout says, which is itself a thing worth reporting.
         """
         ...
