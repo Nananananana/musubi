@@ -11,8 +11,8 @@ tool whose schema lives on somebody else's server is not offline.
 
 | Contract | Schema | Written to |
 |---|---|---|
-| `musubi.sync-manifest/1-draft` | [`schemas/musubi-sync-manifest-1.json`](../schemas/musubi-sync-manifest-1.json) | `<destination>/manifest.json` |
-| `musubi.trace-map/1-draft` | [`schemas/musubi-trace-map-1.json`](../schemas/musubi-trace-map-1.json) | `<destination>/traces/<unit_key>.json` |
+| `musubi.sync-manifest/1-draft` | [`src/musubi/schemas/musubi-sync-manifest-1.json`](../src/musubi/schemas/musubi-sync-manifest-1.json) | `<destination>/manifest.json` |
+| `musubi.trace-map/1-draft` | [`src/musubi/schemas/musubi-trace-map-1.json`](../src/musubi/schemas/musubi-trace-map-1.json) | `<destination>/traces/<unit_key>.json` |
 
 Worked examples, produced by the real emitter and validated on every push, are
 in [`tests/contracts/`](../tests/contracts/README.md).
@@ -227,7 +227,10 @@ as contracts — and they are not documents to *index*.
 ## Writing a consumer
 
 1. Check `contract`. Refuse a value you do not recognise.
-2. Validate against the schema shipped in the wheel:
-   `importlib.resources.files("musubi") / "schemas"`.
+2. Validate against the schema shipped with the package:
+   `importlib.resources.files("musubi") / "schemas"`, or
+   `musubi.schemas.path_to("musubi.trace-map/1-draft")`, which takes the
+   `contract` value out of the document you are holding. musubi's own
+   conformance tests load them this way, so this sentence is one musubi runs.
 3. Check the invariants above that you depend on. The schema did not.
 4. Treat what you read as carrying the classification of the corpus it describes.

@@ -176,7 +176,7 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
 
 - Version `0.1.0.dev0`. **v0.1 is done**: `plan`, `sync` and `trace` over a
   vault, both contracts with schemas, and the invariants asserted rather than
-  only enumerated. Twenty-two ADRs. Nothing is released and the public API is not
+  only enumerated. Twenty-three ADRs. Nothing is released and the public API is not
   stable. **v0.2 is under way** — `docs/proposals/0001-the-design.md` §9, with
   `musubi verify` built. **The freeze is not**, and `verify` does not advance
   it: the roadmap guesses `verify` is the second program for
@@ -209,6 +209,17 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   front matter, and the front matter's reasoning is unchanged. Putting a
   timestamp in a document is a claim; keeping the file's own is declining to
   destroy one. A `stat` that fails is not a failed run.
+- **The schemas live in `src/musubi/schemas/`, and the conformance tests load
+  them the way `docs/contracts.md` tells a consumer to** (ADR-0023). They used
+  to sit at the repository root with a build-time `force-include`, which made
+  the published sentence `importlib.resources.files("musubi") / "schemas"`
+  **false in an editable install** — true for whoever ran `pip install musubi`,
+  false for everybody working on musubi, and run by nothing. hatchling ships
+  files inside the package with no `force-include`; that was measured, not
+  assumed. `schemas/` at the root is a signpost and a test keeps a `.json` from
+  returning there: **two copies of a contract are two contracts the moment
+  somebody edits one**, and a byte-identity test can keep them equal without
+  answering which one a reader is holding.
 - **`verify` checks a folder, not a run**, which is the only thing it is for.
   Every other check in this project runs while the corpus is being written, so
   the files have had no opportunity to change; `verify` reads a corpus that may

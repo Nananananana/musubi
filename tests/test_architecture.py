@@ -31,6 +31,11 @@ ALLOWED: dict[str, frozenset[str]] = {
     # ``errors``, which keeps this set genuinely empty.
     "domain": frozenset(),
     "errors": frozenset(),
+    # The published contracts and the one accessor that reaches them. It imports
+    # nothing of musubi's: a schema is what musubi promises, not something it
+    # decides, and a consumer holding only a document must be able to load one
+    # (ADR-0023).
+    "schemas": frozenset(),
     "ports": frozenset({"domain", "errors"}),
     "infrastructure": frozenset({"domain", "ports", "errors"}),
     "application": frozenset({"domain", "ports", "errors"}),
@@ -50,7 +55,7 @@ ALLOWED: dict[str, frozenset[str]] = {
 #: ADR-0001. The whole package declares zero runtime dependencies, so in
 #: practice this holds everywhere -- but the domain is the one where it is a
 #: guarantee rather than a current fact, so it is asserted separately.
-STDLIB_ONLY = frozenset({"domain"})
+STDLIB_ONLY = frozenset({"domain", "schemas"})
 
 #: musubi reads exports, never services (ADR-0007). Unlike ``tsumugi`` there is
 #: no carve-out for a networked adapter, because there is nothing musubi needs

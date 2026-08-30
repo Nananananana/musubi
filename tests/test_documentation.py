@@ -100,27 +100,42 @@ def test_there_is_no_architecture_document_yet() -> None:
 
 
 def test_a_published_schema_is_packaged_with_the_wheel() -> None:
-    """ADR-0002: the contract ships inside the wheel.
+    """ADR-0002: the contract ships with the package. ADR-0023: where from.
 
-    This asserts the ``force-include`` block is live. It does **not** assert the
-    files are in a built wheel, which is a different question and which the
-    "the schemas ship inside the wheel" CI job answers by building one and
-    opening it -- ``force-include`` does not apply to an editable install, so
-    nothing a developer runs locally would notice if the block were deleted.
+    The files sit inside the package tree, so hatchling ships them without a
+    ``force-include`` and ``importlib.resources`` finds them in an editable
+    install too. That last part is the point: while they lived at the repository
+    root the loading instruction in `docs/contracts.md` was true for a consumer
+    who ran ``pip install musubi`` and false for everybody working on musubi,
+    and nothing here ran the sentence it published.
+
+    The "the schemas ship inside the wheel" CI job still builds a wheel and opens
+    it, which is the different question of whether they are in the artefact.
     """
-    assert list((ROOT / "schemas").glob("*.json")), "both contracts have schemas since #24"
-
-    pyproject = ROOT / "pyproject.toml"
-    live = [
-        line
-        for line in pyproject.read_text(encoding="utf-8").splitlines()
-        if not line.lstrip().startswith("#")
-    ]
-    assert "[tool.hatch.build.targets.wheel.force-include]" in live, (
-        "schemas/ now holds a published contract, so the force-include block in "
-        "pyproject.toml must be uncommented. A consumer validating a manifest should not "
-        "have to fetch a schema from the internet."
+    packaged = ROOT / "src" / "musubi" / "schemas"
+    assert list(packaged.glob("*.json")), "both contracts have schemas since #24"
+    assert not list((ROOT / "schemas").glob("*.json")), (
+        "the schemas moved into the package (ADR-0023). The root directory is a "
+        "signpost; a .json back at the root is a second copy of a contract, which is "
+        "two contracts as soon as somebody edits one."
     )
+    signpost = (ROOT / "schemas" / "README.md").read_text(encoding="utf-8")
+    for name in packaged.glob("*.json"):
+        assert name.name in signpost, f"the signpost does not mention {name.name}"
+
+    # The guarantee that replaced the `force-include` block: the sentence
+    # `docs/contracts.md` publishes resolves here, in this checkout, without a
+    # wheel being built. That is what the old configuration could not offer.
+    from musubi.schemas import CONTRACTS, path_to, schemas
+
+    assert schemas().is_dir(), (
+        "`importlib.resources.files('musubi') / 'schemas'` does not resolve. This is "
+        "the sentence docs/contracts.md tells consumers to use, and it was false in an "
+        "editable install for as long as the schemas lived at the repository root."
+    )
+    for contract in CONTRACTS:
+        assert path_to(contract).is_file(), f"{contract} has no schema where it says"
+        assert path_to(f"{contract}-draft").is_file(), "a consumer reads the draft suffix"
 
 
 @pytest.mark.parametrize("word", FORBIDDEN_IN_OUTPUT)
@@ -233,6 +248,7 @@ _NUMBERS = {
     20: "Twenty",
     21: "Twenty-one",
     22: "Twenty-two",
+    23: "Twenty-three",
 }
 
 
