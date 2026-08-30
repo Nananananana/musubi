@@ -8,7 +8,7 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- The design, before the code: `docs/proposals/0001-the-design.md`, sixteen
+- The design, before the code: `docs/proposals/0001-the-design.md`, seventeen
   architecture decision records, `docs/concept.md`, and the documentation rules
   that keep current state, history and plans apart.
 - The tooling that will enforce the design: the layering asserted by AST over
@@ -63,7 +63,16 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `globalRules` with attribution, the date it was taken, and the entries
   deliberately not adopted — `[a-z]?mc` would strip `amc` and `bmc` from
   somebody's links.
-- ADR-0014, ADR-0015 and ADR-0016.
+- `domain/screening.py`, `ports/screener.py` and `infrastructure/screeners/`:
+  the credential gate. The default tier is **signatures** — a prefix, an
+  alphabet and a minimum length, checked by a linear scan — and entropy is a
+  second tier that is off by default (ADR-0017). Entropy-only detection scores
+  21.1% precision and 70.4% recall on CredData, and under ADR-0008's
+  stop-the-run policy four false stops in five would make `--allow` reflexive
+  inside a week. The entropy tier carries those numbers in the code, to be
+  printed where it is switched on. Twenty-one signatures, each with its evidence
+  and review date.
+- ADR-0014, ADR-0015, ADR-0016 and ADR-0017.
 - `span.resolve`, shared by `Rewritten` and `TraceMap`, and `Span.__bool__`,
   which is `True` always: `__len__` had made an empty span falsy, and
   `resolve(...) or Span(0, 0)` silently replaced a correct `[3:3]` with `[0:0]`.

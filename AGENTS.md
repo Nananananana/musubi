@@ -147,12 +147,13 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
 ## Current state
 
 - Version `0.1.0.dev0`. **v0.1 is in progress**, one issue at a time against the
-  milestone. The design and sixteen ADRs are in `docs/`; nothing is released
+  milestone. The design and seventeen ADRs are in `docs/`; nothing is released
   and there is no public API to speak of yet.
 - **License: Apache-2.0. Python: 3.12+. Runtime dependencies: 0**, checked in CI
   by installing the wheel with no extras and asserting nothing came along.
 - **Built:** `domain/` — `span`, `text`, `trace`, `hashing`, `record`, `removal`,
-  `cleansing`; `infrastructure/rules/` holds the first pack. A `Span`
+  `cleansing`, `screening`; `ports/screener.py`; `infrastructure/rules/` and
+  `infrastructure/screeners/`. A `Span`
   is a half-open range of integer positions and deliberately does not decide
   what a position indexes — the holder says, and the trace map records it. `text.rewrite()` is
   the primitive everything else is made of: deleting is replacing with the
@@ -182,6 +183,14 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   instead of mitigating it. URL finding is a linear scan for the same reason.
   One `Replacement` per query and one `RemovalRecord` per parameter: a query cut
   by three rules is one discontinuity and three things somebody may appeal.
+- `domain/screening.py` + `infrastructure/screeners/`: **the default tier is
+  signatures, and entropy is opt-in** (ADR-0017). A signature is a prefix, an
+  alphabet and a minimum length — no regex, same reason as ADR-0016. Entropy-only
+  detection is 21.1% precision on CredData, and under ADR-0008's stop-the-run
+  policy four false stops in five makes `--allow` reflexive within a week. The
+  entropy tier prints its own numbers where it is switched on.
+- **No recall number is claimed for the default tier.** It is unmeasured, and
+  this project does not write unmeasured numbers. v0.4 owes it.
 - `infrastructure/rules/core.py` is derived from ClearURLs' `globalRules`, with
   the provenance and the two entries deliberately **not** adopted written down
   in the module. Every rule states `evidence` and `since`.
