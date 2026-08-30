@@ -65,6 +65,39 @@ jobs:
       - name: Layering
         run: lint-imports
 
+  contracts:
+    name: the schemas ship inside the wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      # A consumer validating a manifest should not have to fetch a schema from
+      # the internet, and an offline tool whose schema lives on somebody else's
+      # server is not offline. `force-include` in pyproject.toml puts them in
+      # the wheel; an editable install does not have them, so nothing a
+      # developer runs locally would notice if the block were deleted. This is
+      # what notices.
+      - name: Build the wheel
+        run: python -m pip install --upgrade pip build && python -m build --wheel --outdir dist
+
+      - name: Assert the contracts are inside it
+        run: |
+          python - <<'PY'
+          import zipfile, glob, json
+          wheel = glob.glob("dist/*.whl")[0]
+          with zipfile.ZipFile(wheel) as archive:
+              held = set(archive.namelist())
+              for name in ("musubi-trace-map-1.json", "musubi-sync-manifest-1.json"):
+                  path = f"musubi/schemas/{name}"
+                  assert path in held, f"{path} is not in {wheel}"
+                  json.loads(archive.read(path))
+          print("both contracts ship with the wheel")
+          PY
+
   dependencies:
     name: the dependency count is zero
     runs-on: ubuntu-latest

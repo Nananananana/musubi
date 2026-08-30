@@ -276,13 +276,17 @@ def render(manifest: Manifest) -> str:
             }
             for skip in manifest.skipped
         ],
+        # No span and no length ([ADR-0019]). A finding points at a credential
+        # that is still in the owner's source file and still valid, and a
+        # manifest naming its offset and its length is the targeting
+        # information an attacker would want. The owner does not need it -- the
+        # terminal report prints it, because a person looking at their own
+        # screen is who ADR-0008 stops the run for.
         "findings": [
             {
                 "unit_key": key,
                 "rule": finding.rule,
                 "label": finding.label,
-                "span": [finding.span.start, finding.span.end],
-                "matched_characters": finding.matched_characters,
                 "matched_sha256": finding.matched_hash,
             }
             for key, finding in manifest.findings

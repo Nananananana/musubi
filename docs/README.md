@@ -23,7 +23,7 @@ This convention is taken from the sibling projects `kiseki`, `tsumugi` and
 | `AGENTS.md` | For contributors and AI agents: the current rules, constraints and state |
 | `docs/concept.md` | The conceptual model, and the whole picture across five projects |
 | `docs/architecture.md` | The current architecture — **not written yet, on purpose** |
-| `docs/sync-manifest.md` | The SyncManifest and TraceMap contracts, for producers and consumers |
+| `docs/contracts.md` | The SyncManifest and TraceMap contracts, for producers and consumers — including what the schemas cannot say |
 | `docs/sources.md` | Per source: its key derivation, its rule pack, and `kiseki`'s ten questions answered |
 | `docs/threat-model.md` | What a synced folder and a trace map contain, and what they become if they leak |
 | `docs/evaluation-corpus.md` | The generated dataset: its shape, its plants, and what it cannot tell you |

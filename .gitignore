@@ -14,11 +14,15 @@ venv/
 .hypothesis/
 htmlcov/
 
-# musubi's output is the owner's documents, cleaned. A sync run writes the
-# corpus itself, and a trace map says which byte of which private file every
-# character came from. Neither belongs in a commit. See docs/threat-model.md
-# once it exists; until then treat everything below as if it were the notes.
+# musubi's output is the owner's documents, cleaned. The WHOLE destination is
+# one classification (ADR-0019): documents/, traces/ and manifest.json are the
+# same secret, and a trace map is not the safe half -- it carries the owner's
+# filenames, the length and position of every paragraph, and which tracking
+# parameters were in the document. Named by directory rather than by filename,
+# because a rule that matches `*.trace.json` misses `traces/a.md.json`.
 out/
 synced/
-*.trace.json
-*.manifest.json
+**/documents/
+**/traces/
+**/manifest.json
+.musubi-staging/

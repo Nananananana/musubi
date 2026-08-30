@@ -1,0 +1,221 @@
+{
+  "contract": "musubi.trace-map/1-draft",
+  "artefact": {
+    "path": "documents/design/gear.md",
+    "content_hash": "sha256:9a9806619e6790ee4636f05edd8b3f499ebc9633662fdabc838404971db01e62"
+  },
+  "source": {
+    "source_id": "vault",
+    "unit_key": "design/gear.md",
+    "content_hash": "sha256:78b3fff7e05d4b51a4a325075581ba83a65d7a76a544f9888cd46e5189cea8d0",
+    "media_type": "text/markdown",
+    "encoding": "utf-8",
+    "bom_bytes": 0
+  },
+  "converter": "markdown@1",
+  "source_unit": "characters",
+  "coverage": {
+    "characters": 119,
+    "traceable": 83
+  },
+  "segments": [
+    {
+      "out": [
+        0,
+        3
+      ],
+      "src": [
+        0,
+        3
+      ],
+      "kind": "guessed"
+    },
+    {
+      "out": [
+        3,
+        4
+      ],
+      "src": [
+        3,
+        5
+      ],
+      "kind": "transformed",
+      "rule": "line_ending"
+    },
+    {
+      "out": [
+        4,
+        40
+      ],
+      "src": [
+        3,
+        5
+      ],
+      "kind": "synthetic",
+      "rule": "front_matter"
+    },
+    {
+      "out": [
+        40,
+        55
+      ],
+      "src": [
+        5,
+        20
+      ],
+      "kind": "verbatim"
+    },
+    {
+      "out": [
+        55,
+        56
+      ],
+      "src": [
+        20,
+        22
+      ],
+      "kind": "transformed",
+      "rule": "line_ending"
+    },
+    {
+      "out": [
+        56,
+        59
+      ],
+      "src": [
+        22,
+        25
+      ],
+      "kind": "verbatim"
+    },
+    {
+      "out": [
+        59,
+        60
+      ],
+      "src": [
+        25,
+        27
+      ],
+      "kind": "transformed",
+      "rule": "line_ending"
+    },
+    {
+      "out": [
+        60,
+        61
+      ],
+      "src": [
+        27,
+        29
+      ],
+      "kind": "transformed",
+      "rule": "line_ending"
+    },
+    {
+      "out": [
+        61,
+        70
+      ],
+      "src": [
+        29,
+        38
+      ],
+      "kind": "verbatim"
+    },
+    {
+      "out": [
+        70,
+        71
+      ],
+      "src": [
+        38,
+        40
+      ],
+      "kind": "transformed",
+      "rule": "line_ending"
+    },
+    {
+      "out": [
+        71,
+        72
+      ],
+      "src": [
+        40,
+        42
+      ],
+      "kind": "transformed",
+      "rule": "line_ending"
+    },
+    {
+      "out": [
+        72,
+        83
+      ],
+      "src": [
+        42,
+        53
+      ],
+      "kind": "verbatim"
+    },
+    {
+      "out": [
+        83,
+        84
+      ],
+      "src": [
+        53,
+        55
+      ],
+      "kind": "transformed",
+      "rule": "line_ending"
+    },
+    {
+      "out": [
+        84,
+        85
+      ],
+      "src": [
+        55,
+        57
+      ],
+      "kind": "transformed",
+      "rule": "line_ending"
+    },
+    {
+      "out": [
+        85,
+        113
+      ],
+      "src": [
+        57,
+        85
+      ],
+      "kind": "verbatim"
+    },
+    {
+      "out": [
+        113,
+        118
+      ],
+      "src": [
+        85,
+        112
+      ],
+      "kind": "transformed",
+      "rule": "url_query"
+    },
+    {
+      "out": [
+        118,
+        119
+      ],
+      "src": [
+        112,
+        114
+      ],
+      "kind": "transformed",
+      "rule": "line_ending"
+    }
+  ]
+}

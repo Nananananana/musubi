@@ -1,0 +1,98 @@
+{
+  "contract": "musubi.sync-manifest/1-draft",
+  "run_id": "sha256:83edd77fd5195bd4ad58202d3543b6312fb635345af88e8461879ab359bdb626",
+  "kind": "sync",
+  "created_at": "2026-08-30T00:00:00+00:00",
+  "musubi_version": "0.1.0.dev0",
+  "sources": [
+    {
+      "source_id": "vault",
+      "adapter": "obsidian@1",
+      "key_derivation": "path",
+      "root": "/home/owner/notes",
+      "units": 2,
+      "caps": [
+        "files larger than 8388608 bytes are not read",
+        "only these suffixes are read: .markdown, .md, .mdown, .mkd, .text, .txt"
+      ]
+    }
+  ],
+  "rulesets": [
+    {
+      "id": "core",
+      "version": "2026.08"
+    }
+  ],
+  "converters": [
+    "markdown@1",
+    "plaintext@1"
+  ],
+  "screener": "signatures@2026.08",
+  "emitter": "documents@1",
+  "artefacts": [
+    {
+      "path": "documents/design/gear.md",
+      "content_hash": "sha256:9a9806619e6790ee4636f05edd8b3f499ebc9633662fdabc838404971db01e62",
+      "trace_map": "traces/design/gear.md.json",
+      "source": {
+        "source_id": "vault",
+        "unit_key": "design/gear.md"
+      },
+      "converter": "markdown@1",
+      "layer": "fact",
+      "characters": 119,
+      "traceable_characters": 83
+    },
+    {
+      "path": "documents/plain.txt",
+      "content_hash": "sha256:e6c4d6609612f4b790faec9068ae5d1f1c22632945ce047b71da32bdb5bb0ed3",
+      "trace_map": "traces/plain.txt.json",
+      "source": {
+        "source_id": "vault",
+        "unit_key": "plain.txt"
+      },
+      "converter": "plaintext@1",
+      "layer": "fact",
+      "characters": 10,
+      "traceable_characters": 10
+    }
+  ],
+  "removals": [
+    {
+      "unit_key": "design/gear.md",
+      "rule": "tracking.utm-family",
+      "kind": "tracking_parameter",
+      "span": [
+        78,
+        99
+      ],
+      "removed_characters": 21,
+      "removed_sha256": "sha256:983e97c46d4f9a678ac75ad094e40c5305ec0bfd981a9da1f648e25f4e8fcde0",
+      "removed_value": "utm_source=newsletter"
+    }
+  ],
+  "skipped": [
+    {
+      "source_id": "vault",
+      "origin": "photo.png",
+      "reason": "unknown_format",
+      "detail": ".png"
+    }
+  ],
+  "findings": [],
+  "allowed": [],
+  "coverage": {
+    "units_read": 3,
+    "emitted": 2,
+    "skipped": 1,
+    "characters": 129,
+    "traceable_characters": 93
+  },
+  "limits": [
+    "A traceable character means an offset resolves to a place in the source. It does not mean the conversion read the document in the right order.",
+    "Source offsets are counted in characters of the decoded text. Turning one into a byte offset takes the encoding, the byte-order mark's length and the file itself.",
+    "The screener catches credential formats their issuers made recognisable. Its recall against a labelled corpus has not been measured, and no number is claimed for it.",
+    "Removals are recorded by hash, not by value. Confirming one requires the source.",
+    "Rules remove what they name and nothing else. That is not a guarantee about what is left."
+  ]
+}

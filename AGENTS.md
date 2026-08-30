@@ -147,7 +147,7 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
 ## Current state
 
 - Version `0.1.0.dev0`. **v0.1 is in progress**, one issue at a time against the
-  milestone. The design and eighteen ADRs are in `docs/`; nothing is released
+  milestone. The design and nineteen ADRs are in `docs/`; nothing is released
   and there is no public API to speak of yet.
 - **License: Apache-2.0. Python: 3.12+. Runtime dependencies: 0**, checked in CI
   by installing the wheel with no extras and asserting nothing came along.
@@ -273,9 +273,26 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   v0.4 the corpus and the measured floors, v0.5 the folder `kiseki-notes` can
   read, v0.6 redundancy and the surfaces.
   `docs/proposals/0001-the-design.md` §9 is the detail.
-- No schema exists yet. `pyproject.toml` carries the `force-include` block for
-  `schemas/` **commented out**, because hatchling refuses to build against a
-  force-include that resolves to nothing; `tests/test_documentation.py` turns the
-  build red the moment a schema exists without it.
+- **Both contracts have schemas**, in `schemas/`, shipped inside the wheel and
+  checked there by a CI job — `force-include` does not apply to an editable
+  install, so nothing a developer runs locally would notice if the block were
+  deleted. `docs/contracts.md` is the page a consumer reads.
+- **Validate against real output, never against a document a test assembled.**
+  `tsumugi` shipped a frozen contract and a reference producer and had never
+  once validated its own real output against its own schema; the first run
+  against genuine output found a real bug that had made every package built
+  through the library API non-conformant. `test_contract_conformance.py` builds
+  a corpus with the real emitter and validates what lands on disk, and runs the
+  real command and validates what it prints.
+- **A schema handed over as "the contract" gets read as the whole of it, and it
+  is not.** JSON Schema 2020-12 cannot compare two properties of one object, so
+  `end >= start` is beyond it — and the invariant the trace map exists for, that
+  the segments cover every character exactly once, is far beyond it.
+  `docs/contracts.md` enumerates what is not checked, where a consumer reads it.
+  The property tests are the executable form of that list, not a later
+  reinforcement of it.
+- **A record inherits the classification of what it describes** (ADR-0019). The
+  whole destination is one secret; `traces/` is not the safe half, and a finding
+  in the manifest carries no offset and no length.
 - Working notes, review history and experiments are kept **outside this
   repository** and are not published.
