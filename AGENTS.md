@@ -275,6 +275,17 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   so the patch is silently undone, the test passes under `-s` and fails without
   it, and what is being measured is pytest. `tests/test_console_encoding.py`
   patches inside the test body.
+- **A Hypothesis counterexample is not kept anywhere.** The example database is
+  keyed by the test function, so editing the test — including adding a message
+  to an assertion so you can see the failing input — changes the key and the
+  stored example is silently skipped. It is also gitignored, so it never leaves
+  the checkout: measured at v0.1, nine test files here used Hypothesis and the
+  suite held **not one `@example`**, meaning no counterexample this repository
+  had ever produced had reached CI or a second machine. Same family as the entry above
+  and nastier — there the test measured the wrong thing, here it measures the
+  right thing and is handed nothing to measure, with nothing broken either
+  time. **When a property test hands you a counterexample, pin it as an
+  `@example` in the commit that fixes it.** The database will not carry it.
 - **The previous manifest is the ledger.** A sync withdraws an artefact whose
   unit is no longer in the source, by reading `<destination>/manifest.json` —
   there is no separate store, because a corpus that already says what is in it

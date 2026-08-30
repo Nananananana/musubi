@@ -58,11 +58,18 @@ dev = [
 # form in project metadata is a trap, and the trap has two steps:
 #
 #   1. hatchling refuses to build at all: "cannot be a direct reference unless
-#      `tool.hatch.metadata.allow-direct-references` is set to `true`". Loud,
-#      and measured here rather than taken on report.
+#      `tool.hatch.metadata.allow-direct-references` is set to `true`". Loud.
 #   2. The shortest way to silence that is to set the flag -- after which the
-#      build succeeds, `twine check` passes, and PyPI rejects the upload. The
-#      failure has moved to release day.
+#      build succeeds and `twine check` passes, and the failure has moved to
+#      release day, where the index refuses the upload.
+#
+# Steps 1 and 2 up to `twine check` were measured here. The refusal was not,
+# and will not be: uploading to PyPI is publishing, and publishing to find out
+# is not a test. It is read instead from the index's own source, which is a
+# better authority than the issue threads this is usually cited from --
+# `warehouse/forklift/metadata.py` walks `requires_dist` and rejects any
+# requirement carrying a URL, "Can't have direct dependency". No status code is
+# recorded because none was observed, and the conclusion does not need one.
 #
 # So the danger is not step 1. It is a pull request that adds the flag to make
 # step 1 go away. If one arrives, it is the wrong fix: the reference goes in CI.
