@@ -24,6 +24,35 @@ happened. It happens when **a second program has produced and consumed one** —
 not on a date ([ADR-0002](adr/0002-the-sync-manifest-is-a-document.md)). Until
 then a field may change meaning, and a consumer written today may need adjusting.
 
+Three things have been proposed as that second program and are not:
+
+- **musubi checking its own output.** `tests/test_invariants.py` validates real
+  manifests and real maps against generated corpora, and `musubi verify` checks
+  a corpus sitting on a disk. Both are worth having and neither counts: they are
+  the producer reading itself, in the same package. The roadmap
+  ([`proposals/0001-the-design.md`](proposals/0001-the-design.md) §9) guesses
+  that `verify` is the likely second program for the manifest. It is not, and
+  that document stays as written — it records what was planned, not what is.
+- **A validator.** Checking a document against the schema exercises the schema.
+  What the freeze is waiting for is a program that *used* one and found out
+  something — and the interesting failures are the ones no schema can express,
+  which is the whole of the next section.
+- **A consumer written in order to freeze it.** A contract freezes because
+  something needed it. Picking a consumer to satisfy the condition is the
+  condition run backwards, and leaves a frozen contract with nothing behind it.
+
+Today `musubi.trace-map/1` has a candidate — a resolver written against it
+outside this project, taking an anchor through to a byte range in an original
+file — and `musubi.sync-manifest/1` has none. Neither is scheduled, because a
+date is exactly what this rule refuses.
+
+One ambiguity is inherited along with the rule: read strictly, *a second program
+has produced and consumed one* asks the same program to do both, which for a
+format musubi is currently the only writer of would mean never. musubi reads it
+as the pair — musubi produces, something else consumes — and the wording belongs
+to `tsumugi`, so the family should settle it rather than each project deciding
+quietly.
+
 Once frozen: a field may be added; none will be removed or change meaning. A
 field addition is a schema revision, and an old validator will refuse a newer
 document because every object is `additionalProperties: false`. That is
