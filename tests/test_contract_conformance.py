@@ -20,6 +20,7 @@ because a schema handed over as "the contract" is read as the whole of it.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -196,6 +197,84 @@ def test_the_published_example_conforms(fixture: str, schema: Path) -> None:
     """Committed real output, so that somebody writing a consumer has a document
     to write it against rather than a docstring to write it from."""
     validator(schema).validate(json.loads((CONTRACTS / fixture).read_text(encoding="utf-8")))
+
+
+def test_a_document_with_an_added_field_cannot_pass_as_this_contract(tmp_path: Path) -> None:
+    """The executable form of the versioning rule (ADR-0024).
+
+    `additionalProperties: false` means a field added inside `/1` is refused by
+    every consumer holding the older schema -- and refused with the same
+    `ValidationError` a malformed document produces. Those need opposite
+    responses, refresh or refuse, and one exception cannot carry both.
+
+    So an addition takes a new identifier, and this is what makes that the only
+    coherent rule: the schema itself will not let a wider document pass as `/1`,
+    so there is no version of "add it quietly" that works.
+    """
+    body = json.loads(_real_manifest(tmp_path).read_text(encoding="utf-8"))
+    assert validator(SYNC_MANIFEST).is_valid(body), "a real manifest should validate"
+
+    widened = {**body, "corpus_bytes": 1234}
+    assert not validator(SYNC_MANIFEST).is_valid(widened), (
+        "a field added inside /1 validated against /1. `additionalProperties: false` "
+        "is what makes 'additions take a new identifier' enforceable rather than "
+        "merely written down."
+    )
+
+
+def test_being_out_of_date_is_reported_before_validation(tmp_path: Path) -> None:
+    """The identifier check is the signal that says *refresh me*.
+
+    A consumer's first step is to check `contract` and refuse what it does not
+    recognise -- and that happens before any validator runs, which is what keeps
+    it distinguishable from a document that is simply wrong.
+    """
+    body = json.loads(_real_manifest(tmp_path).read_text(encoding="utf-8"))
+    future = {**body, "contract": "musubi.sync-manifest/2"}
+    pattern = json.loads(SYNC_MANIFEST.read_text(encoding="utf-8"))["properties"]["contract"]
+    assert not re.match(pattern["pattern"], future["contract"]), (
+        "the /1 schema accepts a /2 identifier, so the two signals collapse again"
+    )
+
+    # And the document it appears in is refused, so a consumer that skipped
+    # step 1 still does not read a /2 as though it were a /1.
+    assert not validator(SYNC_MANIFEST).is_valid(future)
+
+
+def _real_manifest(tmp_path: Path) -> Path:
+    """A manifest a real sync wrote, not one a test assembled."""
+    import contextlib
+    import io
+
+    from musubi.interfaces.cli.main import main
+
+    root, into = tmp_path / "vault", tmp_path / "synced"
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "a.md").write_text("# a\n", encoding="utf-8", newline="\n")
+    with contextlib.redirect_stdout(io.StringIO()):
+        main(["sync", str(root), "--into", str(into)])
+    return into / "manifest.json"
+
+
+def test_the_layout_the_contract_promises_is_the_layout_the_emitter_writes() -> None:
+    """`docs/contracts.md` names three paths and a consumer depends on them.
+
+    They are part of `musubi.sync-manifest/1` rather than a separate thing to
+    check, so moving one is a contract change (ADR-0024). Nothing enforced the
+    document against the code, which means a rename would have left the contract
+    describing a layout musubi no longer writes -- and the consumer discovering
+    it as a missing file rather than as a version it does not recognise.
+    """
+    from musubi.infrastructure.emitters import DOCUMENTS, MANIFEST, TRACES
+
+    said = (Path(__file__).resolve().parent.parent / "docs" / "contracts.md").read_text(
+        encoding="utf-8"
+    )
+    for name, value in (("documents", DOCUMENTS), ("traces", TRACES), ("manifest", MANIFEST)):
+        assert f"`<destination>/{value}" in said or f"`{value}`" in said, (
+            f"the emitter writes {value!r} for {name} and docs/contracts.md does not "
+            f"say so. A consumer reading the contract would look in the wrong place."
+        )
 
 
 def _refusals(prefix: str) -> list[Path]:
