@@ -19,6 +19,20 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - ADR-0013 narrows ADR-0010: musubi publishes one output family and ships no
   consumer-specific emitter. `kiseki` already has its own producers, and
   `kiseki-notes` reads exactly the folder musubi writes.
+- `domain/span.py`: a half-open range of integer positions, which deliberately
+  does not decide what a position indexes. A span over an artefact counts
+  characters; a span over a PDF counts something else. The holder says, and the
+  trace map records it.
+- `domain/text.py`: `rewrite()`, the primitive every later stage is built out
+  of. Deleting is replacing with the empty string, inserting is replacing an
+  empty span, and the account of where every output character came from falls
+  out of the one code path. Its pieces tile both the output and the source,
+  checked on construction and by property tests. Plus `normalize_line_endings()`
+  and `decode()`, which reads UTF-8 and UTF-16-with-a-BOM and refuses everything
+  else rather than detecting — a guessed encoding writes mojibake into a corpus
+  bound for a model and looks exactly like a successful read.
+- The `domain-no-io` layering contract, switched on by the arrival of the first
+  domain module, as `tests/test_layering_config.py` requires.
 - `musubi.errors`, and nothing else. No architecture document — there is no
   architecture yet, and a current-state document written before the code is
   fiction.

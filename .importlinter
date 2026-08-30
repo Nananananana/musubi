@@ -78,18 +78,18 @@ forbidden_modules =
 # bytes and hands back records, which is what lets the whole conversion be
 # tested without a filesystem -- and what makes ADR-0003's reproducibility
 # claim mean something.
-# [importlinter:contract:domain-no-io]
-# name = The domain layer does not touch the filesystem
-# type = forbidden
-# source_modules =
-#     musubi.domain
-# forbidden_modules =
-#     pathlib
-#     os
-#     sqlite3
-#     zipfile
-#     tomllib
-#     argparse
+[importlinter:contract:domain-no-io]
+name = The domain layer does not touch the filesystem
+type = forbidden
+source_modules =
+    musubi.domain
+forbidden_modules =
+    pathlib
+    os
+    sqlite3
+    zipfile
+    tomllib
+    argparse
 
 # ADR-0008: a credential stops the run. The screener that decides what a
 # credential is has a conservative stdlib implementation in the core and an
