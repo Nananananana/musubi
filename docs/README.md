@@ -30,7 +30,25 @@ This convention is taken from the sibling projects `kiseki`, `tsumugi` and
 | `docs/measurements.md` | Traceable coverage, map size, screener recall and the re-read ratio, with the tools that produced them |
 | `docs/adr/` | Decisions as they were made, with their reasons — history |
 | `docs/proposals/` | Proposed or planned work — not necessarily implemented |
+| [GitHub milestones](https://github.com/Nananananana/musubi/milestones?state=all) | One per roadmap chapter: where each stands, and every correction the roadmap cannot carry |
 | `CHANGELOG.md` | The released history, briefly |
+
+**A roadmap chapter's current state is a milestone, not the roadmap.** The design
+document is left as written once the code disagrees with it, which is what makes
+it evidence of what was planned — and useless as an answer to *where is this
+now*. There is one milestone per chapter of
+[`proposals/0001-the-design.md`](proposals/0001-the-design.md) §9, and the
+descriptions carry what the document cannot be edited to say. Three of them are
+corrections rather than progress:
+
+- **v0.2** — the freeze is a *condition* recorded in that chapter, not a
+  deliverable of it. It completes with both contracts still `-draft`, and
+  `musubi verify` does **not** satisfy the condition, though the roadmap guesses
+  it might.
+- **v0.4** — one item is calendar-bound and should start now rather than there:
+  the two real exports taken weeks apart, which are collected and cannot be
+  generated.
+- **v0.6** — the seam in that chapter is `mamori`, not `tsumugi`.
 
 ## The rules that keep them apart
 
