@@ -152,8 +152,9 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
 - **License: Apache-2.0. Python: 3.12+. Runtime dependencies: 0**, checked in CI
   by installing the wheel with no extras and asserting nothing came along.
 - **Built:** `domain/` — `span`, `text`, `trace`, `hashing`, `record`, `removal`,
-  `cleansing`, `screening`; `ports/screener.py`; `infrastructure/rules/` and
-  `infrastructure/screeners/`. A `Span`
+  `cleansing`, `screening`; `ports/screener.py` and `ports/source.py`;
+  `infrastructure/rules/`, `infrastructure/screeners/` and
+  `infrastructure/sources/`. A `Span`
   is a half-open range of integer positions and deliberately does not decide
   what a position indexes — the holder says, and the trace map records it. `text.rewrite()` is
   the primitive everything else is made of: deleting is replacing with the
@@ -189,6 +190,17 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   detection is 21.1% precision on CredData, and under ADR-0008's stop-the-run
   policy four false stops in five makes `--allow` reflexive within a week. The
   entropy tier prints its own numbers where it is switched on.
+- `infrastructure/sources/`: a source is asked twice — `discover()` opens
+  nothing, `read(found)` opens one thing. The split is `kiseki-notes`' and it is
+  what lets `plan` account for what will be skipped before a private file has
+  been read. Pointing at the home directory or a filesystem root is **refused**
+  (ADR-0007). A file symlink is followed only if it resolves inside the root; a
+  directory symlink is never followed, because a cycle in an unattended walk is
+  a hang.
+- **Coverage is 100% except the three symlink branches**, which need a
+  privilege Windows does not grant by default. Those tests skip by *capability*
+  rather than by platform — they run on Linux and macOS CI, and on a Windows
+  machine with developer mode on. Do not "fix" the gap by deleting them.
 - **No recall number is claimed for the default tier.** It is unmeasured, and
   this project does not write unmeasured numbers. v0.4 owes it.
 - `infrastructure/rules/core.py` is derived from ClearURLs' `globalRules`, with
