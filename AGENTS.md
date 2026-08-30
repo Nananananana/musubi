@@ -155,8 +155,8 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   `cleansing`, `screening`, `frontmatter`, `manifest`; `ports/` (`screener`,
   `source`, `converter`, `emitter`); `infrastructure/` (`rules`, `screeners`,
   `sources`, `converters`, `emitters`); `application/pipeline.py`;
-  `application/sync.py`; `interfaces/cli` with **`musubi plan`** and
-  **`musubi sync`**. A `Span`
+  `application/sync.py` and `application/trace.py`; `interfaces/cli` with
+  **`musubi plan`**, **`musubi sync`** and **`musubi trace`**. A `Span`
   is a half-open range of integer positions and deliberately does not decide
   what a position indexes — the holder says, and the trace map records it. `text.rewrite()` is
   the primitive everything else is made of: deleting is replacing with the
@@ -230,6 +230,22 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   claim that a reader sees the whole corpus appear at once — that would need a
   directory swap, which would mean rewriting every unchanged artefact on every
   run.
+- **`trace` is the command the design is for**, and the layer ADR-0018 deferred
+  to: the map is in characters, and the byte offset is computed here because
+  here is where the encoding, the byte-order mark and the file all are. It also
+  checks the source's hash — a file that has moved on means the offsets are
+  about a document that no longer exists, and saying nothing would point a
+  reader confidently at the wrong place.
+- A range that contains a **removal** is told so. A removal occupies no output,
+  so it overlaps nothing and a span union covers it silently — `_bears_on` in
+  `application/trace.py` is deliberately wider than the arithmetic
+  `source_span_of` uses, which is ADR-0005 applied to a query.
+- **Publishing a contract means the ADR, the schema and the emitter in one
+  commit** — `mamori`'s rule, and musubi is a worked example of breaking it:
+  ADR-0002 named two contracts in the first commit and the schemas arrived
+  sixteen commits later, which is why #24 had to be filed. Half a contract is
+  either "consumable-looking but not consumable" or "a published reading that
+  disagrees with the implementation".
 - **The previous manifest is the ledger.** A sync withdraws an artefact whose
   unit is no longer in the source, by reading `<destination>/manifest.json` —
   there is no separate store, because a corpus that already says what is in it

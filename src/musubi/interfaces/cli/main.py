@@ -13,6 +13,7 @@ somebody deciding whether to trust this with their notes.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections import Counter
 from collections.abc import Sequence
@@ -22,9 +23,12 @@ from pathlib import Path
 from ... import __version__
 from ...application.pipeline import Outcome, Settings, run
 from ...application.sync import Synced, sync
+from ...application.trace import Resolution, resolve
 from ...domain.manifest import Manifest, render
-from ...errors import MusubiError
+from ...domain.span import Span
+from ...errors import MusubiError, TraceError
 from ...infrastructure.converters import converter_for
+from ...infrastructure.corpus import Corpus
 from ...infrastructure.emitters import DocumentEmitter
 from ...infrastructure.rules import CORE
 from ...infrastructure.screeners import EntropyScreener, default_screener
@@ -41,8 +45,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if arguments.command is None:
         parser.print_help()
         return 2
+    commands = {"plan": _plan, "sync": _sync, "trace": _trace}
     try:
-        return _plan(arguments) if arguments.command == "plan" else _sync(arguments)
+        return commands[arguments.command](arguments)
     except MusubiError as error:
         print(f"musubi: {error}", file=sys.stderr)
         return 1
@@ -81,6 +86,28 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     _shared(synchronise)
+
+    following = commands.add_parser(
+        "trace",
+        help="say where a range of a synced document came from",
+        description=(
+            "The command the whole design is for. Give it a range of a document musubi "
+            "built and it resolves back through every transformation to a place in the "
+            "file you actually have -- in characters, and in bytes when the file is "
+            "still there to measure against."
+        ),
+    )
+    following.add_argument(
+        "target",
+        help="a document and a range: synced/documents/design/gear.md:1204-1231",
+    )
+    following.add_argument(
+        "--into",
+        type=Path,
+        default=None,
+        help="the destination, when the target is given as a key rather than a path",
+    )
+    following.add_argument("--json", action="store_true", help="print the answer as a document")
 
     return parser
 
@@ -166,6 +193,91 @@ def _sync(arguments: argparse.Namespace) -> int:
     else:
         _report_sync(result, arguments.into)
     return 0
+
+
+def _trace(arguments: argparse.Namespace) -> int:
+    target, _, offsets = arguments.target.rpartition(":")
+    if not target or "-" not in offsets:
+        raise TraceError(
+            f"{arguments.target!r} is not a document and a range. Write it as "
+            f"path/to/document.md:1204-1231"
+        )
+    start, _, end = offsets.partition("-")
+    try:
+        span = Span(int(start), int(end))
+    except ValueError as error:
+        raise TraceError(f"{offsets!r} is not a range of two offsets: {error}") from error
+
+    if arguments.into is None:
+        corpus, key = Corpus.holding(Path(target))
+    else:
+        corpus, key = Corpus(arguments.into), Path(target).as_posix()
+    found = resolve(corpus, key, span)
+    if arguments.json:
+        print(json.dumps(_as_document(found), ensure_ascii=False, indent=2))
+    else:
+        _report_trace(found)
+    return 0
+
+
+def _report_trace(found: Resolution) -> None:
+    kinds = ", ".join(kind.value for kind in found.kinds) or "nothing"
+    print(f"{found.artefact} {found.out}  {kinds}")
+    print(f"  {found.excerpt!r}")
+
+    if found.is_synthetic:
+        # The honest answer, and the one a naive resolver would get wrong by
+        # reporting a source range for text that has no source.
+        print(f"\n  musubi wrote this. It came from nothing in {found.source.unit_key}.")
+        if found.rules:
+            print(f"  ({', '.join(found.rules)})")
+        return
+
+    print(f"\n  {found.source.source_id}:{found.source.unit_key}")
+    print(f"    characters {found.source_span}")
+    if found.source_bytes is not None:
+        mark = f", a {found.source.bom_bytes}-byte mark" if found.source.bom_bytes else ""
+        print(f"    bytes      {found.source_bytes}  ({found.source.encoding}{mark})")
+    else:
+        print("    bytes      unknown: the source is not where the manifest said it was")
+    if found.source_path is not None:
+        print(f"    {found.source_path}")
+    if found.rules:
+        print(f"    through: {', '.join(found.rules)}")
+
+    if found.source_excerpt is not None:
+        print(f"\n  {found.source_excerpt!r}")
+    if found.changed:
+        print(
+            "\n  The source has changed since the sync. These offsets are about the "
+            "document musubi read, which is not the one on the disk now."
+        )
+
+
+def _as_document(found: Resolution) -> dict[str, object]:
+    return {
+        "artefact": found.artefact,
+        "out": [found.out.start, found.out.end],
+        "excerpt": found.excerpt,
+        "kinds": [kind.value for kind in found.kinds],
+        "rules": list(found.rules),
+        "converter": found.converter,
+        "source": {
+            "source_id": found.source.source_id,
+            "unit_key": found.source.unit_key,
+            "encoding": found.source.encoding,
+            "bom_bytes": found.source.bom_bytes,
+            "characters": [found.source_span.start, found.source_span.end],
+            "bytes": (
+                None
+                if found.source_bytes is None
+                else [found.source_bytes.start, found.source_bytes.end]
+            ),
+            "path": None if found.source_path is None else str(found.source_path),
+            "excerpt": found.source_excerpt,
+            "changed": found.changed,
+        },
+    }
 
 
 def _report_plan(outcome: Outcome, *, show_removals: bool) -> None:

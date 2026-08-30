@@ -91,13 +91,12 @@ request as the code it describes.
 | Cleansing | 65 rules derived from ClearURLs, matched structurally and never by regex ([ADR-0016](adr/0016-a-rule-is-a-matcher-not-a-regular-expression.md)) |
 | Screening | 21 credential signatures; the entropy tier exists and is opt-in ([ADR-0017](adr/0017-entropy-is-a-tier-not-a-default.md)) |
 | `musubi sync` | The same run with the writing on: staged, promoted together, and a credential means nothing is written at all ([ADR-0008](adr/0008-a-credential-stops-the-run.md)) |
+| `musubi trace` | A range of a synced document, resolved back through every transformation to a place in the file you have ([ADR-0004](adr/0004-a-conversion-carries-a-map-back-to-its-source.md)) |
 | The emitter | Front matter, the trace sidecar, staging, atomic promotion, and withdrawal |
 | The contracts | Both schemas, shipped in the wheel, validated against real output ([`contracts.md`](contracts.md)) |
 
 **Not built, and named rather than implied:**
 
-- **`musubi trace`.** The maps are written and the resolution is implemented and
-  tested; there is no command that takes `file:start-end` and answers.
 - **`musubi verify`**, `musubi rules`, `musubi eval`, `musubi doctor`. Named in
   the design, none written.
 - **The incremental path.** A sync withdraws an artefact whose unit is gone, by
