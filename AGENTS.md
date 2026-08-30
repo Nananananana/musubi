@@ -106,6 +106,10 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   once more.
 - Windows: set `PYTHONUTF8=1`. This project reads files written on other people's
   machines, and half its bugs are encodings.
+- Writing a repository file from a Python script on Windows: pass
+  `newline="\n"`. `Path.write_text` translates, `.gitattributes` says the
+  repository is LF, and the pre-commit hook then rewrites the file underneath
+  the commit. It is caught every time and it wastes a cycle every time.
 - Read-only dumps for an assistant go **outside** the working tree.
 
 ## Rules particular to this project
@@ -142,14 +146,31 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
 
 ## Current state
 
-- Version `0.1.0.dev0`. **Nothing is built.** The repository holds the design,
-  thirteen ADRs, and the tooling that will enforce them.
+- Version `0.1.0.dev0`. **v0.1 is in progress**, one issue at a time against the
+  milestone. The design and thirteen ADRs are in `docs/`; nothing is released
+  and there is no public API to speak of yet.
 - **License: Apache-2.0. Python: 3.12+. Runtime dependencies: 0**, checked in CI
   by installing the wheel with no extras and asserting nothing came along.
-- `src/musubi/` holds `__init__.py`, `errors.py` and `py.typed`. Every other
-  layer is named in the layer table and in `.importlinter` before it exists, so
-  that the first module to appear in one is already governed.
-- Built: nothing. Planned, in order: v0.1 the spine (`plan`, `sync`, `trace` over
+- **Built:** `domain/span.py` and `domain/text.py`. A `Span` is a half-open
+  range of integer positions and deliberately does not decide what a position
+  indexes — the holder says, and the trace map records it. `text.rewrite()` is
+  the primitive everything else is made of: deleting is replacing with the
+  empty string, inserting is replacing an empty span, and the account of where
+  every output character came from falls out of the one code path rather than
+  being maintained beside it. Its `Piece`s tile **both** sides, checked on
+  construction and by property tests.
+- `decode()` reads UTF-8 (with or without a BOM) and UTF-16 that announces
+  itself, and **refuses everything else rather than detecting**. A guessed
+  legacy encoding writes mojibake into a corpus bound for a model and looks
+  exactly like a successful read.
+- Four `import-linter` contracts are live; two remain parked. `domain-no-io`
+  went live with the first domain module, which is what
+  `tests/test_layering_config.py` is for — it turned the build red on the
+  commit that made it resolvable.
+- 100% line coverage, and it is expected to stay there while the domain is the
+  whole of the code. It will not survive contact with the CLI, and chasing it
+  there would be a worse use of the time than the tests that matter.
+- Planned, in order: v0.1 the spine (`plan`, `sync`, `trace` over
   a vault), v0.2 the contracts and `verify`, v0.3 Notion / Slack / HTML / PDF,
   v0.4 the corpus and the measured floors, v0.5 the folder `kiseki-notes` can
   read, v0.6 redundancy and the surfaces.
