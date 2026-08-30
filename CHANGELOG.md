@@ -31,6 +31,17 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and `decode()`, which reads UTF-8 and UTF-16-with-a-BOM and refuses everything
   else rather than detecting — a guessed encoding writes mojibake into a corpus
   bound for a model and looks exactly like a successful read.
+- `domain/trace.py`: `TraceMap`, the tiling ADR-0004 describes. Segments are
+  `verbatim`, `transformed`, `synthetic` or `removal`, the kind is derived from
+  the rewrite rather than declared by the converter, and the tiling of the
+  artefact is checked on construction. `followed_by` composes two stages into
+  one map from the artefact back to the source; it never claims the stronger of
+  two kinds, and it splits a run where the earlier stage changed kind rather
+  than degrading the whole of it. `traceable_coverage` publishes its numerator
+  and denominator beside it.
+- `span.resolve`, shared by `Rewritten` and `TraceMap`, and `Span.__bool__`,
+  which is `True` always: `__len__` had made an empty span falsy, and
+  `resolve(...) or Span(0, 0)` silently replaced a correct `[3:3]` with `[0:0]`.
 - The `domain-no-io` layering contract, switched on by the arrival of the first
   domain module, as `tests/test_layering_config.py` requires.
 - `musubi.errors`, and nothing else. No architecture document — there is no

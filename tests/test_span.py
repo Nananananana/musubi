@@ -112,3 +112,12 @@ def test_shifting_preserves_length(span: Span, delta: int) -> None:
 @given(spans, spans)
 def test_overlap_is_symmetric(left: Span, right: Span) -> None:
     assert left.overlaps(right) == right.overlaps(left)
+
+
+def test_a_span_is_always_truthy() -> None:
+    """``__len__`` would otherwise make an empty span falsy, and empty spans are
+    everywhere here: an insertion's source, a removal's output, a point query.
+    ``resolve(...) or Span(0, 0)`` silently replaced a correct [3:3] with [0:0]
+    before this existed."""
+    assert bool(Span(3, 3))
+    assert Span(3, 3) or False
