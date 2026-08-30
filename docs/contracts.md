@@ -247,6 +247,19 @@ wrong.
 the sense of [ADR-0002](adr/0002-the-sync-manifest-is-a-document.md) — read them
 as contracts — and they are not documents to *index*.
 
+**The layout is part of `musubi.sync-manifest/1`, not a separate thing to
+check.** A consumer that reads `<destination>/documents` and
+`<destination>/traces/<unit_key>.json` is depending on those names, so moving
+one is a change to what the contract promises and takes a new identifier the
+same way a field does. There is no second selector: **step 1 is the whole of
+it**, and everything a consumer depends on sits behind that one value.
+
+The manifest's `emitter` — `documents@1` — is **provenance and not a selector**.
+It records which emitter wrote this corpus, for somebody reading the account
+afterwards. Branching on it would put the draft state and the version in a
+field nobody was told to check, which is how a consumer ends up confident it
+selected something it did not.
+
 ## Writing a consumer
 
 1. Check `contract`. Refuse a value you do not recognise.
