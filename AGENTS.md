@@ -103,6 +103,22 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   `git add` and run it again — a commit whose hooks failed did not happen.
 - Checkpoints: after `git commit`, confirm the `[branch hash]` line; after
   pulling main, run pytest once more.
+- **Do not stack pull requests. `gh pr create --base main`, always.** A PR whose
+  base is another PR's branch merges *into that branch*, and if the base has
+  already merged to `main` the content goes nowhere — `MERGED`, no error, no
+  warning, `main` untouched. GitHub retargets a stacked PR only when its base
+  branch is **deleted**, which a squash-merge does not always do. This happened
+  to #41 and then, after being warned about and planned around, to **#59 on the
+  same day**.
+- **The ADR-numbering guard is not asking you to stack.** When a second ADR
+  cannot be numbered because the first is unmerged, that is
+  `test_adr_numbers_are_unique_and_contiguous` saying **one ADR at a time**, not
+  *make a stack*. #59 was stacked as a workaround for a guard that was giving
+  correct advice. Land the first, then write the second.
+- If a stack is genuinely unavoidable, **retarget the moment the base lands** —
+  `gh pr edit <n> --base main` — and recover a stranded PR from
+  `refs/pull/<n>/head`, never from the squash commit, whose label describes a
+  different change than its contents.
 - **After a merge, read the outcome and not the report.** `Squashed and merged`
   says the merge command succeeded, which is a different claim from *the change
   is on `main`* — #41 merged cleanly into a branch that had already been merged,
