@@ -147,14 +147,13 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
 ## Current state
 
 - Version `0.1.0.dev0`. **v0.1 is in progress**, one issue at a time against the
-  milestone. The design and seventeen ADRs are in `docs/`; nothing is released
+  milestone. The design and eighteen ADRs are in `docs/`; nothing is released
   and there is no public API to speak of yet.
 - **License: Apache-2.0. Python: 3.12+. Runtime dependencies: 0**, checked in CI
   by installing the wheel with no extras and asserting nothing came along.
 - **Built:** `domain/` — `span`, `text`, `trace`, `hashing`, `record`, `removal`,
-  `cleansing`, `screening`; `ports/screener.py` and `ports/source.py`;
-  `infrastructure/rules/`, `infrastructure/screeners/` and
-  `infrastructure/sources/`. A `Span`
+  `cleansing`, `screening`; `ports/` (`screener`, `source`, `converter`);
+  `infrastructure/` (`rules`, `screeners`, `sources`, `converters`). A `Span`
   is a half-open range of integer positions and deliberately does not decide
   what a position indexes — the holder says, and the trace map records it. `text.rewrite()` is
   the primitive everything else is made of: deleting is replacing with the
@@ -197,6 +196,21 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   (ADR-0007). A file symlink is followed only if it resolves inside the root; a
   directory symlink is never followed, because a cycle in an unattended walk is
   a hang.
+- `ports/converter.py` + `infrastructure/converters/`: bytes in, text **and a
+  map** out, or an `Unconvertible` value saying why not. There is no third
+  option, because a converter that produced text without a map would put back
+  the hole this project exists to close. `Unconvertible` is a value rather than
+  an exception: it is not an error, and a reason that travels as a value cannot
+  be swallowed by a bare `except`.
+- **A trace map's source side is in characters, never bytes** (ADR-0018). This
+  was implemented in bytes first and a test caught why it cannot be:
+  `source_span_of` shifts an offset by a constant inside a verbatim run, and
+  that constant counts characters. The decoding travels beside the map instead,
+  and the command that opens the file converts. Compose in characters; there is
+  no re-measure step to get the order of wrong.
+- Markdown and plaintext are the **same** conversion, and saying so beats
+  inventing a difference. Wikilinks, `%%comments%%` and reference links are all
+  rewrites of somebody's writing and each needs its own argument.
 - **Coverage is 100% except the three symlink branches**, which need a
   privilege Windows does not grant by default. Those tests skip by *capability*
   rather than by platform — they run on Linux and macOS CI, and on a Windows
