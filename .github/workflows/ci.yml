@@ -1,3 +1,14 @@
+# Every step in this file has been watched failing, on purpose, for its own
+# reason -- see AGENTS.md, "Every gate here has been seen red", which records
+# the date and the breakage used for each. A step that has only ever been green
+# has never been shown to be a gate: iriguchi ran `python -m importlinter.cli
+# lint-imports` for the life of that project and it printed nothing and exited
+# 0 every time, checking none of its six contracts, all of which were fine.
+#
+# An exit code is evidence only once something has been shown that makes it
+# non-zero. If you add a step here, break the thing it guards and watch it go
+# red before you trust it.
+
 name: CI
 
 on:
