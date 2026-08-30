@@ -104,6 +104,14 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
 - Checkpoints: after `git commit`, confirm the `[branch hash]` line; after
   `gh pr merge`, confirm `Squashed and merged`; after pulling main, run pytest
   once more.
+- **A backslash escape does not survive a bash heredoc here.** Writing a Python
+  file with `python - <<'PY'` turns `\\n` inside the script into a real
+  newline, so the generated source has an unterminated string literal. It is
+  caught immediately by ruff, and it cost three cycles in one session anyway,
+  because the fix is mechanical and remembering is not: **build the escape from
+  a placeholder** — write `@NL@` in the text and finish with
+  `.replace("@NL@", chr(92) + "n")` — or use the Write tool, which passes
+  the bytes through untouched. The same applies to backticks.
 - Windows: set `PYTHONUTF8=1`. This project reads files written on other people's
   machines, and half its bugs are encodings.
 - Writing a repository file from a Python script on Windows: pass
