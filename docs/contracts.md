@@ -149,6 +149,29 @@ offset within it — will be a different one, and an old validator **refusing** 
 is the intended behaviour: seeing that it is not a character map is better than
 reading one field as another.
 
+## Which folder to read
+
+`<destination>/documents` — and only that one.
+
+Separating the trees makes the correct invocation *available*; it does not make
+an incorrect one safe, and an incorrect one is silent. Measured against a real
+`tsumugi`:
+
+```text
+tsumugi ingest corpus/documents   ->  2 new
+tsumugi ingest corpus             ->  5 new
+```
+
+The five are the documents, `manifest.json` and the trace maps, indexed by
+section heading — so a search for a word that appears in a trace map returns the
+*map* of a document rather than the document, and the corpus is holding a
+per-character index of itself. `0 skipped, 0 failed`; nothing says anything went
+wrong.
+
+`traces/` and `manifest.json` are musubi's own records. They are documents in
+the sense of [ADR-0002](adr/0002-the-sync-manifest-is-a-document.md) — read them
+as contracts — and they are not documents to *index*.
+
 ## Writing a consumer
 
 1. Check `contract`. Refuse a value you do not recognise.

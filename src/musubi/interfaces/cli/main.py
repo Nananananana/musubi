@@ -29,7 +29,7 @@ from ...domain.span import Span
 from ...errors import MusubiError, TraceError
 from ...infrastructure.converters import converter_for
 from ...infrastructure.corpus import Corpus
-from ...infrastructure.emitters import DocumentEmitter
+from ...infrastructure.emitters import DOCUMENTS, MANIFEST, TRACES, DocumentEmitter
 from ...infrastructure.rules import CORE
 from ...infrastructure.screeners import EntropyScreener, default_screener
 from ...infrastructure.sources import FilesystemSource, ObsidianSource
@@ -349,6 +349,12 @@ def _report_sync(result: Synced, destination: Path) -> None:
             print(f"  {path}")
 
     _coverage(manifest, "written")
+    # The run that created the ambiguity is the one that can resolve it.
+    # Separating the trees makes the correct invocation available; it does not
+    # make `ingest <destination>` safe, and that one is silent when it is wrong.
+    print(f"\nIngest {destination / DOCUMENTS}")
+    print(f"  {destination / TRACES} and {destination / MANIFEST}")
+    print("  are musubi's own records, and are not documents to index.")
     _limits(manifest)
 
 
