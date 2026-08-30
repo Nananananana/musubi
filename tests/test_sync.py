@@ -314,3 +314,18 @@ def test_a_withdrawal_of_something_already_gone_is_not_an_error(tmp_path: Path) 
     (into / DOCUMENTS).mkdir(parents=True)
     emitter = DocumentEmitter(into)
     assert emitter.withdraw(["documents/never-existed.md", "../escaped.md"]) == ()
+
+
+def test_the_report_says_which_folder_to_ingest(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Separating the trees makes the correct invocation available; it does not
+    make `ingest <destination>` safe, and that one is silent when it is wrong.
+    The run that created the ambiguity is the one that can resolve it."""
+    root = vault(tmp_path / "vault", {"a.md": "x\n"})
+    into = tmp_path / "synced"
+    main(["sync", str(root), "--into", str(into)])
+
+    out = capsys.readouterr().out
+    assert f"Ingest {into / DOCUMENTS}" in out
+    assert "not documents to index" in out

@@ -149,6 +149,18 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   document encoded in whatever the console happened to be — **not valid UTF-8,
   exit 0, no error**. JSON is UTF-8 by definition, and a consumer piping it got
   a file full of plausible nonsense.
+- The emitter docstring claimed that separating `documents/` from `traces/`
+  *removes* the problem of a consumer ingesting the maps. Measured, it does not:
+  `tsumugi ingest <destination>` reads five things where
+  `<destination>/documents` reads two, and says `0 skipped, 0 failed`. The
+  premise was right and the conclusion was too strong — the separation makes the
+  correct invocation available, and cannot make an incorrect one safe. `musubi
+  sync` now prints which folder to ingest, and `docs/contracts.md` says it where
+  a consumer reads. Reported by the `seam` session.
+- A CI comment justified the zero-dependency job by "the README promises `pip
+  install musubi`". The README promises no such thing, and could not: that name
+  belongs to an unrelated package on PyPI. Found by the cross-project manager
+  session.
 - Both are ADR-0020: a document is UTF-8 whatever the console is, a human report
   may lose a glyph but never a run, and the exit code reports the run rather
   than the rendering. Reported by the `seam` session from the first real

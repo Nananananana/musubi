@@ -211,6 +211,18 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   that constant counts characters. The decoding travels beside the map instead,
   and the command that opens the file converts. Compose in characters; there is
   no re-measure step to get the order of wrong.
+- **Separating the trees makes the correct invocation available; it does not
+  make an incorrect one safe.** `tsumugi ingest <destination>` reads the trace
+  maps and the manifest as documents, reports `0 skipped, 0 failed`, and leaves
+  the corpus holding a per-character index of itself. musubi cannot stop that
+  and does not claim to — it says which folder to read, at the end of the sync
+  and in `docs/contracts.md`. Not by asking a sibling to change its skip list,
+  and not by writing an ignore file into somebody's output folder.
+- **A claim in a comment is a claim.** The CI job's comment said "the README
+  promises `pip install musubi`". The README promised no such thing, and could
+  not: on PyPI that name belongs to an unrelated DNSBL checker. A comment that
+  justifies a check by citing a promise nobody made is the same defect class as
+  a README describing a command that does not exist.
 - **The destination is three folders**: `documents/` (what a consumer ingests),
   `traces/`, `manifest.json`. Not sidecars beside the documents —
   `tsumugi`'s corpus walk does not skip `.musubi` and its parser registry claims

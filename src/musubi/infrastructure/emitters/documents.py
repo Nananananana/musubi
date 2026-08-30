@@ -14,9 +14,34 @@ The obvious arrangement is a sidecar beside each document -- `gear.md` and
 consumer. `tsumugi`'s corpus walk skips a fixed list of directories that does not
 include `.musubi`, and its parser registry claims `.json`; sidecars beside the
 documents would be **ingested as documents**, and a corpus would end up holding a
-per-character index of itself. Separating the trees removes the problem instead
-of relying on somebody else's ignore list, and `musubi trace` finds a map by
-construction rather than by convention.
+per-character index of itself.
+
+**What separating the trees buys, precisely.** It makes a correct invocation
+*available*: `tsumugi ingest <destination>/documents` reads the documents and
+nothing else, which a sidecar arrangement makes impossible however carefully it
+is called. It does **not** make an incorrect one safe. Measured, on a real run:
+
+```text
+tsumugi ingest corpus/documents   ->  2 new
+tsumugi ingest corpus             ->  5 new
+```
+
+The five are the documents, the manifest and the trace maps, indexed by section
+heading, so `tsumugi search "removal"` returns the map of a document rather than
+the document. `0 skipped, 0 failed`; nothing anywhere says something went wrong.
+Naming `<destination>` is a completely natural way to call it.
+
+So musubi cannot stop a consumer from ingesting the wrong subtree, and does not
+claim to. What it does instead is say which one is right, at the end of the run
+that created the ambiguity, and again in `docs/contracts.md` where a consumer
+reads. Adding `traces` to somebody else's skip list would buy a fix by
+abandoning the argument for the layout, and writing a `.tsumugiignore` into the
+destination would put a file in the owner's output folder that they did not ask
+for, help exactly one consumer, and make the contents depend on which sibling
+happens to exist.
+
+`musubi trace` finds a map by construction rather than by convention, which the
+separation does deliver unconditionally.
 
 ## Staging
 

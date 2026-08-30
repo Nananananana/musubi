@@ -108,11 +108,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      # The README promises `pip install musubi` installs one thing. A promise
-      # in a README decays; this one is checked on every push. musubi is
-      # pointed at the folder holding everything its owner has ever written,
-      # and the number of third parties with read access to it has to be
-      # measured rather than asserted.
+      # ADR-0001: musubi is pointed at the folder holding everything its owner
+      # has ever written, so the number of third parties with read access to it
+      # is a number, and a number in this project is measured rather than
+      # asserted. This installs the wheel into a clean environment and counts.
+      #
+      # It deliberately does not say "the README promises `pip install musubi`".
+      # The README makes no such promise, and cannot: on PyPI the name `musubi`
+      # belongs to an unrelated DNSBL checker. What is checked here is the
+      # dependency count, which is true whatever the distribution ends up
+      # called.
       - name: Install with no extras
         run: python -m pip install --upgrade pip && python -m pip install .
 
