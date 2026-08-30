@@ -8,7 +8,7 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- The design, before the code: `docs/proposals/0001-the-design.md`, nineteen
+- The design, before the code: `docs/proposals/0001-the-design.md`, twenty
   architecture decision records, `docs/concept.md`, and the documentation rules
   that keep current state, history and plans apart.
 - The tooling that will enforce the design: the layering asserted by AST over
@@ -139,7 +139,24 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   taken out of the range, and reports when the source has changed since the
   sync. A decomposed filename is found by searching, which is ADR-0014's stated
   cost being paid.
-- ADR-0014 through ADR-0019.
+### Fixed
+
+- `musubi sync` returned 1 with the corpus **fully written** on a console whose
+  codec could not encode an em dash — the default on Japanese Windows. The exit
+  code said nothing had been written and the destination was full, which is the
+  shape of a violation of ADR-0008's central promise while being its opposite.
+- Worse, and found while fixing it: `--json` did not crash, it emitted a
+  document encoded in whatever the console happened to be — **not valid UTF-8,
+  exit 0, no error**. JSON is UTF-8 by definition, and a consumer piping it got
+  a file full of plausible nonsense.
+- Both are ADR-0020: a document is UTF-8 whatever the console is, a human report
+  may lose a glyph but never a run, and the exit code reports the run rather
+  than the rendering. Reported by the `seam` session from the first real
+  musubi → tsumugi run.
+
+### Added
+
+- ADR-0014 through ADR-0020.
 - `span.resolve`, shared by `Rewritten` and `TraceMap`, and `Span.__bool__`,
   which is `True` always: `__len__` had made an empty span falsy, and
   `resolve(...) or Span(0, 0)` silently replaced a correct `[3:3]` with `[0:0]`.

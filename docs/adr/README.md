@@ -34,6 +34,7 @@ later ADR supersedes it and says so.
 | [0017](0017-entropy-is-a-tier-not-a-default.md) | Entropy is a tier, not a default |
 | [0018](0018-the-map-is-in-characters-and-the-file-says-what-a-byte-is.md) | The map is in characters, and the file says what a byte is |
 | [0019](0019-a-record-inherits-what-it-describes.md) | A record inherits the classification of what it describes |
+| [0020](0020-the-console-is-not-the-contract.md) | The console is not the contract, and the exit code reports the run |
 
 [0004](0004-a-conversion-carries-a-map-back-to-its-source.md) is the one to read
 first. The rest of the design is arranged around it, and

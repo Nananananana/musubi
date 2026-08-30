@@ -147,7 +147,7 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
 ## Current state
 
 - Version `0.1.0.dev0`. **v0.1 is in progress**, one issue at a time against the
-  milestone. The design and nineteen ADRs are in `docs/`; nothing is released
+  milestone. The design and twenty ADRs are in `docs/`; nothing is released
   and there is no public API to speak of yet.
 - **License: Apache-2.0. Python: 3.12+. Runtime dependencies: 0**, checked in CI
   by installing the wheel with no extras and asserting nothing came along.
@@ -246,6 +246,16 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   sixteen commits later, which is why #24 had to be filed. Half a contract is
   either "consumable-looking but not consumable" or "a published reading that
   disagrees with the implementation".
+- **The console's encoding never reaches a document, and never fails a run**
+  (ADR-0020). `--json` writes UTF-8 bytes to `sys.stdout.buffer`; the report
+  streams are reconfigured with `errors="replace"` so a character a terminal
+  cannot show costs a glyph rather than the report. The exit code reports the
+  run, not the rendering.
+- **Do not patch `sys.stdout` in a fixture.** pytest suspends its capture for
+  fixture setup and resumes it for the call phase, reinstating its own object —
+  so the patch is silently undone, the test passes under `-s` and fails without
+  it, and what is being measured is pytest. `tests/test_console_encoding.py`
+  patches inside the test body.
 - **The previous manifest is the ledger.** A sync withdraws an artefact whose
   unit is no longer in the source, by reading `<destination>/manifest.json` —
   there is no separate store, because a corpus that already says what is in it
