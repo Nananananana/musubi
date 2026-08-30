@@ -34,6 +34,11 @@ class Found:
     #: filesystem source, an entry name for an archive. Never parsed by anything
     #: except the source that produced it.
     origin: str
+    #: When the source last recorded this as changing, as a POSIX timestamp, or
+    #: ``None`` from a source that does not know. Carried so that the document
+    #: musubi writes can keep it (ADR-0022) -- never put into the artefact's
+    #: content, which would make a re-sync rewrite a corpus nothing changed in.
+    modified_at: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
