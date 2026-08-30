@@ -72,6 +72,13 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   inside a week. The entropy tier carries those numbers in the code, to be
   printed where it is switched on. Twenty-one signatures, each with its evidence
   and review date.
+- `ports/source.py` and `infrastructure/sources/`: `FilesystemSource` and
+  `ObsidianSource`. Two stages — `discover()` opens nothing and reports what it
+  will skip and why; `read(found)` opens one thing. The walk is sorted at every
+  level (ADR-0003) and the key is the path relative to the root, declared as the
+  weak `path` derivation (ADR-0006). Pointing at a home directory or a
+  filesystem root is refused (ADR-0007), a file symlink is followed only if it
+  resolves inside the root, and a directory symlink is never followed.
 - ADR-0014, ADR-0015, ADR-0016 and ADR-0017.
 - `span.resolve`, shared by `Rewritten` and `TraceMap`, and `Span.__bool__`,
   which is `True` always: `__len__` had made an empty span falsy, and
