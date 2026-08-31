@@ -14,9 +14,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from ...ports.converter import Converter
+from .html import HtmlConverter
 from .text import MarkdownConverter, PlainTextConverter, TextConverter
 
 __all__ = [
+    "HtmlConverter",
     "MarkdownConverter",
     "PlainTextConverter",
     "TextConverter",
@@ -70,5 +72,5 @@ def registered_media_types() -> Mapping[str, str]:
     return {media: converter.name for media, converter in sorted(_by_media_type.items())}
 
 
-for _builtin in (MarkdownConverter(), PlainTextConverter()):
+for _builtin in (MarkdownConverter(), PlainTextConverter(), HtmlConverter()):
     register_converter(_builtin)

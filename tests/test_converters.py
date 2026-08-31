@@ -195,10 +195,12 @@ def test_a_media_type_nobody_claims_resolves_to_nothing() -> None:
 
 def test_the_registry_lists_what_it_holds() -> None:
     assert registered_media_types() == {
+        "application/xhtml+xml": "html@1",
+        "text/html": "html@1",
         "text/markdown": "markdown@1",
         "text/plain": "plaintext@1",
     }
-    assert [c.name for c in known_converters()] == ["markdown@1", "plaintext@1"]
+    assert [c.name for c in known_converters()] == ["html@1", "markdown@1", "plaintext@1"]
 
 
 class Rival:
