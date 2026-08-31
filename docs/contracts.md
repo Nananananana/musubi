@@ -247,6 +247,28 @@ wrong.
 the sense of [ADR-0002](adr/0002-the-sync-manifest-is-a-document.md) — read them
 as contracts — and they are not documents to *index*.
 
+**And the root a consumer chooses is part of every reference it derives.** The
+paragraph above is about *what gets indexed*; this is a second consequence of
+the same mistake, and it is quieter. A consumer that identifies a document by
+its path relative to where it was pointed gets a different answer from each
+root — measured:
+
+```text
+rooted at <destination>/documents   design/gear.md             -> 32a68bbd4e346596
+rooted at <destination>             documents/design/gear.md   -> 4b743d9119e01e18
+```
+
+**Same file, no rename, different reference.** Move the root once and every
+document in the corpus is a document the consumer has never seen. Nothing fails:
+musubi wrote the corpus correctly, the consumer read it correctly, and the two
+were pointed at different things. **Neither side can see it** — musubi does not
+run the consumer, and the consumer has no way to know it was aimed one level too
+high.
+
+So the root belongs with the derivation. A consumer that keeps references across
+runs must keep **where it was pointed** as fixed as musubi keeps `unit_key`, and
+`<destination>/documents` is the answer it should be pointed at.
+
 **An artefact's path is exactly `documents/` followed by its `unit_key`**, and a
 consumer that derives anything from that path inherits the manifest's
 `key_derivation` whether it reads the field or not.

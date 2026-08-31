@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import re
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -304,6 +305,34 @@ def test_an_artefact_path_is_documents_plus_its_unit_key(tmp_path: Path) -> None
         assert (manifest.parent / expected).is_file(), (
             f"the manifest says {expected!r} and nothing is there"
         )
+
+
+def test_the_root_a_consumer_chooses_changes_every_reference(tmp_path: Path) -> None:
+    """The quiet half of pointing at the wrong folder.
+
+    `docs/contracts.md` already says to read `<destination>/documents` and
+    measures what happens when a consumer indexes the whole destination
+    instead. This is the other consequence: a consumer identifying a document
+    by its path relative to where it was pointed gets a different answer from
+    each root, so moving the root once re-identifies the entire corpus.
+
+    Nothing fails. musubi wrote it correctly, the consumer read it correctly,
+    and the two were aimed at different things -- which neither side can see,
+    because musubi does not run the consumer and the consumer cannot know it
+    was aimed one level too high. Asserted here so the numbers in the document
+    are numbers this repository produces.
+    """
+    into = _real_manifest(tmp_path).parent
+    document = next((into / DOCUMENTS).rglob("*.md"))
+
+    rooted_at_documents = document.relative_to(into / DOCUMENTS).as_posix()
+    rooted_at_destination = document.relative_to(into).as_posix()
+
+    assert rooted_at_documents != rooted_at_destination
+    assert rooted_at_destination == f"{DOCUMENTS}/{rooted_at_documents}"
+    assert sha256(rooted_at_documents.encode()).digest() != (
+        sha256(rooted_at_destination.encode()).digest()
+    ), "the two roots gave one reference, and this test is measuring nothing"
 
 
 def _refusals(prefix: str) -> list[Path]:
