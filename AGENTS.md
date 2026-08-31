@@ -103,6 +103,14 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   `git add` and run it again — a commit whose hooks failed did not happen.
 - Checkpoints: after `git commit`, confirm the `[branch hash]` line; after
   pulling main, run pytest once more.
+- **Tell the `release` session when a pull request opens**: repo, number,
+  title, whether `base=main`, and the CI state. No reply expected; it does not
+  gate anything and does not merge. The reason is not process for its own sake —
+  #64 went from open to merged in a minute, so nobody read it before the owner
+  decided, and what went unsaid was that its headline number is a **fall**
+  (traceable coverage 26/76) that is the milestone working as designed rather
+  than a regression. A number that looks like a step backwards needs somebody to
+  say it is not, and that somebody has to have read it first.
 - **Do not stack pull requests. `gh pr create --base main`, always.** A PR whose
   base is another PR's branch merges *into that branch*, and if the base has
   already merged to `main` the content goes nowhere — `MERGED`, no error, no
