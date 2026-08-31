@@ -42,6 +42,9 @@ dev = [
     # dataclasses are kept in step by a test rather than derived from one
     # another.
     "jsonschema>=4",
+    # Stubs, so that the tests validating against the contracts are type-checked
+    # rather than skipped over as untyped imports.
+    "types-jsonschema",
 ]
 
 # There is deliberately no `siblings` extra yet. The only sibling musubi ever
@@ -122,7 +125,13 @@ ignore = [
 
 [tool.mypy]
 python_version = "3.12"
-files = ["src/musubi"]
+# Every Python file in the repository, not only the library. A checker whose
+# scope is narrower than what it protects passes for the wrong reason: the
+# tests are where the properties v0.2 rests on are generated, and they went
+# unchecked long enough to accumulate an annotation the library had outgrown
+# (`validator(schema: Path)` had been taking a `Traversable` since #58 and
+# survived only because both have `read_text`).
+files = ["src/musubi", "tests"]
 strict = true
 warn_unreachable = true
 

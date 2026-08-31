@@ -16,7 +16,14 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from musubi.domain.hashing import ALGORITHM, canonical, content_hash, hash_of, is_hash
+from musubi.domain.hashing import (
+    ALGORITHM,
+    Canonical,
+    canonical,
+    content_hash,
+    hash_of,
+    is_hash,
+)
 
 # -- content hashes ---------------------------------------------------------
 
@@ -97,17 +104,17 @@ def test_a_float_is_refused() -> None:
     musubi's inputs never need. Refusing is a smaller promise than implementing
     it badly (ADR-0015)."""
     with pytest.raises(TypeError, match="floating point"):
-        canonical({"coverage": 0.99})
+        canonical({"coverage": 0.99})  # type: ignore[dict-item]  # the float is the subject
 
 
 def test_something_that_is_not_a_document_is_refused() -> None:
     with pytest.raises(TypeError, match="cannot be canonicalized"):
-        canonical({"when": object()})
+        canonical({"when": object()})  # type: ignore[dict-item]  # the object is the subject
 
 
 def test_a_non_string_key_is_refused() -> None:
     with pytest.raises(TypeError, match="keys are strings"):
-        canonical({1: "one"})
+        canonical({1: "one"})  # type: ignore[dict-item]  # the non-string key is the subject
 
 
 # -- hashing a structure ----------------------------------------------------
@@ -132,5 +139,5 @@ def test_a_nested_structure_is_canonical_all_the_way_down() -> None:
         max_size=6,
     )
 )
-def test_canonicalizing_is_stable(value: dict[str, object]) -> None:
+def test_canonicalizing_is_stable(value: dict[str, Canonical]) -> None:
     assert canonical(value) == canonical(dict(reversed(list(value.items()))))

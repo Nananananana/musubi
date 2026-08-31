@@ -248,8 +248,9 @@ def test_every_core_rule_states_its_evidence_and_when_it_was_reviewed() -> None:
 
 def test_referral_marketing_is_its_own_kind_so_it_can_be_spared_later() -> None:
     assert "referral_marketing" in CORE.kinds()
-    assert CORE.matching("ref") is not None
-    assert CORE.matching("ref").kind == "referral_marketing"
+    rule = CORE.matching("ref")
+    assert rule is not None
+    assert rule.kind == "referral_marketing"
 
 
 # -- rules --------------------------------------------------------------

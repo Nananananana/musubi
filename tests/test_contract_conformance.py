@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import re
 from hashlib import sha256
+from importlib.resources.abc import Traversable
 from pathlib import Path
 from typing import Any
 
@@ -65,7 +66,7 @@ NOTE = (
 )
 
 
-def validator(schema: Path) -> Draft202012Validator:
+def validator(schema: Traversable) -> Draft202012Validator:
     body = json.loads(schema.read_text(encoding="utf-8"))
     Draft202012Validator.check_schema(body)
     return Draft202012Validator(body)

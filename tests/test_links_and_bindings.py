@@ -19,14 +19,16 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from musubi.schemas import CONTRACTS, load, schemas
 
 
-def _validator(schema: dict):  # type: ignore[no-untyped-def]
+def _validator(schema: dict[str, Any]) -> Callable[[object], None]:
     """jsonschema is a dev dependency (ADR-0001); a consumer brings its own."""
     from jsonschema import Draft202012Validator
 
