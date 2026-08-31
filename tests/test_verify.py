@@ -16,6 +16,7 @@ import io
 import json
 from contextlib import redirect_stdout
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -44,11 +45,12 @@ def built(tmp_path: Path, files: dict[str, str] | None = None) -> Path:
     return into
 
 
-def manifest_of(into: Path) -> dict:
-    return json.loads((into / "manifest.json").read_text(encoding="utf-8"))
+def manifest_of(into: Path) -> dict[str, Any]:
+    body: dict[str, Any] = json.loads((into / "manifest.json").read_text(encoding="utf-8"))
+    return body
 
 
-def rewrite(into: Path, body: dict) -> None:
+def rewrite(into: Path, body: dict[str, Any]) -> None:
     (into / "manifest.json").write_text(
         json.dumps(body, indent=2) + "\n", encoding="utf-8", newline="\n"
     )

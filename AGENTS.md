@@ -97,7 +97,7 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   `MUSUBI_*`. **A CLI test that writes into a developer's real folder is worse
   here than anywhere else in this family** — musubi's job is to write folders,
   and its test subject is somebody's notes.
-- Checks before every green commit: `uv run pytest -q`, `uv run mypy src`,
+- Checks before every green commit: `uv run pytest -q`, `uv run mypy`,
   `uv run lint-imports`, `uv run ruff check --fix .`, `uv run ruff format .`,
   `uv run pre-commit run --all-files`. If pre-commit rewrites anything,
   `git add` and run it again — a commit whose hooks failed did not happen.
@@ -111,6 +111,16 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   (traceable coverage 26/76) that is the milestone working as designed rather
   than a regression. A number that looks like a step backwards needs somebody to
   say it is not, and that somebody has to have read it first.
+- **`uv run mypy` with no argument, never `mypy src`.** The scope lives in
+  `pyproject.toml` and covers `src/` *and* `tests/`; naming a path on the command
+  line narrows it back and the run still says `Success`. From `mamori` via
+  `iriguchi`: **a checker whose scope is narrower than what it protects fails
+  silently by construction.** Measured here — 43 of 66 files were being checked,
+  and the 23 unchecked ones held an annotation the library had outgrown
+  (`validator(schema: Path)` had been taking a `Traversable` since #58, surviving
+  only because both happen to have `read_text`). The tests are where the
+  properties v0.2 rests on are generated, so leaving them out was leaving out the
+  evidence.
 - **Do not stack pull requests. `gh pr create --base main`, always.** A PR whose
   base is another PR's branch merges *into that branch*, and if the base has
   already merged to `main` the content goes nowhere — `MERGED`, no error, no
