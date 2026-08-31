@@ -248,6 +248,24 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   returning there: **two copies of a contract are two contracts the moment
   somebody edits one**, and a byte-identity test can keep them equal without
   answering which one a reader is holding.
+- **The HTML converter is where coverage becomes a measurement.** Boilerplate
+  is a `removal` segment with a rule (`boilerplate.nav`), never a gap; entities
+  are `transformed` because `&amp;` is five characters in and one out; `# ` and
+  paragraph breaks are `synthetic` with an empty source span. **Every character
+  of the source is in exactly one segment.** `convert_charrefs` is **off** and
+  that is not a preference — with it on, `html.parser` folds entities into the
+  surrounding text and the offsets stop lining up, producing plausible text over
+  a wrong map.
+- **Do not resolve an entity with `html.unescape`.** It implements HTML5's
+  longest-prefix rule, so `&notarealentity;` comes back as `¬arealentity;` — it
+  matches the real `&not` and leaves the rest. Applied to a reference the parser
+  has already isolated, that invents a character the page does not contain.
+  `html.entities.html5` is looked up directly instead, and an unrecognised name
+  stays as written.
+- **Whitespace in HTML is two things.** Between blocks it is markup indentation
+  and belongs nowhere; **inside a line it is a word boundary**, and dropping it
+  turned `See <a>this</a> &amp; that` into `See this& that`. Both cases have a
+  test, because the first fix for one broke the other.
 - **`verify` checks a folder, not a run**, which is the only thing it is for.
   Every other check in this project runs while the corpus is being written, so
   the files have had no opportunity to change; `verify` reads a corpus that may

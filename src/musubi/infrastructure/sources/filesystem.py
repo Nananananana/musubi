@@ -46,6 +46,9 @@ MEDIA_TYPES: dict[str, str] = {
     ".mkd": "text/markdown",
     ".txt": "text/plain",
     ".text": "text/plain",
+    ".html": "text/html",
+    ".htm": "text/html",
+    ".xhtml": "application/xhtml+xml",
 }
 
 #: Directories that are machinery rather than writing. Skipped whole.
