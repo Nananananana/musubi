@@ -266,6 +266,26 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   returning there: **two copies of a contract are two contracts the moment
   somebody edits one**, and a byte-identity test can keep them equal without
   answering which one a reader is holding.
+- **`NotionSource` keys by the page id, and says so as `notion-page-id`.** Not
+  `path`, which would be a lie, and not the title, which changes. The key becomes
+  the output filename (ADR-0013), so a corpus of Notion pages has hexadecimal
+  names — and **loses nothing**, because Notion writes the title into the
+  document's first line as an `# ` heading (measured on a real export: the
+  filename's title and the H1 are the same string).
+- **A file with no page id is skipped, never keyed by path instead.** Mixing two
+  derivations under one `key_derivation` makes the manifest's statement true for
+  some units in a run and false for others, with nothing saying which.
+- **Whether a Notion page id survives a re-export is still unmeasured**, and the
+  source does not pretend otherwise. ADR-0006 contradicts itself — its Context
+  says the filename UUID is regenerated, its Decision keys by it — and a real
+  export shows **three UUIDs on three layers**, so the two statements may be
+  about different numbers. One counterexample from a second export decides it. If
+  it says no, the derivation falls back to `path` and the manifest says `path`.
+- **A Notion export carries no per-page date.** Every entry shares the export's
+  timestamp, to the second. So the source reports `modified_at=None` rather than
+  handing on a date that is uniform and looks like history — ADR-0022's failure
+  arriving from the other direction. `kiseki-notes` warning that a Notion corpus
+  shares one date is **correct**, and `docs/sources.md` says so.
 - **A PDF's map counts pages, not characters** (ADR-0025). Its words are inside
   Flate-compressed streams, so no byte range in the file holds them and a
   character offset would index text that does not exist. `src` is a page range,

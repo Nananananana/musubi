@@ -14,11 +14,13 @@ from .filesystem import (
     FilesystemSource,
     ObsidianSource,
 )
+from .notion import NotionSource
 
 __all__ = [
     "MACHINERY",
     "MAXIMUM_BYTES",
     "MEDIA_TYPES",
     "FilesystemSource",
+    "NotionSource",
     "ObsidianSource",
 ]

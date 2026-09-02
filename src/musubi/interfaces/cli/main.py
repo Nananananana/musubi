@@ -36,11 +36,11 @@ from ...infrastructure.corpus import Corpus
 from ...infrastructure.emitters import DOCUMENTS, MANIFEST, TRACES, DocumentEmitter
 from ...infrastructure.rules import CORE
 from ...infrastructure.screeners import EntropyScreener, default_screener
-from ...infrastructure.sources import FilesystemSource, ObsidianSource
+from ...infrastructure.sources import FilesystemSource, NotionSource, ObsidianSource
 
 __all__ = ["main"]
 
-_SOURCES = {"obsidian": ObsidianSource, "filesystem": FilesystemSource}
+_SOURCES = {"obsidian": ObsidianSource, "filesystem": FilesystemSource, "notion": NotionSource}
 
 
 def main(argv: Sequence[str] | None = None) -> int:
