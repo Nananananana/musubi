@@ -110,6 +110,49 @@ def test_a_trace_still_answers_on_a_console_that_cannot_show_it(
     assert b"verbatim" in console.written()
 
 
+def test_a_verify_still_reports_on_a_console_that_cannot_show_it(
+    tmp_path: Path, vault: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`verify` landed after ADR-0020 and was not covered by any of this.
+
+    It survives -- `_readable()` reconfigures the streams for every command, so
+    the em dash in its heading is substituted rather than fatal -- but nothing
+    here said so, and a guard that does not cover the newest command is the
+    shape this repository keeps finding. Measured before writing it: exit 0,
+    and the heading arrives as `musubi verify ? ...`.
+    """
+    console = narrow_console(monkeypatch)
+    into = tmp_path / "corpus"
+    main(["sync", str(vault), "--into", str(into)])
+
+    assert main(["verify", str(into)]) == 0
+    shown = console.written().decode("cp932")
+    assert "musubi verify" in shown
+    assert "—" not in shown, "the em dash could not be encoded and was substituted"
+
+
+def test_every_command_the_parser_knows_is_exercised_here() -> None:
+    """The drift guard, and the reason this file needs one.
+
+    ADR-0020 is about *the console never failing a run*, which is a promise
+    about musubi and not about the three commands that happened to exist when it
+    was written. A fourth was added and this file did not notice. So the
+    subcommands are read out of the parser rather than remembered, and adding a
+    fifth turns this red until somebody points a narrow console at it.
+    """
+    from musubi.interfaces.cli.main import COMMANDS
+
+    assert COMMANDS, "found no subcommands; this guard is measuring nothing"
+    known = set(COMMANDS)
+
+    source = Path(__file__).read_text(encoding="utf-8")
+    missing = sorted(name for name in known if f'main(["{name}"' not in source)
+    assert not missing, (
+        f"{missing} print to a console this file never narrows. ADR-0020 promises the "
+        f"console cannot fail a run, and that promise is per command."
+    )
+
+
 def test_what_cannot_be_shown_is_replaced_rather_than_fatal(
     vault: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

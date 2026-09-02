@@ -399,6 +399,13 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   named for the numbered entries, and a guard fails if the list grows an entry
   nothing runs. Everything there is asserted against a **real sync** of a
   generated vault, never against a document a test assembled.
+- **`COMMANDS` in the CLI is a module-level table so a test can read it.**
+  ADR-0020's promise is about musubi, not about the three commands that existed
+  when it was written — `verify` landed after it and
+  `tests/test_console_encoding.py` never pointed a narrow console at it. It
+  survives (measured: exit 0, heading arrives as `musubi verify ? …`), but
+  nothing said so. A guard now reads the table and turns red when a command has
+  no cp932 coverage, verified by adding a fifth and watching it fire.
 - **The console's encoding never reaches a document, and never fails a run**
   (ADR-0020). `--json` writes UTF-8 bytes to `sys.stdout.buffer`; the report
   streams are reconfigured with `errors="replace"` so a character a terminal

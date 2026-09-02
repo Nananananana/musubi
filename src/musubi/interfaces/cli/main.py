@@ -16,7 +16,7 @@ import argparse
 import json
 import sys
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -42,6 +42,14 @@ __all__ = ["main"]
 _SOURCES = {"obsidian": ObsidianSource, "filesystem": FilesystemSource}
 
 
+#: Every subcommand and what runs it. A module-level table rather than a local
+#: dict, so that a test can ask what commands exist instead of being told:
+#: ADR-0020's promise -- the console cannot fail a run -- is about musubi and
+#: not about the three commands that happened to exist when it was written. A
+#: fourth was added and `tests/test_console_encoding.py` did not notice.
+COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {}
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     _readable()
     parser = _parser()
@@ -49,9 +57,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if arguments.command is None:
         parser.print_help()
         return 2
-    commands = {"plan": _plan, "sync": _sync, "trace": _trace, "verify": _verify}
     try:
-        return commands[arguments.command](arguments)
+        return COMMANDS[arguments.command](arguments)
     except MusubiError as error:
         print(f"musubi: {error}", file=sys.stderr)
         return 1
@@ -483,3 +490,6 @@ def _limits(manifest: Manifest) -> None:
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
+
+
+COMMANDS.update({"plan": _plan, "sync": _sync, "trace": _trace, "verify": _verify})
