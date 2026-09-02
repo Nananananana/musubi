@@ -123,6 +123,7 @@ def test_a_finding_describes_itself_without_naming_the_secret() -> None:
 
 
 def test_every_signature_states_its_evidence_and_when_it_was_reviewed() -> None:
+    assert SIGNATURES, "no signatures; this test would pass without reading one"
     for signature in SIGNATURES:
         assert signature.evidence, f"{signature.id} has no evidence"
         assert signature.since, f"{signature.id} has no review date"

@@ -224,6 +224,31 @@ offset within it — will be a different one, and an old validator **refusing** 
 is the intended behaviour: seeing that it is not a character map is better than
 reading one field as another.
 
+## What encoding these are in
+
+**Every file musubi writes is UTF-8 with LF line endings.** The documents in
+`documents/`, the maps in `traces/`, and `manifest.json` — on every platform,
+whatever the machine's locale is.
+
+That is not a detail. **A trace map's offsets are character offsets, and turning
+one into a byte offset needs an encoding** (above). A corpus whose files were
+written in whatever the producing machine's locale happened to be would have
+offsets that mean different things on different machines, and the map would
+still validate. So the encoding is part of what the contract promises, and this
+is where it says so.
+
+The same holds for a document musubi prints. `--json` writes UTF-8 **bytes**
+straight to `stdout.buffer`, bypassing the terminal's codec entirely
+([ADR-0020]), so a redirected `musubi sync --json > manifest.json` is UTF-8 on a
+`cp932` console. A human-facing report may lose a glyph to a narrow console; a
+**document may not**, because the thing reading it is a program.
+
+**A contract that does not name its encoding is one its own producer eventually
+gets wrong.** `akashi` wrote a JSON report through the locale path and could not
+read it back with its own tools — the input side had the rule and the output
+side had nobody's. This paragraph exists because that is cheap to prevent and
+expensive to find.
+
 ## Which folder to read
 
 `<destination>/documents` — and only that one.

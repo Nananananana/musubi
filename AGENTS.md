@@ -482,6 +482,28 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   survives (measured: exit 0, heading arrives as `musubi verify ? …`), but
   nothing said so. A guard now reads the table and turns red when a command has
   no cp932 coverage, verified by adding a fifth and watching it fire.
+- **A redirect is not the console path, and until now nothing here tested it.**
+  Python picks the *locale* encoding for a redirected stream and the console's
+  for a terminal; they are configured separately. Every cp932 test in this
+  repository patches `sys.stdout` in-process, which exercises one of the two.
+  `tests/test_redirected_document.py` starts a real process with `stdout` going
+  to a file and `PYTHONUTF8` cleared. From `akashi`, which wrote a `cp932` JSON
+  report its own `recheck` refused — **it wrote a document it could not read**,
+  because the rule lived in the reading side's docstring and the writing side
+  had none.
+- **`docs/contracts.md` names the encoding, because a contract that does not is
+  one its own producer eventually gets wrong.** Every file musubi writes is
+  UTF-8 with LF, on every platform. That is not a detail: a map's offsets are
+  *character* offsets, so a corpus written in the producing machine's locale
+  would have offsets meaning different things on different machines — **and
+  every map in it would still validate**.
+- **Guard a collection where it is built, not in the tests that loop over it.**
+  `for x in things: assert ...` passes when `things` is empty, so ten invariant
+  tests were one strategy edit away from all going green while checking nothing.
+  Measured: loosening `a_vault`'s `min_size` to 0 turns **21 tests red** with the
+  guard in `maps()` and would have turned none red without it. The same guard is
+  now on `CORE.rules` and `SIGNATURES`; `_modules()`, `_adr_files()` and
+  `_refusals()` already had it. From `akashi` via `manager` — check 27.
 - **The console's encoding never reaches a document, and never fails a run**
   (ADR-0020). `--json` writes UTF-8 bytes to `sys.stdout.buffer`; the report
   streams are reconfigured with `errors="replace"` so a character a terminal
