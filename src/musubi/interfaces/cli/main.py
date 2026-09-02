@@ -29,6 +29,7 @@ from ...application.trace import Resolution, resolve
 from ...application.verify import Verified, verify
 from ...domain.manifest import Manifest, render
 from ...domain.span import Span
+from ...domain.trace import CHARACTERS
 from ...errors import MusubiError, TraceError
 from ...infrastructure.converters import converter_for
 from ...infrastructure.corpus import Corpus
@@ -341,12 +342,19 @@ def _report_trace(found: Resolution) -> None:
         return
 
     print(f"\n  {found.source.source_id}:{found.source.unit_key}")
-    print(f"    characters {found.source_span}")
-    if found.source_bytes is not None:
-        mark = f", a {found.source.bom_bytes}-byte mark" if found.source.bom_bytes else ""
-        print(f"    bytes      {found.source_bytes}  ({found.source.encoding}{mark})")
+    if found.source_unit == CHARACTERS:
+        print(f"    characters {found.source_span}")
+        if found.source_bytes is not None:
+            mark = f", a {found.source.bom_bytes}-byte mark" if found.source.bom_bytes else ""
+            print(f"    bytes      {found.source_bytes}  ({found.source.encoding}{mark})")
+        else:
+            print("    bytes      unknown: the source is not where the manifest said it was")
     else:
-        print("    bytes      unknown: the source is not where the manifest said it was")
+        # `[1:2]` is one page or one character and the two look identical, so
+        # the unit is printed rather than assumed. There is no byte offset to
+        # offer: a PDF has no decoded text for a character to index into.
+        print(f"    pages      {found.source_span}  ({found.source_unit} locator)")
+        print("    bytes      none: this map locates a page, not a character")
     if found.source_path is not None:
         print(f"    {found.source_path}")
     if found.rules:

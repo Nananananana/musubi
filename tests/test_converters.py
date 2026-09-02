@@ -190,17 +190,23 @@ def test_a_media_type_resolves_to_its_converter() -> None:
 def test_a_media_type_nobody_claims_resolves_to_nothing() -> None:
     """`None` rather than a raise: a folder holds files nobody meant to convert,
     and the caller reports what it skipped."""
-    assert converter_for("application/pdf") is None
+    assert converter_for("application/vnd.oasis.opendocument.text") is None
 
 
 def test_the_registry_lists_what_it_holds() -> None:
     assert registered_media_types() == {
+        "application/pdf": "pdf_text@1",
         "application/xhtml+xml": "html@1",
         "text/html": "html@1",
         "text/markdown": "markdown@1",
         "text/plain": "plaintext@1",
     }
-    assert [c.name for c in known_converters()] == ["html@1", "markdown@1", "plaintext@1"]
+    assert [c.name for c in known_converters()] == [
+        "html@1",
+        "markdown@1",
+        "pdf_text@1",
+        "plaintext@1",
+    ]
 
 
 class Rival:
@@ -263,17 +269,44 @@ def trace_over(length: int) -> TraceMap:
     )
 
 
-def test_composing_a_map_whose_source_is_not_characters_is_refused() -> None:
-    """No converter produces one yet. The guard is what stops the first one that
-    does from silently shifting offsets by a constant that is not a constant."""
+def test_composing_a_verbatim_run_whose_source_is_not_characters_is_refused() -> None:
+    """The guard is what stops a converter from silently shifting offsets by a
+    constant that is not a constant."""
     opaque = TraceMap(
         artefact_length=2,
         source_length=9,
         source_unit=OPAQUE,
         segments=(Segment(out=Span(0, 2), src=Span(0, 9), kind=Kind.VERBATIM),),
     )
-    with pytest.raises(ValueError, match="both sides in characters"):
+    with pytest.raises(ValueError, match="verbatim"):
         opaque.followed_by(trace_over(2))
+
+
+def test_a_map_with_no_verbatim_run_composes_whatever_it_measures() -> None:
+    """ADR-0025. The refusal above is about the arithmetic, not about the unit.
+
+    Shifting an offset inside a verbatim run is the only place composition
+    touches the earlier source side; every other kind is taken whole. So a map
+    with no verbatim run composes safely however it measures its source -- which
+    is what lets a PDF's map, one non-verbatim segment per page, reach the
+    cleanser at all.
+    """
+    pages = TraceMap(
+        artefact_length=12,
+        source_length=2,
+        source_unit=OPAQUE,
+        segments=(
+            Segment(out=Span(0, 6), src=Span(0, 1), kind=Kind.TRANSFORMED, rule="pdf.page"),
+            Segment(out=Span(6, 12), src=Span(1, 2), kind=Kind.TRANSFORMED, rule="pdf.page"),
+        ),
+    )
+    composed = pages.followed_by(trace_over(12))
+
+    assert composed.source_length == 2, "the page count survived the composition"
+    assert all(s.kind is not Kind.VERBATIM for s in composed.segments)
+    assert composed.source_span_of(Span(0, 3)) == Span(0, 1), "an offset on page one"
+    assert composed.source_span_of(Span(7, 9)) == Span(1, 2), "an offset on page two"
+    assert composed.source_span_of(Span(3, 9)) == Span(0, 2), "a range crossing both"
 
 
 def test_the_equal_length_rule_applies_only_while_both_sides_count_characters() -> None:

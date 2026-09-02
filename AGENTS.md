@@ -210,7 +210,7 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
 
 - Version `0.1.0.dev0`. **v0.1 is done**: `plan`, `sync` and `trace` over a
   vault, both contracts with schemas, and the invariants asserted rather than
-  only enumerated. Twenty-four ADRs. Nothing is released and the public API is not
+  only enumerated. Twenty-five ADRs. Nothing is released and the public API is not
   stable. **v0.2 is under way** — `docs/proposals/0001-the-design.md` §9, with
   `musubi verify` built. **The freeze is not**, and `verify` does not advance
   it: the roadmap guesses `verify` is the second program for
@@ -266,6 +266,24 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   returning there: **two copies of a contract are two contracts the moment
   somebody edits one**, and a byte-identity test can keep them equal without
   answering which one a reader is holding.
+- **A PDF's map counts pages, not characters** (ADR-0025). Its words are inside
+  Flate-compressed streams, so no byte range in the file holds them and a
+  character offset would index text that does not exist. `src` is a page range,
+  `source_unit` is `opaque`, and **every segment is `transformed`** — a verbatim
+  claim means the correspondence holds at every interior offset, and inside a
+  page it holds nowhere. **The map that composes is the map that is honest**:
+  `followed_by` refuses a non-character source only when a *verbatim* run is
+  present, because shifting an offset by a constant is the only arithmetic it
+  does on that side.
+- **A page with no text layer never renumbers the pages after it.** Page three
+  stays `src[2:3]` when page two was scanned. Reporting it as page two would send
+  a reader to the wrong page with full confidence, which is the one thing a
+  locator must not do.
+- **`traceable` means different things per converter and the totals do not say
+  so.** A PDF at 100% resolves to a page; a Markdown file at 100% resolves to a
+  character. The manifest's `limits` say it and each map's `source_unit` says it;
+  the aggregate percentage says neither. **A reader taking the number and not the
+  sentence gets a worse answer than before PDF existed.**
 - **The HTML converter is where coverage becomes a measurement.** Boilerplate
   is a `removal` segment with a rule (`boilerplate.nav`), never a gap; entities
   are `transformed` because `&amp;` is five characters in and one out; `# ` and

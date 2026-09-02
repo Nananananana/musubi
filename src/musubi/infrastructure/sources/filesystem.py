@@ -49,6 +49,7 @@ MEDIA_TYPES: dict[str, str] = {
     ".html": "text/html",
     ".htm": "text/html",
     ".xhtml": "application/xhtml+xml",
+    ".pdf": "application/pdf",
 }
 
 #: Directories that are machinery rather than writing. Skipped whole.

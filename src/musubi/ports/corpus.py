@@ -41,6 +41,11 @@ class Held:
     source: SourceReference
     converter: str
 
+    @property
+    def source_unit(self) -> str:
+        """What the map's source offsets index. The map is the holder."""
+        return self.trace.source_unit
+
 
 class CorpusReader(Protocol):
     """Satisfied by anything that can read a destination musubi wrote."""

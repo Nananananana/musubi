@@ -73,8 +73,8 @@
       "minLength": 1
     },
     "source_unit": {
-      "description": "What a source offset indexes. Only 'characters' exists (ADR-0018). A future locator -- a PDF page plus an offset within it -- is a different value, and an old validator REFUSING it is the intended behaviour: seeing that it is not a character map is better than reading one field as another.",
-      "enum": ["characters"]
+      "description": "What a source offset indexes, and a reader must branch on it before doing arithmetic: [0:1] is one character or one page and the two look identical. 'characters' is characters of the decoded source (ADR-0018), and a byte offset can be derived from it with the encoding and the file. 'opaque' is a locator with no decoded text behind it -- a PDF page (ADR-0025) -- and no byte offset can be derived from it at all. A reader that does not recognise the value refuses the map rather than reading page indices as character offsets.",
+      "enum": ["characters", "opaque"]
     },
     "coverage": {
       "description": "The numerator and the denominator, published together so that a reader aggregating over a corpus uses the right total rather than averaging ratios.",

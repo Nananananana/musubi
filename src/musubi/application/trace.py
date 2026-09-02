@@ -37,7 +37,7 @@ from pathlib import Path
 from ..domain.hashing import content_hash
 from ..domain.span import Span
 from ..domain.text import decode
-from ..domain.trace import Kind, Segment
+from ..domain.trace import CHARACTERS, Kind, Segment
 from ..errors import TraceError
 from ..ports.corpus import CorpusReader, SourceReference
 
@@ -57,8 +57,14 @@ class Resolution:
     rules: tuple[str, ...]
     converter: str
     source: SourceReference
-    #: In characters of the decoded source ([ADR-0018]).
+    #: The range in the source, counted in :attr:`source_unit`.
     source_span: Span
+    #: What ``source_span`` indexes: characters of the decoded source
+    #: ([ADR-0018]), or `opaque` for a converter whose source has no decoded
+    #: text to count -- a PDF's pages ([ADR-0025]). **A caller must read this
+    #: before doing arithmetic on the span**, and a report must say it, because
+    #: `[0:1]` means one character or one page and the numbers look identical.
+    source_unit: str = CHARACTERS
     #: In bytes of the file, when the file was there to measure against.
     source_bytes: Span | None = None
     source_path: Path | None = None
@@ -96,6 +102,7 @@ def resolve(corpus: CorpusReader, key: str, out: Span) -> Resolution:
         converter=held.converter,
         source=held.source,
         source_span=held.trace.source_span_of(out),
+        source_unit=held.source_unit,
     )
     return _against_the_file(corpus, resolution)
 
@@ -114,6 +121,14 @@ def _against_the_file(corpus: CorpusReader, resolution: Resolution) -> Resolutio
     path, raw = found
 
     changed = content_hash(raw) != resolution.source.content_hash
+    if resolution.source_unit != CHARACTERS:
+        # There is no decoded text to count into, so there is no byte offset to
+        # give and no excerpt to slice. The page is the answer, and the path is
+        # what makes it actionable: a reader opens the file at that page.
+        # Attempting the arithmetic anyway would decode a PDF as if it were
+        # text and hand back a byte range into mojibake.
+        return replace(resolution, source_path=path, changed=changed)
+
     try:
         decoded = decode(raw)
     except ValueError:
