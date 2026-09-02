@@ -26,9 +26,55 @@ import pytest
 from musubi.infrastructure.emitters import DOCUMENTS, MANIFEST, TRACES
 from musubi.interfaces.cli import main
 
-#: Enough to be unencodable in `cp932`: the em dash musubi prints in every
-#: heading, and a filename in a script the codec does hold.
-NOTE = "# 設計メモ\n\nテントは 2.4kg。\n"
+#: A note whose text a `cp932` console genuinely cannot show.
+#:
+#: The comment that stood here said *enough to be unencodable in cp932*, and
+#: that was true of the em dash **musubi** prints and false of the note itself.
+#: A claim about the fixture that the fixture did not have.
+#:
+#: The previous fixture was `設計メモ` and `テントは 2.4kg。`, and **every
+#: character in it round-trips through cp932** -- so this whole file would have
+#: passed with musubi's encoding handling deleted. Measured, and the same shape
+#: `seam`, `kiseki`, `mamori` and `tsumugi` each found in their own fixtures on
+#: the same day: Japanese text is *usually* representable in cp932, which is
+#: exactly what makes it a comfortable and useless sample.
+#:
+#: `𩸽` is U+29E3D, a fish, outside cp932's repertoire and outside the basic
+#: multilingual plane. It is a real character a real note can contain.
+NOTE = "# 設計メモ 𩸽\n\nテントは 2.4kg。\n"
+
+
+def beyond_cp932(text: str) -> set[str]:
+    """The characters in `text` that cp932 cannot represent."""
+    unrepresentable = set()
+    for character in text:
+        try:
+            if character.encode("cp932").decode("cp932") != character:
+                unrepresentable.add(character)
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            unrepresentable.add(character)
+    return unrepresentable
+
+
+def test_the_fixture_can_actually_break_a_cp932_console() -> None:
+    """The guard `seam` put in front of its own suite, and the reason for it.
+
+    Every other test in this file narrows a console and asserts musubi survives.
+    **All of them pass on a fixture cp932 can represent**, because then there is
+    nothing for the encoding handling to do -- and the previous fixture here was
+    exactly that: `設計メモ` and `テントは 2.4kg。` round-trip through cp932
+    without a mark.
+
+    So this asserts the population has teeth, and it comes *first* in the file
+    on purpose. `seam`'s reason: printing nine passes and then a caveat means the
+    reader takes the number.
+    """
+    doomed = beyond_cp932(NOTE)
+    assert doomed, (
+        "every character in NOTE survives a cp932 round trip, so every test below "
+        "would pass with musubi's encoding handling removed"
+    )
+    assert "𩸽" in doomed, "the fixture lost the character chosen to break cp932"
 
 
 class Narrow(io.TextIOWrapper):
