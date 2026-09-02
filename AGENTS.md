@@ -462,6 +462,26 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   named for the numbered entries, and a guard fails if the list grows an entry
   nothing runs. Everything there is asserted against a **real sync** of a
   generated vault, never against a document a test assembled.
+- **A cp932 fixture made of ordinary Japanese proves nothing.** `設計メモ` and
+  `テントは 2.4kg。` round-trip through cp932 without a mark, so every test in
+  `test_console_encoding.py` would have passed with musubi's encoding handling
+  deleted — and the comment above the fixture claimed it was unencodable, which
+  was true of the em dash **musubi** prints and false of the note. The fixture
+  now carries `𩸽` (U+29E3D), outside cp932 and outside the BMP, and
+  `test_the_fixture_can_actually_break_a_cp932_console` asserts that **before**
+  the rest of the file runs. From `seam`, who found the same in its own
+  fixtures, along with the reason for the ordering: **print nine passes and then
+  a caveat, and the reader takes the number.** `kiseki`, `mamori` and `tsumugi`
+  each found it in their own on the same day; Japanese text is *usually*
+  representable in cp932, which is exactly what makes it a comfortable and
+  useless sample.
+- **`COMMANDS` in the CLI is a module-level table so a test can read it.**
+  ADR-0020's promise is about musubi, not about the three commands that existed
+  when it was written — `verify` landed after it and
+  `tests/test_console_encoding.py` never pointed a narrow console at it. It
+  survives (measured: exit 0, heading arrives as `musubi verify ? …`), but
+  nothing said so. A guard now reads the table and turns red when a command has
+  no cp932 coverage, verified by adding a fifth and watching it fire.
 - **The console's encoding never reaches a document, and never fails a run**
   (ADR-0020). `--json` writes UTF-8 bytes to `sys.stdout.buffer`; the report
   streams are reconfigured with `errors="replace"` so a character a terminal
