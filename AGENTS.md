@@ -491,12 +491,22 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   report its own `recheck` refused — **it wrote a document it could not read**,
   because the rule lived in the reading side's docstring and the writing side
   had none.
-- **`docs/contracts.md` names the encoding, because a contract that does not is
-  one its own producer eventually gets wrong.** Every file musubi writes is
-  UTF-8 with LF, on every platform. That is not a detail: a map's offsets are
-  *character* offsets, so a corpus written in the producing machine's locale
-  would have offsets meaning different things on different machines — **and
-  every map in it would still validate**.
+- **`docs/contracts.md` names the encoding for the corpus and inherits it for
+  the JSON**, and the distinction is the whole point. `manifest.json` and the
+  trace maps are JSON, and RFC 8259 §8.1 **already** requires UTF-8 for JSON
+  leaving a closed ecosystem — so writing it down there is a **pin**, not a
+  missing rule. A document in `documents/` is Markdown or plain text, which say
+  nothing about encoding, so the contract **grants** it: UTF-8 with LF, on every
+  platform. **That third one is where the real gap was**, and it is where it
+  matters most — a map's offsets are *character* offsets, so a corpus written in
+  the producing machine's locale would mean different things on different
+  machines and **every map over it would still validate**.
+- **Do not write "a contract that does not name its encoding is one its own
+  producer gets wrong."** It is too broad, and `akashi` withdrew it after
+  measuring: RFC 8259 was in force the whole time and its implementation broke
+  it. The correct form is **a requirement already in force can be broken by an
+  implementation**, and the reason the broad version is worse is that it
+  **exonerates the producer** — which was `akashi` itself.
 - **`empty_parameter_set_mark = "fail_at_collect"`** is set, from `iriguchi`
   through `manager`. pytest's default marks an empty parameter set as **skip**,
   which spells *there were no cases* exactly the way it spells *this does not
