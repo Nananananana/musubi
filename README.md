@@ -133,21 +133,62 @@ worth more than a complete-looking one whose edges cannot be examined.
 
 ## Where it sits
 
-```text
-[ musubi ]   exports and folders ➔ documents that can point back at the byte
-     ↓
-[ kiseki ]   a photo timeline ➔ personal context: facts / measures / interpretations
-     ↓
-[ tsumugi ]  selection ➔ a ContextPackage: what was sent, and what was withheld
-     ↓
-[ mamori ]   pseudonymization ➔ out to the model, restoration on the way back
-     ↓
-[ akashi ]   the answer ➔ which particulars are traceable, and which are floating
+```mermaid
+graph LR
+  subgraph IN["reading and interpreting"]
+    MU["<b>musubi</b><br/>exports and folders → a corpus<br/><i>every character remembers where it came from</i>"]
+    KI["<b>kiseki</b><br/>photos, notes, web, steps<br/>→ context about a person"]
+  end
+  subgraph OUT["the moment it leaves"]
+    TS["<b>tsumugi</b><br/>selects what bears on the question<br/><i>and records what it left out</i>"]
+    IR["<b>iriguchi</b><br/>decides where it may go<br/><i>before it goes</i>"]
+    MA["<b>mamori</b><br/>hides values, restores them on the way back"]
+  end
+  subgraph BACK["after the answer"]
+    AK["<b>akashi</b><br/>checks the answer against what was sent"]
+  end
+  LLM(("an outside<br/>model"))
+
+  MU -->|"a folder of Markdown with front matter"| TS
+  MU -->|"a folder of Markdown with front matter"| KI
+  MU -.-> NOBODY["<i>nothing reads these yet</i><br/>musubi.sync-manifest/1-draft<br/>musubi.trace-map/1-draft"]
+  KI -->|"kiseki-interest-export/1"| TS
+  TS -->|"tsumugi.context-package/1<br/><b>frozen</b>"| MA
+  MA -->|"mamori.protection-scope/1"| IR
+  IR -->|"allow / refuse"| LLM
+  MA -->|"the hidden text"| LLM
+  LLM -->|"the answer"| MA
+  MA -->|"the restored text"| AK
+  TS -->|"tsumugi.context-package/1"| AK
+  AK -->|"akashi.audit-report/1-draft"| KI
+
+  classDef unread stroke-dasharray:4 3
+  class NOBODY unread
 ```
 
-Five libraries, each standing alone, none importing another except through one
-optional adapter. They meet at published contracts, because a contract is the
-only kind of seam that lets five projects release on five schedules.
+**Every arrow is a document, not an import.** Six libraries, each standing
+alone, none importing another except through one optional adapter. They meet at
+published contracts, because a contract is the only kind of seam that lets six
+projects release on six schedules.
+
+Three things in that picture are worth saying out loud, because they are the
+ones a diagram usually gets wrong:
+
+**musubi's two arrows carry the same thing.** Not a `NoteRecord` to `kiseki` and
+a trace map to `tsumugi` — **one folder of Markdown, and each consumer adapts**
+([ADR-0013](docs/adr/0013-one-output-contract-and-the-consumer-adapts.md)).
+musubi emits no `kiseki` records at all; `kiseki-notes` turns that folder into
+them. `tsumugi` reads the same folder and **ignores the trace maps entirely**.
+
+**Nothing reads musubi's two contracts yet**, and the dashed box says so rather
+than leaving it to be inferred. That is not a gap in the diagram — it is why
+both still carry `-draft`. A contract freezes when a second program has needed
+it, not on a date ([`docs/contracts.md`](docs/contracts.md)).
+
+**The chain closes.** `tsumugi` anchors into `synced/design/gear.md` at offset
+1204; `musubi trace` resolves that to `~/notes/design/gear.md` at byte 1086. A
+sentence in a model's answer can be followed back to a byte in a file the owner
+already had, and **no component in that chain imports another**.
 
 - [kiseki](https://github.com/Nananananana/kiseki) — personal context from a
   photo timeline
@@ -155,6 +196,8 @@ only kind of seam that lets five projects release on five schedules.
   attached
 - [mamori](https://github.com/Nananananana/mamori) — a privacy layer for prompts
 - [akashi](https://github.com/Nananananana/akashi) — response auditing
+- [iriguchi](https://github.com/Nananananana/iriguchi) — the gate a request
+  passes before it leaves
 
 ## Documentation
 
