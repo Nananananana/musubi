@@ -172,6 +172,56 @@ def test_utf16_text_is_decoded_by_its_mark() -> None:
     assert "ギア" in convert(a_pdf([stream])).text
 
 
+def _utf16(shown: str) -> bytes:
+    """A content stream showing one string, marked as UTF-16 so any character can
+    be expressed exactly."""
+    body = shown.encode("utf-16-be").hex().upper()
+    return b"BT /F1 12 Tf 72 720 Td <FEFF" + body.encode() + b"> Tj ET"
+
+
+@pytest.mark.parametrize(
+    "shown",
+    ["plain ascii", "ギア設計メモ", "café résumé", "α β γ", "1 + 1 = 2"],
+)
+def test_what_the_page_showed_is_what_the_text_holds(shown: str) -> None:
+    """Requirement 4, from `mamori` through `manager`: **did the value that went
+    in come out**, not merely *is the output well formed*.
+
+    The two are different failures wanting different poisons. Replacing
+    characters *after* encoding produces invalid UTF-8, which the encoding tests
+    catch. Replacing them **while the value is still a `str`** leaves output that
+    is valid UTF-8, valid JSON, and wrong -- and only a test that knows what went
+    in can see it.
+
+    For a character-measured converter this falls out of ADR-0004 for free: a
+    `verbatim` segment must read the same on both sides, so a substituted
+    character makes the map's own invariant false. **A PDF's segments are all
+    `transformed`**, which claims no interior correspondence, so there is nothing
+    for that invariant to catch. Measured: poisoning the extracted text fails
+    only two tests here, and both by accident -- they happen to use non-ASCII
+    examples. This asserts it on purpose.
+
+    It matters more here than elsewhere because musubi's promise is that every
+    character remembers where it came from, and **a character replaced by `?`
+    cannot have a provenance.**
+    """
+    assert shown in convert(a_pdf([_utf16(shown)])).text
+
+
+def test_a_page_is_not_quietly_dropped_when_its_text_is_unusual() -> None:
+    """The other half of the same question. A page whose text survived as a
+    string but whose segment vanished would be caught by nobody: the artefact
+    would be shorter, the map would still tile it, and every invariant would
+    hold."""
+    pages = ["first", "ギア", "third"]
+    result = convert(a_pdf([_utf16(page) for page in pages]))
+
+    assert result.trace.source_length == 3
+    assert len(result.trace.segments) == 3, "a page produced no segment"
+    for page in pages:
+        assert page in result.text
+
+
 # -- what it refuses --------------------------------------------------------
 
 

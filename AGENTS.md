@@ -286,6 +286,21 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   handing on a date that is uniform and looks like history — ADR-0022's failure
   arriving from the other direction. `kiseki-notes` warning that a Notion corpus
   shares one date is **correct**, and `docs/sources.md` says so.
+- **"Is the output well formed" and "is the value the one that went in" are
+  two questions, and they want different poisons.** Substituting characters
+  *after* encoding gives invalid UTF-8, which the encoding tests catch.
+  Substituting them **while the value is still a `str`** leaves output that is
+  valid UTF-8, valid JSON, and wrong. From `mamori` through `manager`, after
+  `tsumugi` aimed the first poison at the second question and caught nothing.
+- **For a character-measured converter, fidelity is structural and free.** A
+  `verbatim` segment must read the same on both sides (ADR-0004), so a
+  substituted character makes the map's own invariant false — measured: the
+  str-stage poison in the emitter fails **eight** tests, `trace 3` among them.
+  **A PDF's segments are all `transformed`**, which claims no interior
+  correspondence, so that invariant has nothing to catch. The same poison there
+  failed **two** tests, and both by accident: they happened to use non-ASCII
+  examples. `test_what_the_page_showed_is_what_the_text_holds` asserts it on
+  purpose, and the poison now fails six.
 - **A PDF's map counts pages, not characters** (ADR-0025). Its words are inside
   Flate-compressed streams, so no byte range in the file holds them and a
   character offset would index text that does not exist. `src` is a page range,
