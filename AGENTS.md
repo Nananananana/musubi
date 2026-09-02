@@ -497,6 +497,23 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   *character* offsets, so a corpus written in the producing machine's locale
   would have offsets meaning different things on different machines — **and
   every map in it would still validate**.
+- **`empty_parameter_set_mark = "fail_at_collect"`** is set, from `iriguchi`
+  through `manager`. pytest's default marks an empty parameter set as **skip**,
+  which spells *there were no cases* exactly the way it spells *this does not
+  apply* — and unlike `for x in []`, nobody wrote it. Verified by emptying a
+  collection and watching collection fail rather than skip.
+- **What that closes is emptiness, not bias, and the two need different tools.**
+  A population of zero is countable; a population of forty that is all the same
+  value is not. None of the PDF converter's three defects was a vacuous loop:
+  two had tests that ran and only ever saw `characters`, and one had no test at
+  all. **What found them was a new input, not a new check** — writing the
+  converter and putting a sync through it.
+- **`tests/test_what_is_read_and_written.py` is a set equality, deliberately.**
+  A `for` passes on empty and a `parametrize` skipped on empty; **an empty set
+  is not equal to a non-empty one**, which closes the one place pytest cannot
+  see into — a plain assertion in a single test. It pins the suffixes a source
+  reads and checks both directions against the converter registry, so a format
+  cannot silently stop being ingested and a converter cannot become unreachable.
 - **Guard a collection where it is built, not in the tests that loop over it.**
   `for x in things: assert ...` passes when `things` is empty, so ten invariant
   tests were one strategy edit away from all going green while checking nothing.
