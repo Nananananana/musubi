@@ -46,9 +46,13 @@ CONTRACT = "musubi.sync-manifest/1-draft"
 LIMITS: tuple[str, ...] = (
     "A traceable character means an offset resolves to a place in the source. "
     "It does not mean the conversion read the document in the right order.",
-    "Source offsets are counted in characters of the decoded text. Turning one "
-    "into a byte offset takes the encoding, the byte-order mark's length and the "
-    "file itself.",
+    "How precisely it resolves depends on the converter, and the totals here do "
+    "not say. A character map answers with a character; a PDF's map answers with "
+    "a page. Each trace map states its own `source_unit`, and a corpus of mixed "
+    "formats has one coverage number over more than one meaning of traceable.",
+    "Where a map's `source_unit` is `characters`, turning a source offset into a "
+    "byte offset takes the encoding, the byte-order mark's length and the file "
+    "itself. Where it is not, there is no byte offset to turn it into.",
     "The screener catches credential formats their issuers made recognisable. "
     "Its recall against a labelled corpus has not been measured, and no number "
     "is claimed for it.",

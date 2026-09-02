@@ -107,9 +107,10 @@ request as the code it describes.
 | | |
 |---|---|
 | `musubi plan` | Reads a folder and reports what a sync would do, writing nothing ([ADR-0012](adr/0012-a-dry-run-comes-first.md)) |
-| Sources | `FilesystemSource`, `ObsidianSource`. Two stages: `discover()` opens nothing, `read()` opens one thing |
+| Sources | `FilesystemSource`, `ObsidianSource`, `NotionSource`. Two stages: `discover()` opens nothing, `read()` opens one thing. Notion keys by the **page id** and skips anything without one, so `key_derivation` is true of every unit in a run ([`sources.md`](sources.md)) |
 | Converters | Markdown and plain text — decoding, line endings, and a trace map over both |
 | `html@1` | HTML, where the output is a minority of the input: boilerplate removed as `removal` segments with rules, entities `transformed`, structure `synthetic`. The first converter whose traceable coverage is a measurement |
+| `pdf_text@1` | A PDF's text layer, page by page. The first map whose source is **not** characters: `src` is a page range and `source_unit` is `opaque` ([ADR-0025](adr/0025-a-map-with-no-verbatim-run-composes-whatever-it-measures.md)). A page with no text layer is reported, not guessed at |
 | The tiling | Segments, composition, merging, coverage ([ADR-0004](adr/0004-a-conversion-carries-a-map-back-to-its-source.md)) |
 | Cleansing | 65 rules derived from ClearURLs, matched structurally and never by regex ([ADR-0016](adr/0016-a-rule-is-a-matcher-not-a-regular-expression.md)) |
 | Screening | 21 credential signatures; the entropy tier exists and is opt-in ([ADR-0017](adr/0017-entropy-is-a-tier-not-a-default.md)) |

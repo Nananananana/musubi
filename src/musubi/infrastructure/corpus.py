@@ -19,12 +19,18 @@ from pathlib import Path
 from typing import Any
 
 from ..domain.span import Span
-from ..domain.trace import CHARACTERS, Kind, Segment, TraceMap
+from ..domain.trace import CHARACTERS, OPAQUE, Kind, Segment, TraceMap
 from ..errors import ContractError, TraceError
 from ..ports.corpus import Held, SourceReference
 from .emitters.documents import DOCUMENTS, MANIFEST, TRACES
 
 __all__ = ["Corpus"]
+
+
+#: Units this reader knows how to hand on. `characters` it can do arithmetic
+#: in; `opaque` it can carry but not compute with, which is the whole of the
+#: difference a caller needs (ADR-0025).
+KNOWN_UNITS = frozenset({CHARACTERS, OPAQUE})
 
 
 class Corpus:
@@ -75,10 +81,15 @@ class Corpus:
                 f"the map for {key} declares contract {contract!r}, which this does not "
                 f"recognise. Refusing rather than resolving an offset against a guess."
             )
-        if body.get("source_unit") != CHARACTERS:
+        unit = str(body.get("source_unit") or CHARACTERS)
+        if unit not in KNOWN_UNITS:
+            # A unit this does not recognise is refused rather than read as
+            # characters. Reading page indices as character offsets would point
+            # a citation at a confident wrong place, which is the failure this
+            # project exists to prevent.
             raise ContractError(
-                f"the map for {key} measures its source in {body.get('source_unit')!r}, "
-                f"which this does not know how to read"
+                f"the map for {key} measures its source in {unit!r}, which this does "
+                f"not recognise. Refusing rather than resolving against a guess."
             )
 
         segments = tuple(_segment(entry, key) for entry in body.get("segments") or [])
@@ -89,6 +100,7 @@ class Corpus:
                 segments=segments,
                 artefact_length=int(coverage.get("characters", 0)),
                 source_length=max((s.src.end for s in segments), default=0),
+                source_unit=unit,
             )
         except ValueError as error:
             raise TraceError(f"the map for {key} does not hold: {error}") from error

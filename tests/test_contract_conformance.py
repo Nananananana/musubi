@@ -392,5 +392,18 @@ def test_a_source_unit_the_schema_does_not_know_is_refused() -> None:
     """ADR-0018 kept the field so that an old reader can *see* a locator it does
     not understand. Refusing is the intended behaviour, not a gap."""
     body = json.loads((CONTRACTS / "trace-map-valid.json").read_text(encoding="utf-8"))
-    body["source_unit"] = "opaque"
+    body["source_unit"] = "pdf-page-and-offset"
     assert not validator(TRACE_MAP).is_valid(body)
+
+
+def test_opaque_is_a_unit_the_schema_now_knows() -> None:
+    """The PDF converter produces one (ADR-0025), so the enum admits it.
+
+    Widening an enum is a change a `-draft` contract may make, and this is what
+    that costs: a consumer holding the older schema refuses a valid map. Which
+    is why the field exists -- refusing beats reading page indices as character
+    offsets -- and why the freeze has not happened.
+    """
+    body = json.loads((CONTRACTS / "trace-map-valid.json").read_text(encoding="utf-8"))
+    body["source_unit"] = "opaque"
+    assert validator(TRACE_MAP).is_valid(body)

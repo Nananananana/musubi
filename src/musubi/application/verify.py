@@ -11,6 +11,22 @@ line endings, half-transferred, and pointed at by `kiseki-notes` long after the
 run that built it ended. This answers *is this still internally consistent*
 about a folder, with no run in sight.
 
+**What it cannot answer, and this is the important half.** Every check here
+compares the corpus with **its own manifest**. That proves nothing has changed
+since the run wrote it; it does not prove the run wrote the right thing. A
+corruption that happened *before* the hash was taken is recorded in the hash,
+and this reports `all hold` -- measured, by replacing every non-ASCII character
+in `render()`: the corpus said `# ????` where the vault said `# ギア設計`, and
+`verify` returned 0.
+
+That is not a defect to fix here. `verify` exists to answer a question about a
+folder **with no run in sight**, and the sources may be long gone. But
+**consistency is not fidelity**, and a hash agreeing with itself only proves the
+damage was deterministic. The command that compares a corpus with the file it
+came from is `musubi trace`, which opens the source and says `changed` when the
+hashes disagree; and the property that catches it *during* a run is ADR-0004's,
+because a substituted character makes a `verbatim` segment's equality false.
+
 **No JSON Schema here.** `jsonschema` is a dev dependency and ADR-0001 keeps the
 runtime at zero, so these are the invariants checked directly -- which is the
 half a schema cannot express in any case. A consumer that has `jsonschema`

@@ -29,17 +29,18 @@ from ...application.trace import Resolution, resolve
 from ...application.verify import Verified, verify
 from ...domain.manifest import Manifest, render
 from ...domain.span import Span
+from ...domain.trace import CHARACTERS
 from ...errors import MusubiError, TraceError
 from ...infrastructure.converters import converter_for
 from ...infrastructure.corpus import Corpus
 from ...infrastructure.emitters import DOCUMENTS, MANIFEST, TRACES, DocumentEmitter
 from ...infrastructure.rules import CORE
 from ...infrastructure.screeners import EntropyScreener, default_screener
-from ...infrastructure.sources import FilesystemSource, ObsidianSource
+from ...infrastructure.sources import FilesystemSource, NotionSource, ObsidianSource
 
 __all__ = ["main"]
 
-_SOURCES = {"obsidian": ObsidianSource, "filesystem": FilesystemSource}
+_SOURCES = {"obsidian": ObsidianSource, "filesystem": FilesystemSource, "notion": NotionSource}
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -292,6 +293,12 @@ def _report_verify(checked: Verified) -> None:
     print(f"musubi verify — {checked.summary()}")
     print(f"  {checked.destination}. run id {checked.run_id}")
     if checked.holds:
+        # A green answer whose meaning is narrower than it reads is the kind
+        # this project keeps finding, so the narrowing is printed beside it
+        # rather than left in a document nobody opened.
+        print("\n  This compares the corpus with its own manifest. It does not open")
+        print("  the sources, so it cannot say the corpus is faithful to them —")
+        print("  `musubi trace` is what opens a source and reports when it changed.")
         return
     print()
     print("Did not hold")
@@ -341,12 +348,19 @@ def _report_trace(found: Resolution) -> None:
         return
 
     print(f"\n  {found.source.source_id}:{found.source.unit_key}")
-    print(f"    characters {found.source_span}")
-    if found.source_bytes is not None:
-        mark = f", a {found.source.bom_bytes}-byte mark" if found.source.bom_bytes else ""
-        print(f"    bytes      {found.source_bytes}  ({found.source.encoding}{mark})")
+    if found.source_unit == CHARACTERS:
+        print(f"    characters {found.source_span}")
+        if found.source_bytes is not None:
+            mark = f", a {found.source.bom_bytes}-byte mark" if found.source.bom_bytes else ""
+            print(f"    bytes      {found.source_bytes}  ({found.source.encoding}{mark})")
+        else:
+            print("    bytes      unknown: the source is not where the manifest said it was")
     else:
-        print("    bytes      unknown: the source is not where the manifest said it was")
+        # `[1:2]` is one page or one character and the two look identical, so
+        # the unit is printed rather than assumed. There is no byte offset to
+        # offer: a PDF has no decoded text for a character to index into.
+        print(f"    pages      {found.source_span}  ({found.source_unit} locator)")
+        print("    bytes      none: this map locates a page, not a character")
     if found.source_path is not None:
         print(f"    {found.source_path}")
     if found.rules:

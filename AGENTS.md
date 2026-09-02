@@ -210,7 +210,7 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
 
 - Version `0.1.0.dev0`. **v0.1 is done**: `plan`, `sync` and `trace` over a
   vault, both contracts with schemas, and the invariants asserted rather than
-  only enumerated. Twenty-four ADRs. Nothing is released and the public API is not
+  only enumerated. Twenty-five ADRs. Nothing is released and the public API is not
   stable. **v0.2 is under way** — `docs/proposals/0001-the-design.md` §9, with
   `musubi verify` built. **The freeze is not**, and `verify` does not advance
   it: the roadmap guesses `verify` is the second program for
@@ -266,6 +266,69 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   returning there: **two copies of a contract are two contracts the moment
   somebody edits one**, and a byte-identity test can keep them equal without
   answering which one a reader is holding.
+- **`NotionSource` keys by the page id, and says so as `notion-page-id`.** Not
+  `path`, which would be a lie, and not the title, which changes. The key becomes
+  the output filename (ADR-0013), so a corpus of Notion pages has hexadecimal
+  names — and **loses nothing**, because Notion writes the title into the
+  document's first line as an `# ` heading (measured on a real export: the
+  filename's title and the H1 are the same string).
+- **A file with no page id is skipped, never keyed by path instead.** Mixing two
+  derivations under one `key_derivation` makes the manifest's statement true for
+  some units in a run and false for others, with nothing saying which.
+- **Whether a Notion page id survives a re-export is still unmeasured**, and the
+  source does not pretend otherwise. ADR-0006 contradicts itself — its Context
+  says the filename UUID is regenerated, its Decision keys by it — and a real
+  export shows **three UUIDs on three layers**, so the two statements may be
+  about different numbers. One counterexample from a second export decides it. If
+  it says no, the derivation falls back to `path` and the manifest says `path`.
+- **A Notion export carries no per-page date.** Every entry shares the export's
+  timestamp, to the second. So the source reports `modified_at=None` rather than
+  handing on a date that is uniform and looks like history — ADR-0022's failure
+  arriving from the other direction. `kiseki-notes` warning that a Notion corpus
+  shares one date is **correct**, and `docs/sources.md` says so.
+- **`musubi verify` compares a corpus with its own manifest, and that is not
+  fidelity.** A corruption that happened *before* the hash was taken is recorded
+  in the hash, and `verify` reports `all hold` — measured, by replacing every
+  non-ASCII character in `render()`: the corpus said `# ????` where the vault
+  said `# ギア設計` and the exit code was 0. **A hash agreeing with itself only
+  proves the damage was deterministic** (from `kiseki` via `manager`). This is a
+  boundary rather than a bug — `verify` answers about a folder with no run in
+  sight — so the report says it, the docstring says it, and a test pins it. What
+  compares a corpus with the file it came from is `musubi trace`; what catches
+  it during a run is ADR-0004's verbatim equality.
+- **"Is the output well formed" and "is the value the one that went in" are
+  two questions, and they want different poisons.** Substituting characters
+  *after* encoding gives invalid UTF-8, which the encoding tests catch.
+  Substituting them **while the value is still a `str`** leaves output that is
+  valid UTF-8, valid JSON, and wrong. From `mamori` through `manager`, after
+  `tsumugi` aimed the first poison at the second question and caught nothing.
+- **For a character-measured converter, fidelity is structural and free.** A
+  `verbatim` segment must read the same on both sides (ADR-0004), so a
+  substituted character makes the map's own invariant false — measured: the
+  str-stage poison in the emitter fails **eight** tests, `trace 3` among them.
+  **A PDF's segments are all `transformed`**, which claims no interior
+  correspondence, so that invariant has nothing to catch. The same poison there
+  failed **two** tests, and both by accident: they happened to use non-ASCII
+  examples. `test_what_the_page_showed_is_what_the_text_holds` asserts it on
+  purpose, and the poison now fails six.
+- **A PDF's map counts pages, not characters** (ADR-0025). Its words are inside
+  Flate-compressed streams, so no byte range in the file holds them and a
+  character offset would index text that does not exist. `src` is a page range,
+  `source_unit` is `opaque`, and **every segment is `transformed`** — a verbatim
+  claim means the correspondence holds at every interior offset, and inside a
+  page it holds nowhere. **The map that composes is the map that is honest**:
+  `followed_by` refuses a non-character source only when a *verbatim* run is
+  present, because shifting an offset by a constant is the only arithmetic it
+  does on that side.
+- **A page with no text layer never renumbers the pages after it.** Page three
+  stays `src[2:3]` when page two was scanned. Reporting it as page two would send
+  a reader to the wrong page with full confidence, which is the one thing a
+  locator must not do.
+- **`traceable` means different things per converter and the totals do not say
+  so.** A PDF at 100% resolves to a page; a Markdown file at 100% resolves to a
+  character. The manifest's `limits` say it and each map's `source_unit` says it;
+  the aggregate percentage says neither. **A reader taking the number and not the
+  sentence gets a worse answer than before PDF existed.**
 - **The HTML converter is where coverage becomes a measurement.** Boilerplate
   is a `removal` segment with a rule (`boilerplate.nav`), never a gap; entities
   are `transformed` because `&amp;` is five characters in and one out; `# ` and

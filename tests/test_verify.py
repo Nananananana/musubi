@@ -21,6 +21,7 @@ from typing import Any
 import pytest
 
 from musubi.application.verify import verify
+from musubi.domain.hashing import content_hash
 from musubi.errors import ContractError
 from musubi.infrastructure.corpus import Corpus
 from musubi.interfaces.cli.main import main
@@ -152,6 +153,48 @@ def test_a_trace_map_that_stopped_tiling_its_document(tmp_path: Path) -> None:
     body["segments"] = body["segments"][:-1]
     trace.write_text(json.dumps(body, indent=2) + "\n", encoding="utf-8", newline="\n")
     assert "trace 1" in invariants(into)
+
+
+# -- the limit, asserted so that it is a boundary and not a surprise --------
+
+
+def test_a_corpus_that_is_self_consistent_and_unfaithful_passes(tmp_path: Path) -> None:
+    """`verify` cannot see a corruption that happened before the hash was taken.
+
+    From `kiseki` through `manager`, who put it best: **consistency is not
+    fidelity, and a hash agreeing with itself only proves the damage was
+    deterministic.** Measured by replacing every non-ASCII character in
+    `render()`, before `content_hash` runs -- the corpus said `# ????` where the
+    vault said `# ギア設計`, and `verify` returned 0.
+
+    This test builds that corpus directly: a document rewritten *and* its
+    manifest entry rehashed to match, which is exactly the state such a bug
+    leaves behind.
+
+    **It is asserted rather than fixed**, because it is a boundary of what the
+    command can mean. `verify` answers a question about a folder with no run in
+    sight, and the sources may be long gone. What compares a corpus with the file
+    it came from is `musubi trace`; what catches it during a run is ADR-0004's
+    verbatim equality, which a substituted character makes false.
+    """
+    into = built(tmp_path, {"a.md": "# ギア設計\n"})
+    document = into / "documents" / "a.md"
+
+    damaged = document.read_text(encoding="utf-8").encode("ascii", "replace").decode("ascii")
+    document.write_text(damaged, encoding="utf-8", newline="\n")
+
+    body = manifest_of(into)
+    body["artefacts"][0]["content_hash"] = content_hash(damaged)
+    body["coverage"]["characters"] = len(damaged)
+    body["artefacts"][0]["characters"] = len(damaged)
+    rewrite(into, body)
+
+    assert "????" in document.read_text(encoding="utf-8"), "the fixture must be unfaithful"
+    assert "manifest 2" not in invariants(into), "the totals were made to agree"
+    assert "content" not in invariants(into), (
+        "verify reported a content fault, which would mean this limit no longer exists "
+        "and this test should be replaced by one asserting the stronger guarantee"
+    )
 
 
 # -- refusing rather than reporting nothing ---------------------------------

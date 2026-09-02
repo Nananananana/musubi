@@ -272,13 +272,21 @@ class TraceMap:
         two transformations, one answer, no hop the reader has to make
         themselves.
         """
-        if self.source_unit != CHARACTERS:
-            # Projecting a verbatim run through this map shifts an offset by a
-            # constant, which is only true while both sides count characters
-            # ([ADR-0018]).
+        if self.source_unit != CHARACTERS and any(
+            segment.kind is Kind.VERBATIM for segment in self.segments
+        ):
+            # Shifting an offset by a constant is the *only* arithmetic this
+            # composition does on the earlier source side, and it happens for
+            # verbatim runs alone -- every other kind is taken whole. So the
+            # constraint is not "both sides must count characters", it is "a
+            # verbatim run must", and a map with no verbatim run composes
+            # safely whatever it measures ([ADR-0025]). A PDF's map is that
+            # case: one segment per page, none of them verbatim, because there
+            # is no character-level correspondence inside a page.
             raise ValueError(
-                f"composition needs both sides in characters, and this map's source is "
-                f"measured in {self.source_unit}"
+                f"composition shifts offsets inside a verbatim run, which needs both "
+                f"sides counting the same thing; this map has verbatim runs and its "
+                f"source is measured in {self.source_unit}"
             )
         if later.source_length != self.artefact_length:
             raise ValueError(
@@ -304,6 +312,12 @@ class TraceMap:
             segments=tuple(composed),
             artefact_length=later.artefact_length,
             source_length=self.source_length,
+            # The source side is still this map's source, so it is still
+            # measured in this map's unit. Omitting it defaulted a composed PDF
+            # map to `characters` and published page indices under a label that
+            # said they were character offsets -- unreachable until ADR-0025
+            # let a non-character map compose at all.
+            source_unit=self.source_unit,
         )
 
     def _project(self, run: Segment, carried: set[int]) -> list[Segment]:

@@ -230,7 +230,7 @@ def test_a_map_measured_in_something_else_stops_the_answer(tmp_path: Path) -> No
     body["source_unit"] = "pdf-page"
     sidecar.write_text(json.dumps(body), encoding="utf-8")
 
-    with pytest.raises(ContractError, match="does not know how to read"):
+    with pytest.raises(ContractError, match="does not recognise"):
         resolve(Corpus(into), "design/gear.md", Span(0, 3))
 
 
