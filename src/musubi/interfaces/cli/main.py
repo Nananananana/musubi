@@ -293,6 +293,12 @@ def _report_verify(checked: Verified) -> None:
     print(f"musubi verify — {checked.summary()}")
     print(f"  {checked.destination}. run id {checked.run_id}")
     if checked.holds:
+        # A green answer whose meaning is narrower than it reads is the kind
+        # this project keeps finding, so the narrowing is printed beside it
+        # rather than left in a document nobody opened.
+        print("\n  This compares the corpus with its own manifest. It does not open")
+        print("  the sources, so it cannot say the corpus is faithful to them —")
+        print("  `musubi trace` is what opens a source and reports when it changed.")
         return
     print()
     print("Did not hold")

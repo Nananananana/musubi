@@ -286,6 +286,16 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   handing on a date that is uniform and looks like history — ADR-0022's failure
   arriving from the other direction. `kiseki-notes` warning that a Notion corpus
   shares one date is **correct**, and `docs/sources.md` says so.
+- **`musubi verify` compares a corpus with its own manifest, and that is not
+  fidelity.** A corruption that happened *before* the hash was taken is recorded
+  in the hash, and `verify` reports `all hold` — measured, by replacing every
+  non-ASCII character in `render()`: the corpus said `# ????` where the vault
+  said `# ギア設計` and the exit code was 0. **A hash agreeing with itself only
+  proves the damage was deterministic** (from `kiseki` via `manager`). This is a
+  boundary rather than a bug — `verify` answers about a folder with no run in
+  sight — so the report says it, the docstring says it, and a test pins it. What
+  compares a corpus with the file it came from is `musubi trace`; what catches
+  it during a run is ADR-0004's verbatim equality.
 - **"Is the output well formed" and "is the value the one that went in" are
   two questions, and they want different poisons.** Substituting characters
   *after* encoding gives invalid UTF-8, which the encoding tests catch.
