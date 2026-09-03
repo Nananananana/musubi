@@ -45,6 +45,15 @@ dependencies = []
 # `domain/alignment.py` recovers the tiling by finding that string in the
 # source: 99.7% traceable on the same measurement, against html@1's 93.5%.
 html = ["trafilatura>=2.0"]
+# PDFium, which is Chrome's PDF engine, behind a wheel with **no dependencies of
+# its own** and a BSD-3-Clause/Apache-2.0 licence.
+#
+# The case for it is not speed. musubi's own `pdf_text@1` scans for `N 0 obj`
+# and cannot see an object that lives inside a compressed object stream --
+# which is what a PDF 1.5 file is, and what every modern producer writes. On
+# such a file it reports `no_pages`, correctly and uselessly. Measured with
+# tools/pdf_coverage.py.
+pdf = ["pypdfium2>=4"]
 dev = [
     "pytest>=8",
     "pytest-cov",
@@ -65,6 +74,7 @@ dev = [
     # skipped. A test that skips on the developer's machine and in CI is a test
     # that has never run.
     "trafilatura>=2.0",
+    "pypdfium2>=4",
 ]
 
 # There is deliberately no `siblings` extra yet. The only sibling musubi ever

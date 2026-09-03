@@ -21,7 +21,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from ...ports.converter import Converter
-from .external import AlignedConverter, available
+from .external import adapters
 from .html import HtmlConverter
 from .pdf import PdfConverter
 from .text import MarkdownConverter, PlainTextConverter, TextConverter
@@ -107,5 +107,5 @@ for _builtin in (MarkdownConverter(), PlainTextConverter(), HtmlConverter(), Pdf
 
 # Offered, never claimed. Installing an extra adds a name a settings file can
 # use; it does not change what any folder already builds.
-for _extractor in available():
-    offer_converter(AlignedConverter(_extractor))
+for _adapter in adapters():
+    offer_converter(_adapter)

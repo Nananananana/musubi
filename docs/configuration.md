@@ -109,7 +109,8 @@ dependency. Those are **extras**, and installing one adds a name without
 changing anything:
 
 ```bash
-pip install 'musubi[html]'
+pip install 'musubi[html]'      # better main-content extraction
+pip install 'musubi[pdf]'       # reads the PDFs a scan of `N 0 obj` cannot
 ```
 
 ```toml
@@ -122,6 +123,7 @@ pip install 'musubi[html]'
 
 ```text
 Optional converters (ADR-0028). Installed ones are offered, never claimed:
+  pdfium@1         available    application/pdf  [BSD-3-Clause]
   trafilatura@1    available    text/html, application/xhtml+xml  [Apache-2.0]
 ```
 
@@ -132,6 +134,14 @@ source, so traceable coverage stays a measurement in the manifest rather than a
 claim. On one generated page: 99.7% through `trafilatura@1`, against 93.5% for
 the built-in `html@1` — and 6/6 planted boilerplate strings rejected against
 3/6. Re-derive both with `uv run python tools/html_coverage.py`.
+
+**PDF is different, and the difference is worth knowing.** There is no decoded
+text in a PDF to align against, so `pdfium@1` produces exactly the map
+`pdf_text@1` produces — one segment per page, and a citation that says *page
+three*. What the dependency buys there is **reach**: `pdf_text@1` finds objects
+by scanning for `N 0 obj`, and reports `no_pages` on a PDF 1.5, where the page
+lives inside a compressed object stream. That is what almost every current
+producer writes. Re-derive it with `uv run python tools/pdf_coverage.py`.
 
 Only permissively licensed extractors are offered. PyMuPDF is the fastest PDF
 reader in Python and is AGPL-3.0; an extra is still a dependency you ship.

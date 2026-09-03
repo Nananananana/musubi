@@ -25,8 +25,16 @@ from musubi.infrastructure.converters import (
     converter_for,
     known_converters,
 )
-from musubi.infrastructure.converters.external import EXTRACTORS, available, unavailable
-from musubi.ports.converter import Converted
+from musubi.infrastructure.converters.external import (
+    EXTRACTORS,
+    PAGE_EXTRACTORS,
+    TEXT_EXTRACTORS,
+    adapters,
+    available,
+    unavailable,
+)
+from musubi.ports.converter import Converted, Converter
+from pdf_fixtures import FIRST_LINE, classic, modern, scanned
 
 # -- the alignment ----------------------------------------------------------
 
@@ -205,32 +213,76 @@ PLANTED = (
 )
 
 
-@pytest.mark.parametrize("name", sorted(e.name for e in available()))
+#: One sample per media type an adapter might claim, so a parametrised test can
+#: hand each adapter something it can actually read. A single fixture would have
+#: measured `pdfium@1` on a web page.
+SAMPLES: dict[str, bytes] = {
+    "text/html": PAGE,
+    "application/xhtml+xml": PAGE,
+    "application/pdf": classic(),
+}
+
+
+def _sample_for(converter: Converter) -> tuple[str, bytes]:
+    for media_type in converter.media_types:
+        if media_type in SAMPLES:
+            return media_type, SAMPLES[media_type]
+    raise AssertionError(f"no sample for {converter.media_types}; this would measure nothing")
+
+
+def _named(name: str) -> Converter:
+    return next(c for c in known_converters() if c.name == name)
+
+
+@pytest.mark.parametrize("name", sorted(c.name for c in adapters()))
 def test_an_adapter_opens_no_socket(name: str, no_network: None) -> None:
     """The page holds an absolute URL, which is what a fetching extractor would
     reach for."""
-    converter = next(c for c in known_converters() if c.name == name)
-    result = converter.convert(PAGE, "text/html")
+    converter = _named(name)
+    media_type, sample = _sample_for(converter)
+    result = converter.convert(sample, media_type)
     assert isinstance(result, Converted), getattr(result, "reason", result)
 
 
-@pytest.mark.parametrize("name", sorted(e.name for e in available()))
+@pytest.mark.parametrize("name", sorted(c.name for c in adapters()))
 def test_an_adapter_returns_a_map_that_resolves(name: str) -> None:
-    """The thing an extractor cannot give and this has to recover."""
-    converter = next(c for c in known_converters() if c.name == name)
-    result = converter.convert(PAGE, "text/html")
+    """The thing an extractor cannot give and an adapter has to recover."""
+    converter = _named(name)
+    media_type, sample = _sample_for(converter)
+    result = converter.convert(sample, media_type)
     assert isinstance(result, Converted)
     assert result.trace.traceable_coverage > 0.5, (
-        f"{name} produced text the alignment could not place; a better extraction "
-        f"that cannot be traced is not the trade ADR-0028 made"
+        f"{name} produced text nothing could place; a better extraction that "
+        f"cannot be traced is not the trade ADR-0028 made"
     )
+    assert result.trace.artefact_length == len(result.text)
     for segment in result.trace.segments:
         if segment.kind is Kind.VERBATIM:
             assert segment.out.length == segment.src.length
 
 
-@pytest.mark.skipif(not available(), reason="no optional extractor is installed")
-def test_the_adapter_rejects_boilerplate_the_built_in_one_keeps() -> None:
+@pytest.mark.parametrize("name", sorted(c.name for c in adapters()))
+def test_an_adapter_refuses_rubbish_rather_than_raising(name: str) -> None:
+    """A folder of thousands holds a truncated file, and [ADR-0008] wants a run
+    that stops on a credential and keeps going past one of those.
+
+    An exception escaping an adapter takes the whole sync with it, and the code
+    it would escape from is not musubi's.
+    """
+    converter = _named(name)
+    media_type, _ = _sample_for(converter)
+    result = converter.convert(bytes([0, 1]) + b" not a document " + bytes([255]), media_type)
+    assert not isinstance(result, Converted), "read a document out of noise"
+    assert result.reason, "refused without saying why"
+
+
+# -- what each dependency actually buys -------------------------------------
+
+
+@pytest.mark.skipif(
+    not [e for e in TEXT_EXTRACTORS if e.load()], reason="no text extractor installed"
+)
+def test_the_html_adapter_rejects_boilerplate_the_built_in_one_keeps() -> None:
     """The measurement ADR-0028 rests on, as an assertion rather than a table.
 
     Not a threshold on a score. `html@1` keeps a cookie banner and a newsletter
@@ -243,9 +295,8 @@ def test_the_adapter_rejects_boilerplate_the_built_in_one_keeps() -> None:
     mine = built_in.convert(PAGE, "text/html")
     assert isinstance(mine, Converted)
 
-    offered = next(iter(available()))
-    adapter = next(c for c in known_converters() if c.name == offered.name)
-    theirs = adapter.convert(PAGE, "text/html")
+    offered = next(e for e in TEXT_EXTRACTORS if e.load() is not None)
+    theirs = _named(offered.name).convert(PAGE, "text/html")
     assert isinstance(theirs, Converted)
 
     kept_by_mine = {phrase for phrase in PLANTED if phrase in mine.text}
@@ -259,7 +310,7 @@ def test_the_adapter_rejects_boilerplate_the_built_in_one_keeps() -> None:
 
 
 @pytest.mark.skipif(not available(), reason="no optional extractor is installed")
-def test_the_content_survives_both_of_them() -> None:
+def test_the_content_survives_both_html_converters() -> None:
     """The half that matters more. A dropped paragraph is worse than a kept
     banner: the corpus goes on answering questions without it, and nothing
     anywhere says so."""
@@ -270,3 +321,64 @@ def test_the_content_survives_both_of_them() -> None:
         result = converter.convert(PAGE, "text/html")
         assert isinstance(result, Converted), converter.name
         assert paragraph in result.text, converter.name
+
+
+# -- the PDF half, which is reach rather than quality -----------------------
+
+_PAGED = [e for e in PAGE_EXTRACTORS if e.load()]
+
+
+@pytest.mark.skipif(not _PAGED, reason="no page extractor installed")
+def test_the_pdf_adapter_reads_the_file_every_producer_writes() -> None:
+    """`pdf_text@1` scans for `N 0 obj`.
+
+    A PDF 1.5 keeps its catalogue, page tree and page inside a **compressed
+    object stream**, where none of them is written that way, so the scan finds
+    nothing and reports `no_pages`. That is correct, it is useless, and it is
+    the shape of file almost every current producer emits.
+    """
+    built_in = converter_for("application/pdf")
+    assert built_in is not None
+    assert isinstance(built_in.convert(classic(), "application/pdf"), Converted), (
+        "the built-in converter stopped reading the shape it was written for"
+    )
+
+    refused = built_in.convert(modern(), "application/pdf")
+    assert not isinstance(refused, Converted)
+    assert refused.reason == "no_pages"
+
+    read = _named(_PAGED[0].name).convert(modern(), "application/pdf")
+    assert isinstance(read, Converted), getattr(read, "reason", read)
+    assert FIRST_LINE in read.text
+
+
+@pytest.mark.skipif(not _PAGED, reason="no page extractor installed")
+def test_a_better_extractor_does_not_change_what_an_offset_means() -> None:
+    """A corpus rebuilt with `pdfium@1` still cites *page three*.
+
+    This is what the paged shape is for. Alignment recovers character offsets
+    where there is text to align against; a PDF has none, so the locator stays
+    a page and both converters agree about it ([ADR-0025]).
+    """
+    built_in = converter_for("application/pdf")
+    assert built_in is not None
+    mine = built_in.convert(classic(), "application/pdf")
+    theirs = _named(_PAGED[0].name).convert(classic(), "application/pdf")
+    assert isinstance(mine, Converted)
+    assert isinstance(theirs, Converted)
+
+    assert mine.trace.source_unit == theirs.trace.source_unit == "opaque"
+    assert [s.src for s in mine.trace.segments] == [s.src for s in theirs.trace.segments]
+    assert mine.source_encoding == theirs.source_encoding == ""
+
+
+@pytest.mark.skipif(not _PAGED, reason="no page extractor installed")
+def test_a_page_with_no_text_is_still_refused_by_both() -> None:
+    """OCR belongs to a program the owner runs before musubi ([ADR-0007]), and a
+    better reader does not change that. A refusal that quietly became an empty
+    document would be the worse outcome."""
+    for converter in (converter_for("application/pdf"), _named(_PAGED[0].name)):
+        assert converter is not None
+        result = converter.convert(scanned(), "application/pdf")
+        assert not isinstance(result, Converted)
+        assert result.reason == "no_text_layer"

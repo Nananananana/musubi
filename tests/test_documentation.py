@@ -292,6 +292,7 @@ _NUMBERS = {
     26: "Twenty-six",
     27: "Twenty-seven",
     28: "Twenty-eight",
+    29: "Twenty-nine",
 }
 
 

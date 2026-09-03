@@ -471,6 +471,14 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   external.py`, imports its dependency **inside a function**, and is *offered*
   rather than registered — installing an extra must not change what any folder
   already builds.
+- **Alignment needs a source that is text, and PDF is where that stops.**
+  `PagedConverter` exists for sources that are not (ADR-0029): the locator stays
+  a page and `pdf_text@1` and `pdfium@1` produce **the same `src` spans**, which
+  a test asserts. `pdfium` will report a character box per glyph; musubi
+  declines it, because *page three* is a claim a reader can check by opening the
+  file and *page three, character 47* is not. What the dependency buys here is
+  **reach**, not precision -- a scan for `N 0 obj` reports `no_pages` on every
+  PDF 1.5.
 - **An extractor that returns only text still owes a map.** `domain/alignment.py`
   recovers one by finding the output's lines in the source: verbatim where they
   are there, transformed where they are not, and `removal` for a stretch that
