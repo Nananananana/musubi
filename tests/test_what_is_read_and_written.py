@@ -13,6 +13,12 @@ step on their own — **a suffix a source will read, and a media type some
 converter has claimed.** A source offering a suffix nothing can convert produces
 a corpus quietly smaller than the folder; a converter claiming a media type no
 source offers is a claim nothing feeds real input to.
+
+**It has already earned this once.** The PDF converter landed on a different
+branch while this one was open, adding `.pdf` to `MEDIA_TYPES` and nothing else
+this file touches. `git` merged both cleanly -- there was no textual conflict --
+and this test went red on the rebase, which is the only place the disagreement
+was visible.
 """
 
 from __future__ import annotations
@@ -33,6 +39,7 @@ READ_FROM_A_FOLDER = {
     ".html",
     ".htm",
     ".xhtml",
+    ".pdf",
 }
 
 
