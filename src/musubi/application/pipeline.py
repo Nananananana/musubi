@@ -27,6 +27,7 @@ from ..domain.record import Unit, unit_key
 from ..domain.removal import RemovalRecord, Ruleset
 from ..domain.screening import Finding
 from ..domain.trace import TraceMap
+from ..errors import SourceError
 from ..ports.converter import Converted, Converter
 from ..ports.emitter import Document, Emitter
 from ..ports.screener import Screener
@@ -82,8 +83,24 @@ def run(source: Source, settings: Settings, emitter: Emitter, *, write: bool) ->
         Skip(source.source_id, item.origin, item.reason, item.detail) for item in discovery.skipped
     ]
 
+    # A key is the artefact's path, so two units sharing one is one document
+    # overwriting another with the manifest listing both -- a corpus quietly
+    # smaller than its own account of itself, and every coverage number in it
+    # counting a file that is not there. Refused rather than resolved: which of
+    # two pages owns a page id is not something musubi can decide, and the
+    # source's `key_derivation` is the thing that turned out not to be true.
+    claimed: dict[str, str] = {}
+
     for found in sorted(discovery.found, key=lambda f: f.key_parts):
         key = unit_key(*found.key_parts)
+        if key in claimed:
+            raise SourceError(
+                f"{source.source_id} derives the key {key!r} for two different units "
+                f"({claimed[key]} and {found.origin}). Its key_derivation is "
+                f"{source.key_derivation!r}, and one of the two would have overwritten "
+                f"the other while the manifest listed both."
+            )
+        claimed[key] = found.origin
         content = source.read(found)
 
         hits = list(settings.screener.screen(_peek(content)))

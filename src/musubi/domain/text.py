@@ -20,7 +20,6 @@ and hands back values.
 from __future__ import annotations
 
 import codecs
-import itertools
 import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -276,12 +275,40 @@ def decode(data: bytes) -> Decoded:
 
 
 def _refuse_overlaps(ordered: Sequence[Replacement]) -> None:
-    for earlier, later in itertools.pairwise(ordered):
-        if earlier.span.overlaps(later.span):
-            raise ValueError(
-                f"replacements {earlier.kind!r} {earlier.span} and {later.kind!r} "
-                f"{later.span} overlap; which one wins is a decision, not a default"
+    """Refuse any pair that claims the same source, including an empty one.
+
+    **Not pairwise, and not** :meth:`Span.overlaps` **alone.** An empty span
+    overlaps nothing by definition -- it has to, or every legal insertion would
+    collide with the run it sits in -- so an insertion *strictly inside* another
+    replacement's span passes both tests, and the pair is not adjacent after
+    sorting either. It was caught, but by ``_assert_tiles`` half a function
+    later, reporting `the source tiling has a gap or an overlap at 10` about
+    musubi's own arithmetic rather than about the two rules that disagreed.
+
+    A refusal that fires from the wrong place says the wrong thing, and ADR-0009
+    is precisely that *which rule wins is a decision somebody makes*. So this
+    carries the furthest end it has seen rather than comparing neighbours, which
+    settles the empty case and the non-adjacent case with the same line.
+    """
+    reach = 0
+    claimant: Replacement | None = None
+    for replacement in ordered:
+        if claimant is not None and replacement.span.start < reach:
+            what = (
+                "has nowhere to go inside"
+                if replacement.span.is_empty
+                else "overlaps"
+                if not claimant.span.is_empty
+                else "runs back over"
             )
+            raise ValueError(
+                f"replacement {replacement.kind!r} {replacement.span} {what} "
+                f"{claimant.kind!r} {claimant.span}; which one wins is a decision, "
+                f"not a default"
+            )
+        if replacement.span.end >= reach:
+            reach = replacement.span.end
+            claimant = replacement
 
 
 def _assert_tiles(spans: Iterable[Span], total: int, side: str) -> None:
