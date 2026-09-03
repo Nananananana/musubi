@@ -25,6 +25,7 @@ This convention is taken from the sibling projects `kiseki`, `tsumugi` and
 | `docs/architecture.md` | The current architecture — **not written yet, on purpose** |
 | `docs/contracts.md` | The SyncManifest and TraceMap contracts, for producers and consumers — including what the schemas cannot say |
 | `docs/sources.md` | Per source: its key derivation, its rule pack, and `kiseki`'s ten questions answered |
+| `docs/configuration.md` | Every setting, where they are read from, and which algorithms a setting can name |
 | `docs/threat-model.md` | What a synced folder and a trace map contain, and what they become if they leak |
 | `docs/evaluation-corpus.md` | The generated dataset: its shape, its plants, and what it cannot tell you |
 | `docs/measurements.md` | Traceable coverage, map size, screener recall and the re-read ratio, with the tools that produced them |
@@ -119,6 +120,7 @@ request as the code it describes.
 | The emitter | Front matter, the trace sidecar, staging, atomic promotion, and withdrawal |
 | The contracts | Both schemas, shipped in the wheel, validated against real output ([`contracts.md`](contracts.md)) |
 | The invariants | What the schemas cannot express, asserted against generated corpora — and a guard that fails if the enumeration grows an entry nothing runs |
+| `musubi config` | Every setting in effect **with the thing that decided it**, and the files found and not read. Reads a `musubi.toml`, a `[tool.musubi]` table or the environment; the nearest file wins whole ([ADR-0027](adr/0027-the-nearest-file-wins-whole-and-every-value-says-where-it-came-from.md)) |
 | `musubi verify` | The same invariants, run against a folder rather than a run — plus the one no test can make, that each document still hashes to what the manifest recorded |
 
 **Not built, and named rather than implied:**

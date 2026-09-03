@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 
+from musubi.config import OPTIONS, Option
+
 ROOT = Path(__file__).resolve().parent.parent
 ADR = ROOT / "docs" / "adr"
 
@@ -221,6 +223,42 @@ def test_a_command_the_docs_call_missing_is_missing(command: str) -> None:
     )
 
 
+CONFIGURATION = ROOT / "docs" / "configuration.md"
+
+
+def _options() -> tuple[Option, ...]:
+    assert OPTIONS, "no settings; the guard below would run zero times"
+    return OPTIONS
+
+
+def test_every_setting_is_documented_and_nothing_else_is() -> None:
+    """A set equality, so an empty side cannot satisfy it.
+
+    `OPTIONS`, the parser's flags and `docs/configuration.md` are three lists in
+    three files with no reason to stay in step, and ADR-0027 says so under what
+    it costs. This closes one of the three pairs.
+    """
+    body = CONFIGURATION.read_text(encoding="utf-8")
+    table = [line for line in body.splitlines() if line.startswith("| `")]
+    documented = {line.split("`")[1] for line in table}
+    assert documented, "the settings table in docs/configuration.md was not found"
+    assert documented == {option.name for option in OPTIONS}
+
+
+@pytest.mark.parametrize("option", sorted(o.name for o in _options()))
+def test_every_setting_documents_its_default(option: str) -> None:
+    """A table row that omits the default is the row somebody reads to find out
+    what happens if they leave it out."""
+    default = next(o.default for o in OPTIONS if o.name == option)
+    row = next(
+        line
+        for line in CONFIGURATION.read_text(encoding="utf-8").splitlines()
+        if line.startswith(f"| `{option}`")
+    )
+    shown = str(default) if default not in ({}, []) else "*(empty)*"
+    assert shown in row, f"`{option}` defaults to {default!r} and its row does not say so"
+
+
 def test_the_counts_in_the_docs_are_the_counts_in_the_code() -> None:
     """The same discipline as asserting a schema's enums against the code's:
     two statements of one fact, kept one by a test."""
@@ -252,6 +290,7 @@ _NUMBERS = {
     24: "Twenty-four",
     25: "Twenty-five",
     26: "Twenty-six",
+    27: "Twenty-seven",
 }
 
 
