@@ -477,6 +477,13 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   run anything. A converter from elsewhere is registered by a program that
   imported musubi deliberately, and is then nameable because the table is read
   when the question is asked rather than at import.
+- **A mutation score is a statement about the test selection.**
+  `tools/mutate.py` changes one operator, runs the tests, and asks whether
+  anything noticed. `domain/screening.py` scored **74% against its own test file
+  and 100% against the suite**, unchanged in between -- so quote the `--tests`
+  argument with any number, and never narrow it to make a sweep faster. Not
+  `mutmut`: it refuses to run outside WSL on Windows, and a CI job for a tool
+  nobody here can run is a check whose failures nobody can reproduce.
 - **A refusal is only as good as the inputs it was pointed at, and the six in
   `tests/test_the_refusals_that_did_not_fire.py` were each already written.**
   Overlapping replacements were refused and an insertion *inside* one was not,
