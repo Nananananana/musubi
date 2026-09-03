@@ -291,23 +291,40 @@ def test_two_units_with_the_same_key_stop_the_run(tmp_path: Path) -> None:
     "path",
     [
         "documents/../../secrets.md",
-        "documents/C:/Windows/win.ini",
         "documents//etc/passwd",
         "documents/",
     ],
 )
 def test_a_manifest_cannot_point_verify_outside_the_corpus(tmp_path: Path, path: str) -> None:
-    """`key_of` checked the prefix, which says where a path starts.
-
-    `documents/../..` leaves by the obvious door. `documents/C:/...` leaves by
-    one that is invisible to a POSIX reading: no `..`, not absolute, and joining
-    it on Windows discards everything to its left. So the question is asked of
-    the filesystem rather than of the string, and does not need to know which
-    platform it is on.
-    """
+    """`key_of` checked the prefix, which says only where a path starts."""
     key = path[len("documents/") :]
     with pytest.raises(ContractError, match="does not stay under"):
         Corpus(tmp_path).key_of(path, f"traces/{key}.json")
+
+
+def test_the_same_key_escapes_on_one_platform_and_does_not_on_another(tmp_path: Path) -> None:
+    """`documents/C:/Windows/win.ini`, and why the check asks the filesystem.
+
+    It holds no `..` and is not absolute by POSIX rules, so a string test would
+    pass it everywhere. On Windows, joining it **discards everything to its
+    left** and `verify` reads a file nobody synced. On Linux it is an ordinary
+    relative directory called `C:`.
+
+    Both are correct, and neither is a special case in the code: the question is
+    put to `Path.resolve` and `relative_to`, which already know which platform
+    they are on. This test is written the same way -- the *first* run of it
+    asserted the Windows answer on every platform and went red on four CI
+    machines, which is the same mistake one layer up.
+    """
+    corpus = Corpus(tmp_path)
+    path = "documents/C:/Windows/win.ini"
+    escapes = (Path("documents") / "C:/Windows/win.ini").is_absolute()
+
+    if escapes:
+        with pytest.raises(ContractError, match="does not stay under"):
+            corpus.key_of(path, "traces/C:/Windows/win.ini.json")
+    else:
+        assert corpus.key_of(path, "traces/C:/Windows/win.ini.json") == "C:/Windows/win.ini"
 
 
 def test_the_paths_musubi_writes_are_still_accepted(tmp_path: Path) -> None:
