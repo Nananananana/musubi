@@ -131,7 +131,13 @@ ignore = [
 # A measurement script generates a population. `random` is the right tool for
 # that and `secrets` is not; the seed is printed with every number precisely so
 # that it is reproducible, which is the opposite of what S311 is warning about.
-"tools/*" = ["S311"]
+"tools/*" = [
+    "S311",
+    # `mutate.py` runs `git` and `pytest`. Both are named literally, both take
+    # arguments the maintainer typed, and there is no shell.
+    "S603",
+    "S607",
+]
 
 [tool.mypy]
 python_version = "3.12"
