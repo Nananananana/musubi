@@ -102,6 +102,40 @@ The wiring — which class implements `notion`, which pack `core` names — live
 `musubi/config.py`, the composition root the architecture map reserves for it.
 An interface prints a configuration or runs one; neither needs to know.
 
+## Optional converters
+
+Some formats have a better extractor than musubi's own, and taking it costs a
+dependency. Those are **extras**, and installing one adds a name without
+changing anything:
+
+```bash
+pip install 'musubi[html]'
+```
+
+```toml
+# musubi.toml -- until this line exists, nothing has changed
+[converters]
+"text/html" = "trafilatura@1"
+```
+
+`musubi config` lists what is installed and what is not:
+
+```text
+Optional converters (ADR-0028). Installed ones are offered, never claimed:
+  trafilatura@1    available    text/html, application/xhtml+xml  [Apache-2.0]
+```
+
+An external extractor returns text and no offsets, which is the shape
+[ADR-0004](adr/0004-a-conversion-carries-a-map-back-to-its-source.md) cannot
+use. musubi **recovers** the map by aligning the extractor's output against the
+source, so traceable coverage stays a measurement in the manifest rather than a
+claim. On one generated page: 99.7% through `trafilatura@1`, against 93.5% for
+the built-in `html@1` — and 6/6 planted boilerplate strings rejected against
+3/6. Re-derive both with `uv run python tools/html_coverage.py`.
+
+Only permissively licensed extractors are offered. PyMuPDF is the fastest PDF
+reader in Python and is AGPL-3.0; an extra is still a dependency you ship.
+
 ## What cannot be configured
 
 - **The screener cannot be turned off.** A run stops on a credential

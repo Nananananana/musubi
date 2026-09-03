@@ -26,9 +26,25 @@ classifiers = [
 # Zero. Not "few". See docs/adr/0001-the-domain-depends-on-nothing.md -- musubi
 # is pointed at the folder that holds everything the owner has ever written,
 # and every runtime dependency is code with unsupervised read access to it.
+#
+# **This line is the promise, and the extras below are not exceptions to it.**
+# ADR-0028 allows a dependency outside the domain, optional and never required:
+# `pip install musubi` still installs nothing, every default converter is still
+# musubi's own, and an extra that is present is *offered* rather than claimed --
+# it adds a name a settings file can use and changes no folder's output on its
+# own.
 dependencies = []
 
 [project.optional-dependencies]
+# Main-content extraction that wins its benchmarks, where musubi's own scan of
+# tags does not: measured with tools/html_coverage.py at 6/6 boilerplate strings
+# rejected against 3/6, on the same page. Apache-2.0, and every one of its own
+# dependencies is Apache-2.0, BSD or MIT.
+#
+# The map is not lost by taking it. trafilatura returns a string, and
+# `domain/alignment.py` recovers the tiling by finding that string in the
+# source: 99.7% traceable on the same measurement, against html@1's 93.5%.
+html = ["trafilatura>=2.0"]
 dev = [
     "pytest>=8",
     "pytest-cov",
@@ -45,6 +61,10 @@ dev = [
     # Stubs, so that the tests validating against the contracts are type-checked
     # rather than skipped over as untyped imports.
     "types-jsonschema",
+    # The optional extras, so that the adapters are exercised rather than
+    # skipped. A test that skips on the developer's machine and in CI is a test
+    # that has never run.
+    "trafilatura>=2.0",
 ]
 
 # There is deliberately no `siblings` extra yet. The only sibling musubi ever

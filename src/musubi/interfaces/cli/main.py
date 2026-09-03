@@ -33,6 +33,7 @@ from ...domain.manifest import Manifest, render
 from ...domain.span import Span
 from ...domain.trace import CHARACTERS
 from ...errors import MusubiError, TraceError
+from ...infrastructure.converters.external import available, unavailable
 from ...infrastructure.corpus import Corpus
 from ...infrastructure.emitters import DOCUMENTS, MANIFEST, TRACES, DocumentEmitter
 from ...infrastructure.screeners import EntropyScreener
@@ -562,6 +563,15 @@ def _config(arguments: argparse.Namespace) -> int:
                 {
                     "read": str(configuration.read) if configuration.read else None,
                     "passed_over": [str(path) for path in configuration.passed_over],
+                    "optional_converters": {
+                        extractor.name: {
+                            "installed": extractor in available(),
+                            "extra": extractor.extra,
+                            "licence": extractor.licence,
+                            "media_types": list(extractor.media_types),
+                        }
+                        for extractor in (*available(), *unavailable())
+                    },
                     "settings": {
                         name: {"value": configuration[name], "origin": configuration.origin(name)}
                         for name, _, _, _ in rows
@@ -586,6 +596,19 @@ def _config(arguments: argparse.Namespace) -> int:
         print("  found further up and not read, because the nearest file wins whole:")
         for path in configuration.passed_over:
             print(f"    {path}")
+
+    offered = available()
+    missing = unavailable()
+    if offered or missing:
+        print()
+        print("Optional converters (ADR-0028). Installed ones are offered, never claimed:")
+        for extractor in offered:
+            print(
+                f"  {extractor.name:<16} available    "
+                f"{', '.join(extractor.media_types)}  [{extractor.licence}]"
+            )
+        for extractor in missing:
+            print(f"  {extractor.name:<16} not installed  pip install '{extractor.extra}'")
     return 0
 
 

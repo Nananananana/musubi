@@ -42,6 +42,7 @@ later ADR supersedes it and says so.
 | [0025](0025-a-map-with-no-verbatim-run-composes-whatever-it-measures.md) | A map with no verbatim run composes whatever it measures |
 | [0026](0026-a-prefix-in-the-middle-of-a-blob-is-not-a-credential.md) | A prefix in the middle of a blob is not a credential |
 | [0027](0027-the-nearest-file-wins-whole-and-every-value-says-where-it-came-from.md) | The nearest file wins whole, and every value says where it came from |
+| [0028](0028-a-dependency-outside-the-domain-buys-quality-and-still-owes-a-map.md) | A dependency outside the domain buys quality, and still owes a map |
 
 [0004](0004-a-conversion-carries-a-map-back-to-its-source.md) is the one to read
 first. The rest of the design is arranged around it, and

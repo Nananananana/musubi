@@ -23,6 +23,7 @@ from musubi.domain.trace import CHARACTERS, OPAQUE, Kind, Segment, TraceMap
 from musubi.infrastructure.converters import (
     MarkdownConverter,
     PlainTextConverter,
+    claimed_converters,
     converter_for,
     known_converters,
     register_converter,
@@ -201,12 +202,33 @@ def test_the_registry_lists_what_it_holds() -> None:
         "text/markdown": "markdown@1",
         "text/plain": "plaintext@1",
     }
-    assert [c.name for c in known_converters()] == [
+    assert [c.name for c in claimed_converters()] == [
         "html@1",
         "markdown@1",
         "pdf_text@1",
         "plaintext@1",
     ]
+
+
+def test_being_known_and_holding_a_media_type_are_two_different_things() -> None:
+    """[ADR-0028]. An optional adapter is *offered*: it is a name a settings file
+    can select, and it changes nothing on its own.
+
+    The distinction is the whole safety property of taking a dependency. If
+    installing `musubi[html]` silently took `text/html`, then every corpus in
+    every environment would depend on what happened to be in site-packages, and
+    two machines with the same settings would build different folders.
+    """
+    from musubi.infrastructure.converters.external import available
+
+    claimed = {c.name for c in claimed_converters()}
+    known = {c.name for c in known_converters()}
+    assert claimed <= known
+
+    offered = {e.name for e in available()}
+    assert offered <= known - claimed, (
+        f"{sorted(offered & claimed)} claimed a media type by being installed"
+    )
 
 
 class Rival:

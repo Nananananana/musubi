@@ -118,9 +118,13 @@ worth more than a complete-looking one whose edges cannot be examined.
 
 ## Design in five lines
 
-- **Zero runtime dependencies.** musubi is pointed at everything you have ever
-  written; every dependency is a third party with unsupervised read access to it.
-  Checked in CI ([ADR-0001](docs/adr/0001-the-domain-depends-on-nothing.md)).
+- **Zero runtime dependencies**, and the extras are opt-in. musubi is pointed at
+  everything you have ever written; every dependency is a third party with
+  unsupervised read access to it. `pip install musubi` installs nothing, and an
+  extra that is installed is *offered* rather than claimed — it adds a converter
+  a settings file can select and changes no folder's output on its own
+  ([ADR-0001](docs/adr/0001-the-domain-depends-on-nothing.md),
+  [ADR-0028](docs/adr/0028-a-dependency-outside-the-domain-buys-quality-and-still-owes-a-map.md)).
 - **A conversion carries a map back to its source**, or it does not ship
   ([ADR-0004](docs/adr/0004-a-conversion-carries-a-map-back-to-its-source.md)).
 - **Every subtraction is recorded** with the rule that made it, by hash and never
@@ -207,7 +211,7 @@ already had, and **no component in that chain imports another**.
 | [`docs/proposals/0001-the-design.md`](docs/proposals/0001-the-design.md) | The design, the roadmap, and what would falsify it |
 | [`docs/contracts.md`](docs/contracts.md) | The two contracts, for producers and consumers — including what the schemas cannot say |
 | [`docs/concept.md`](docs/concept.md) | The conceptual model, and the picture across five projects |
-| [`docs/adr/`](docs/adr/README.md) | Twenty-seven decisions, with their reasons and their costs |
+| [`docs/adr/`](docs/adr/README.md) | Twenty-eight decisions, with their reasons and their costs |
 | [`AGENTS.md`](AGENTS.md) | The rules for anyone — human or model — changing this repository |
 
 ## License

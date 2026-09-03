@@ -218,7 +218,10 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   `tests/test_invariants.py` — the producer checking itself, in the same
   package. A contract freezes when something else needed it.
 - **License: Apache-2.0. Python: 3.12+. Runtime dependencies: 0**, checked in CI
-  by installing the wheel with no extras and asserting nothing came along.
+  by installing the wheel with no extras and asserting nothing came along. The
+  `html` extra (ADR-0028) does not change that number: it is optional, it is
+  *offered* rather than claimed, and the CI check is the thing that keeps the
+  two facts from drifting.
 - **Built:** `domain/` — `span`, `text`, `trace`, `hashing`, `record`, `removal`,
   `cleansing`, `screening`, `frontmatter`, `manifest`; `ports/` (`screener`,
   `source`, `converter`, `emitter`); `infrastructure/` (`rules`, `screeners`,
@@ -462,6 +465,23 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   named for the numbered entries, and a guard fails if the list grows an entry
   nothing runs. Everything there is asserted against a **real sync** of a
   generated vault, never against a document a test assembled.
+- **Outside the domain, a dependency is allowed; inside it, never** (ADR-0028).
+  `domain/` is standard-library only and the architecture test asserts it. An
+  adapter for somebody else's extractor lives in `infrastructure/converters/
+  external.py`, imports its dependency **inside a function**, and is *offered*
+  rather than registered — installing an extra must not change what any folder
+  already builds.
+- **An extractor that returns only text still owes a map.** `domain/alignment.py`
+  recovers one by finding the output's lines in the source: verbatim where they
+  are there, transformed where they are not, and `removal` for a stretch that
+  produced nothing. It is a forward scan with a bounded window and not a diff,
+  for ADR-0016's reason — a scan running unattended over arbitrary documents
+  must not be able to hang. Measured: 99.7% traceable through `trafilatura@1`
+  against 93.5% for the built-in `html@1`, on the same page
+  (`tools/html_coverage.py`).
+- **Only permissive licences in an extra.** PyMuPDF is the fastest PDF reader in
+  Python and is AGPL-3.0. `test_every_adapter_states_a_permissive_licence` is
+  what keeps it out, because an extra is still a dependency the user ships.
 - **A setting arrives from four places and says which one.** `--flag` beats
   `MUSUBI_*` beats the nearest `musubi.toml` beats the default, the nearest file
   wins **whole** rather than merging, and `musubi config` prints the origin

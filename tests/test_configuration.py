@@ -188,7 +188,7 @@ def test_a_converter_override_is_resolved_before_the_run_not_during_it() -> None
     one format, reported as `no_converter` on every file of it -- which reads as
     a sentence about the input."""
     with pytest.raises(ContractError, match="not registered"):
-        chooser({"text/html": "trafilatura@1"})
+        chooser({"text/html": "a-converter-nobody-wrote@1"})
 
 
 def test_an_override_changes_only_the_media_type_it_names() -> None:
