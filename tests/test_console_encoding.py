@@ -227,6 +227,36 @@ def test_an_export_still_writes_a_document_on_a_console_that_cannot_show_it(
     assert report, "the report was not printed at all"
 
 
+def test_the_mcp_server_speaks_utf8_whatever_the_console_is(
+    tmp_path: Path, vault: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The seventh command, and the guard's third catch.
+
+    `mcp` is the worst case ADR-0020 describes rather than the mild one. A
+    protocol stream that lost a character is not a glyph missing from a report
+    -- it is JSON a client cannot parse, or worse, JSON it *can* parse with a
+    document quietly mangled inside it. The server writes to the stream it is
+    handed, so this hands it one that cannot encode the note.
+    """
+    console = narrow_console(monkeypatch)
+    request = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {"name": "musubi_convert", "arguments": {"path": "設計メモ.md"}},
+    }
+    # Through `main`, with a real stdin, rather than by calling `serve`: the
+    # guard below asks whether the **command** was exercised, and a test that
+    # reached past the command would satisfy the letter of it while leaving
+    # `_readable()` and the argument parsing uncovered.
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(request) + "\n"))
+    assert main(["mcp", str(vault)]) == 0
+
+    answer = json.loads(console.written().decode("utf-8"))
+    body = json.loads(answer["result"]["content"][0]["text"])
+    assert NOTE.strip() in body["text"], "the document did not survive the round trip"
+
+
 def test_every_command_the_parser_knows_is_exercised_here() -> None:
     """The drift guard, and the reason this file needs one.
 

@@ -518,6 +518,12 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   run anything. A converter from elsewhere is registered by a program that
   imported musubi deliberately, and is then nameable because the table is read
   when the question is asked rather than at import.
+- **A protocol stream is UTF-8, and a console codec will silently eat it.**
+  ADR-0020 records this for `--json`; `musubi mcp` had it again, and worse --
+  `--json` is read by a person who might notice, a protocol stream by a parser.
+  On cp932 it wrote JSON a client cannot decode, or with `errors="replace"` in
+  front of it, JSON it *can* decode with the document mangled inside. Anything
+  machine-facing goes to `sys.stdout.buffer` as bytes.
 - **Every numeric constant in `src/` is registered in
   `tests/test_thresholds.py` as a bound, a measurement or a threshold, and the
   build fails when a new one is not** (ADR-0033). A threshold must cite a sweep

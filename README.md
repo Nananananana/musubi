@@ -59,6 +59,19 @@ musubi export ./corpus > corpus.jsonl   # one JSON object per document
 so an upsert updates rather than duplicates.
 [`docs/using-a-corpus.md`](docs/using-a-corpus.md) is the whole of it.
 
+## Or give it to an agent
+
+```bash
+musubi mcp ~/notes
+```
+
+A Model Context Protocol server on stdio — standard library, no dependencies.
+Three read-only tools, and the one that matters is `musubi_trace`: an agent can
+convert a document and then **cite a range of it back to a place in your file**,
+in the same session. A string cannot be checked; a citation can.
+
+Rooted at the folder you name, and every path outside it is refused.
+
 ## How it compares
 
 | | musubi | markitdown | docling | unstructured |

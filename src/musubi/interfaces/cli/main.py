@@ -204,6 +204,24 @@ def _parser() -> argparse.ArgumentParser:
         help="a file to write (default: standard output, so it can be piped)",
     )
 
+    serving = commands.add_parser(
+        "mcp",
+        help="serve musubi over the Model Context Protocol, on stdin and stdout",
+        description=(
+            "Speaks JSON-RPC over stdio so an agent can convert a document and then "
+            "cite it back to the byte in the same session. Rooted at the folder given: "
+            "every path outside it is refused (ADR-0007). Reads only -- there is "
+            "deliberately no tool that writes a corpus."
+        ),
+    )
+    serving.add_argument(
+        "root",
+        type=Path,
+        nargs="?",
+        default=Path(),
+        help="the folder this server may read (default: the working directory)",
+    )
+
     setting = commands.add_parser(
         "config",
         help="print the settings in effect, and where each came from",
@@ -615,6 +633,13 @@ def _export(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _mcp(arguments: argparse.Namespace) -> int:
+    """Serve until stdin closes. Prints nothing to stdout but protocol."""
+    from ..mcp import serve
+
+    return serve(arguments.root)
+
+
 def _config(arguments: argparse.Namespace) -> int:
     """What this folder would run with, and why.
 
@@ -688,6 +713,7 @@ COMMANDS.update(
         "trace": _trace,
         "verify": _verify,
         "export": _export,
+        "mcp": _mcp,
         "config": _config,
     }
 )
