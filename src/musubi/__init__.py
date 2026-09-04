@@ -5,8 +5,9 @@ zip, a Slack archive, a shelf of PDFs -- into clean, normalized documents that
 can still point back at the byte they came from. No network, no service
 credentials, no model.
 
-Nothing is built yet. See ``docs/proposals/0001-the-design.md`` for the design
-and ``docs/adr/`` for the decisions behind it.
+``musubi plan``, ``sync``, ``trace``, ``verify``, ``export`` and ``config``
+work. ``docs/README.md`` is the list of what does and does not exist and is the
+one to trust; ``docs/adr/`` holds the decisions behind it.
 """
 
 from __future__ import annotations

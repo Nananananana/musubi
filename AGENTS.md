@@ -50,9 +50,15 @@ The constitution, to be enforced by construction rather than by promise:
 
 ## Architecture map
 
-There is no `docs/architecture.md` yet, on purpose: nothing is built, and a
-current-state document written before the code is fiction. The planned shape is
-`docs/proposals/0001-the-design.md` §4.
+There is no `docs/architecture.md` yet, on purpose. The reason has changed and
+is worth restating: it used to be that there was no code to describe, and there
+is plenty now.
+It is that **the table below is executable and a prose document would not be** —
+`tests/test_architecture.py` parses every module and asserts these rules, so a
+separate description could drift while the build stayed green. When there is
+enough architecture that the table stops being sufficient, the document gets
+written and `test_there_is_no_architecture_document_yet` is deleted in the same
+commit.
 
 ```text
 interfaces ──> application ──> domain
@@ -511,6 +517,18 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   run anything. A converter from elsewhere is registered by a program that
   imported musubi deliberately, and is then nameable because the table is read
   when the question is asked rather than at import.
+- **A cached byte is not a cached parse.** Reading N entries out of an archive
+  was quadratic (#78); caching the inflated part's *bytes* and building a
+  `ZipFile` from them per read left the curve where it was, because constructing
+  one reads a central directory. **Both intermediate states passed every
+  functional test**, which is why `tests/test_archive_reads_stay_linear.py`
+  **counts archive opens** rather than asserting behaviour, and why the
+  invariant is written as *the count does not change when the pages double*
+  rather than as a bound on one fixture.
+- **`docs/measurements.md` is where a number goes, with the script that produced
+  it and what it does not cover.** Two of the design's own falsification
+  conditions are met and recorded there. A number in any other document is a
+  number somebody will quote without its denominator.
 - **A hang is a result, and something has to turn it into one.** pytest has
   nothing to say about a test that is still running, so a property whose failure
   mode is non-termination goes in a **subprocess with a deadline**

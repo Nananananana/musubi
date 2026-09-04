@@ -306,6 +306,29 @@ def test_no_current_state_document_says_nothing_is_built() -> None:
     """It was true for four days. A README saying it over a working command
     costs more credibility than any other kind of staleness, which is why this
     is a test and not a note."""
-    for name in ("README.md", "AGENTS.md", "docs/README.md"):
-        body = (ROOT / name).read_text(encoding="utf-8")
-        assert "Nothing is built" not in body, f"{name} still says nothing is built"
+    checked = [ROOT / name for name in ("README.md", "AGENTS.md")]
+    checked += sorted((ROOT / "docs").glob("*.md"))
+    # The package docstring, which is the current-state document with the widest
+    # audience: it is what `help(musubi)` prints and what a reader sees first.
+    # It said "Nothing is built yet" for months **while this guard was green**,
+    # because the guard named three files and the claim was in a fourth. The
+    # same shape as #67 -- a checker whose scope is narrower than what it
+    # protects -- so the scope is now derived rather than listed.
+    checked.append(ROOT / "src" / "musubi" / "__init__.py")
+
+    assert len(checked) > 3, "the list shrank; this guard would be checking almost nothing"
+    for path in checked:
+        # Case-insensitively, which the first widening was not: AGENTS.md's own
+        # stale sentence read it in lower case mid-paragraph and slipped
+        # through. A guard exact about capitalisation is a guard about
+        # capitalisation.
+        #
+        # And the phrase is a **canary, not vocabulary.** Once this became
+        # case-insensitive it caught the two places that were *discussing* the
+        # rule, and the fix was to stop those documents spelling it rather than
+        # to teach the guard about quotation marks. A canary you also use as a
+        # word cannot tell a claim from a mention of one.
+        body = path.read_text(encoding="utf-8").lower()
+        assert "nothing is built" not in body, (
+            f"{path.relative_to(ROOT).as_posix()} still says nothing is built"
+        )

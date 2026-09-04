@@ -26,10 +26,10 @@ This convention is taken from the sibling projects `kiseki`, `tsumugi` and
 | `docs/contracts.md` | The SyncManifest and TraceMap contracts, for producers and consumers — including what the schemas cannot say |
 | `docs/sources.md` | Per source: its key derivation, its rule pack, and `kiseki`'s ten questions answered |
 | `docs/configuration.md` | Every setting, where they are read from, and which algorithms a setting can name |
+| `docs/measurements.md` | Every number, the script that produced it, and what it does not cover — including **two of the design's own falsification conditions being met** |
 | `docs/using-a-corpus.md` | For a consumer: the three commands, and how to load the export into LangChain, LlamaIndex, `datasets` or a vector store |
 | `docs/threat-model.md` | What a synced folder and a trace map contain, and what they become if they leak |
 | `docs/evaluation-corpus.md` | The generated dataset: its shape, its plants, and what it cannot tell you |
-| `docs/measurements.md` | Traceable coverage, map size, screener recall and the re-read ratio, with the tools that produced them |
 | `docs/adr/` | Decisions as they were made, with their reasons — history |
 | `docs/proposals/` | Proposed or planned work — not necessarily implemented |
 | [GitHub milestones](https://github.com/Nananananana/musubi/milestones?state=all) | One per roadmap chapter: where each stands, and every correction the roadmap cannot carry |
@@ -49,7 +49,11 @@ corrections rather than progress:
   it might.
 - **v0.4** — one item is calendar-bound and should start now rather than there:
   the two real exports taken weeks apart, which are collected and cannot be
-  generated.
+  generated. And **two of §10's falsification conditions are now met** — the
+  trace map is 10.7× the corpus and the re-read ratio is 0.91 — with the map's
+  predicted remedy (*the fix is converter-side*) turning out to be wrong about
+  half of it. `docs/measurements.md` holds the numbers; the milestone holds what
+  they mean.
 - **v0.6** — the seam in that chapter is `mamori`, not `tsumugi`.
 
 ## The rules that keep them apart
@@ -70,7 +74,7 @@ corrections rather than progress:
   number does not cover.
 - **"What exists" is updated in the same pull request as the code it describes.**
   This project's whole claim is that its documents and its code do not diverge, so
-  a README saying *nothing is built* over a working command costs more credibility
+  a README that still denies the existence of a working command costs more credibility
   than any other kind of staleness. It happened once, in the four days between the
   design landing and the CLI working, and this line is the answer to it.
 
@@ -138,9 +142,10 @@ request as the code it describes.
   so every run is a cold one.
 - **Notion, Slack, HTML, PDF.** v0.3, and the milestone where traceable coverage
   stops being 1.0 by construction and starts being a measurement.
-- **Every number in `docs/measurements.md`**, because that file does not exist.
-  No recall is claimed for the screener and no coverage is claimed for any
-  format; v0.4 owes both.
+- **Cleansing precision and screener recall.** `docs/measurements.md` now exists
+  and holds four of the six numbers v0.4 owes. These two are still owed, and the
+  ~70% recall figure [ADR-0008] quotes is from the literature rather than from a
+  measurement of this screener.
 - **`docs/architecture.md`**, deliberately. An ADR before the code is legitimate,
   because it records a decision that has been made. A current-state document
   before the code is fiction — and this table is the current-state document until
