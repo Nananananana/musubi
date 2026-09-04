@@ -41,7 +41,7 @@ import musubi
 
 doc = musubi.convert("notes/gear.md")
 print(doc.text)
-print(doc.where(13, 18))        # characters [13:18], in your file
+print(doc.where(13, 18))  # characters [13:18], in your file
 ```
 
 No corpus, no manifest, nothing written — and the map is a value you can hold
@@ -91,7 +91,7 @@ import json
 rows = [json.loads(line) for line in open("corpus.jsonl", encoding="utf-8")]
 collection.upsert(
     ids=[row["id"] for row in rows],
-    documents=[row["text"][row["metadata"]["body_offset"]:] for row in rows],
+    documents=[row["text"][row["metadata"]["body_offset"] :] for row in rows],
     metadatas=[row["metadata"] for row in rows],
 )
 ```

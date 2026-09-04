@@ -24,6 +24,7 @@ What the neighbours do, and what everybody tries first:
 
 ```python
 from markitdown import MarkItDown
+
 MarkItDown().convert("report.pdf").text_content
 ```
 
@@ -42,7 +43,7 @@ nothing.**
 ```python
 doc = musubi.convert("notes/gear.md")
 doc.text, doc.coverage, doc.removals, doc.converter
-doc.where(13, 18)        # Where(span=[13:18], unit='characters', kinds=..., rules=...)
+doc.where(13, 18)  # Where(span=[13:18], unit='characters', kinds=..., rules=...)
 ```
 
 `musubi.sync(root, into)` is next door for when a folder and a manifest are
