@@ -27,6 +27,7 @@ ranges jump, and the jump is information rather than a defect.
 
 from __future__ import annotations
 
+from bisect import bisect_left
 from dataclasses import dataclass
 from enum import Enum
 
@@ -202,6 +203,45 @@ class TraceMap:
             return 1.0
         return self.traceable_characters / self.artefact_length
 
+    @property
+    def answer_width(self) -> float:
+        """Ask about one character: how much source comes back?
+
+        **The number that stops `traceable_coverage` being read as a quality
+        score, because it can move the wrong way.** A map with a single
+        `transformed` segment covering the whole document is 100% traceable and
+        says nothing: every offset resolves, to the entire file. Measured on a
+        real alignment, `tools/sensitivity.py`:
+
+        ```text
+        window     coverage   matched   answer_width
+            64      100.0%          0          166.0     nothing aligned
+         65536       98.1%          1            1.3     aligned correctly
+        ```
+
+        **The failure reports the higher coverage.** So this is published beside
+        it: 1.0 is a map that answers a character with a character, and a large
+        number is a map that answers a character with a paragraph. Verbatim runs
+        answer exactly, so they count 1; a transformed run answers with the whole
+        of what it replaced, so it counts its source length.
+
+        Threshold-free on purpose. There is no *good* value written down here --
+        the number is smaller or larger, and a reader compares it against the
+        same corpus yesterday. A cut-off would be one more constant nobody
+        measured.
+
+        Counted in whatever `source_unit` says, so on a PDF this is **pages per
+        character**, and the reports label it.
+        """
+        if not self.traceable_characters:
+            return 1.0
+        total = sum(
+            (1 if segment.kind is Kind.VERBATIM else segment.src.length) * segment.out.length
+            for segment in self.segments
+            if segment.is_traceable
+        )
+        return total / self.traceable_characters
+
     def segment_at(self, offset: int) -> Segment:
         """The segment covering this artefact offset.
 
@@ -294,16 +334,25 @@ class TraceMap:
                 f"which does not describe this map's artefact of {self.artefact_length}"
             )
 
+        # Computed once and handed down. Both loops below need to find which of
+        # *this* map's segments bear on a range of its output, and doing that by
+        # scanning is what made composition quadratic: a 112 kB page of tracked
+        # links took 5.3 seconds, and doubling the links took 8.5 times as long.
+        #
+        # The segments tile the output in order, so `out.end` is non-decreasing
+        # and the window is a bisection.
+        ends = [segment.out.end for segment in self.segments]
+
         composed: list[Segment] = []
         carried: set[int] = set()
         for segment in later.segments:
             if segment.kind is Kind.VERBATIM:
-                composed.extend(self._project(segment, carried))
+                composed.extend(self._project(segment, carried, ends))
             else:
                 composed.append(
                     Segment(
                         out=segment.out,
-                        src=self.source_span_of(segment.src),
+                        src=self._span_within(segment.src, ends),
                         kind=segment.kind,
                         rule=segment.rule,
                     )
@@ -320,7 +369,37 @@ class TraceMap:
             source_unit=self.source_unit,
         )
 
-    def _project(self, run: Segment, carried: set[int]) -> list[Segment]:
+    def _bearing_on(self, span: Span, ends: list[int]) -> range:
+        """The indices of the segments whose output could bear on `span`.
+
+        The tiling is the whole argument: segments are ordered by output and
+        cover it with no gap, so `out.end` is non-decreasing and every segment
+        before the first one ending at or after `span.start` is provably out of
+        range. The walk stops at the first segment starting past `span.end`.
+
+        Zero-length segments -- removals -- are kept: one sitting exactly at
+        `span.start` has `out.end == span.start`, so `bisect_left` includes it,
+        and one at `span.end` has `out.start == span.end`, which the upper bound
+        admits. Losing them would drop the subtraction from the composed map,
+        which is the failure ADR-0005 exists to prevent.
+        """
+        first = bisect_left(ends, span.start)
+        last = first
+        while last < len(self.segments) and self.segments[last].out.start <= span.end:
+            last += 1
+        return range(first, last)
+
+    def _span_within(self, out: Span, ends: list[int]) -> Span:
+        """`source_span_of`, over the window rather than over everything."""
+        window = self._bearing_on(out, ends)
+        runs = [
+            (s.out, s.src, s.kind is Kind.VERBATIM)
+            for s in (self.segments[index] for index in window)
+        ]
+        found = resolve(runs, out)
+        return Span(0, 0) if found is None else found
+
+    def _project(self, run: Segment, carried: set[int], ends: list[int]) -> list[Segment]:
         """Carry one verbatim run of the later stage back through this one.
 
         Split where this map changes kind, so that the part that really is
@@ -331,7 +410,8 @@ class TraceMap:
         """
         delta = run.out.start - run.src.start
         projected: list[Segment] = []
-        for index, earlier in enumerate(self.segments):
+        for index in self._bearing_on(run.src, ends):
+            earlier = self.segments[index]
             if earlier.out.is_empty:
                 point = earlier.out.start
                 if index not in carried and run.src.start <= point <= run.src.end:

@@ -150,6 +150,19 @@ OPTIONS: tuple[Option, ...] = (
         "media type -> converter name, overriding the built-in claim",
     ),
     Option("allow", list, [], "credential hits already looked at, as rule:unit_key"),
+    Option(
+        "pdf-word-gap",
+        float,
+        -180.0,
+        "how negative a PDF kerning value must be to read as a space (ADR-0033)",
+    ),
+    Option(
+        "encoding",
+        str,
+        "strict",
+        "whether a file that is not UTF-8 is refused or detected (ADR-0031)",
+        ("strict", "detect"),
+    ),
 )
 
 DEFAULTS: Mapping[str, Any] = {option.name: option.default for option in OPTIONS}
@@ -315,6 +328,11 @@ def _parse(option: Option, raw: str) -> Any:
             f"table, and a table flattened into a string is a syntax nobody can read back. "
             f"Set it in musubi.toml."
         )
+    if option.kind is float:
+        try:
+            return float(raw)
+        except ValueError as error:
+            raise ContractError(f"{option.environment} is {raw!r}, not a number") from error
     return raw
 
 
@@ -327,6 +345,11 @@ def _checked(option: Option, value: Any, where: str) -> Any:
         if not all(isinstance(k, str) and isinstance(v, str) for k, v in value.items()):
             raise ContractError(f"{where} must be a table of strings")
         return dict(value)
+    if option.kind is float and isinstance(value, int | float) and not isinstance(value, bool):
+        # TOML writes `-180.0` as a float and `-180` as an integer, and a
+        # setting that refused the second would be refusing the spelling rather
+        # than the value.
+        return float(value)
     if option.kind is str and isinstance(value, str):
         if option.choices and value not in option.choices:
             raise ContractError(f"{where} is {value!r}; musubi knows {', '.join(option.choices)}")
@@ -375,7 +398,11 @@ def settings_from(
     return Settings(
         ruleset=ruleset_named(configuration["rules"]),
         screener=screener_named(configuration["screener"]),
-        converter_for=chooser(configuration["converters"]),
+        converter_for=chooser(
+            configuration["converters"],
+            detect=configuration["encoding"] == "detect",
+            word_gap=configuration["pdf-word-gap"],
+        ),
         musubi_version=musubi_version,
         allowed=frozenset(configuration["allow"]),
         created_at=created_at,

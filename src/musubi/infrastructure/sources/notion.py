@@ -48,6 +48,9 @@ from __future__ import annotations
 import io
 import re
 import zipfile
+from collections import OrderedDict
+from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 from ...errors import SourceError
@@ -86,6 +89,26 @@ MAXIMUM_DEPTH = 4
 #: anybody has, several times over.
 MAXIMUM_ENTRY_BYTES = 256 * 1024 * 1024
 
+#: How much of a nested archive is kept inflated while a run reads it.
+#:
+#: A Notion export is an archive of archives, and reading one page means
+#: inflating the `Part-N.zip` it lives in. Doing that per page is quadratic --
+#: measured, and filed as #78. Holding every part is linear in the export, which
+#: is the appetite `MAXIMUM_ENTRY_BYTES` exists to refuse.
+#:
+#: So: a budget. A real export's parts fit in it and the run is linear; a larger
+#: one degrades to re-inflating, which is correct and slow, with a bound
+#: somebody chose rather than none.
+NESTED_BUDGET = 512 * 1024 * 1024
+
+
+@dataclass(frozen=True, slots=True)
+class _Part:
+    """A nested archive held open, and what it costs to hold it."""
+
+    archive: zipfile.ZipFile
+    size: int
+
 
 class NotionSource:
     """Satisfies :class:`~musubi.ports.source.Source`.
@@ -103,6 +126,7 @@ class NotionSource:
         source_id: str = "notion",
         adapter: str = "notion-export@1",
         maximum_depth: int = MAXIMUM_DEPTH,
+        nested_budget: int = NESTED_BUDGET,
     ) -> None:
         self.root = Path(root).expanduser().resolve()
         if not self.root.exists():
@@ -111,14 +135,24 @@ class NotionSource:
         self.adapter = adapter
         self.origin = str(self.root)
         self._maximum_depth = maximum_depth
+        self._origins: Mapping[str, tuple[str | None, str]] | None = None
+        self._nested: OrderedDict[str, _Part] = OrderedDict()
+        self._held = 0
+        self._budget = nested_budget
 
     # -- stage one: what is there ------------------------------------------
 
     def discover(self) -> Discovery:
         found: list[Found] = []
         skipped: list[Skipped] = []
-        for archive in self._archives():
-            self._walk(archive.read_bytes(), archive.name, found, skipped, depth=0)
+        for path in self._archives():
+            try:
+                outer = zipfile.ZipFile(path)
+            except zipfile.BadZipFile as error:
+                skipped.append(Skipped(path.name, "unreadable_archive", str(error)))
+                continue
+            with outer:
+                self._walk(outer, path.name, found, skipped, depth=0)
         return Discovery(
             found=tuple(sorted(found, key=lambda f: f.key_parts)),
             skipped=tuple(sorted(skipped, key=lambda s: s.origin)),
@@ -141,67 +175,75 @@ class NotionSource:
 
     def _walk(
         self,
-        payload: bytes,
+        archive: zipfile.ZipFile,
         inside: str,
         found: list[Found],
         skipped: list[Skipped],
         *,
         depth: int,
+        index: dict[str, tuple[str | None, str]] | None = None,
     ) -> None:
-        """Read one archive, following the archives it contains."""
-        try:
-            archive = zipfile.ZipFile(io.BytesIO(payload))
-        except zipfile.BadZipFile as error:
-            skipped.append(Skipped(inside, "unreadable_archive", str(error)))
-            return
+        """Read one archive, following the archives it contains.
 
-        with archive:
-            for entry in archive.infolist():
-                if entry.is_dir():
+        Takes an **open** archive rather than its bytes. `zipfile` reads a
+        central directory and then seeks, so an archive opened on a path costs
+        its directory rather than its size -- and a Notion export is one file
+        that a folder of them multiplies.
+        """
+        for entry in archive.infolist():
+            if entry.is_dir():
+                continue
+            origin = f"{inside}!{entry.filename}"
+            suffix = Path(entry.filename).suffix.lower()
+            if index is not None:
+                # `inside` is the outer archive's *file name* at depth 0 and a
+                # nested archive's origin below it, which is exactly the two
+                # cases `_part` has to tell apart.
+                index[origin] = (None if "!" not in inside else inside, entry.filename)
+
+            if suffix == ".zip":
+                if depth + 1 > self._maximum_depth:
+                    skipped.append(Skipped(origin, "too_deep", f"{depth + 1} levels"))
                     continue
-                origin = f"{inside}!{entry.filename}"
-                suffix = Path(entry.filename).suffix.lower()
-
-                if suffix == ".zip":
-                    if depth + 1 > self._maximum_depth:
-                        skipped.append(Skipped(origin, "too_deep", f"{depth + 1} levels"))
-                        continue
-                    try:
-                        payload = _bounded(archive, entry)
-                    except _TooLargeError as refusal:
-                        skipped.append(Skipped(origin, "too_large", str(refusal)))
-                        continue
-                    self._walk(payload, origin, found, skipped, depth=depth + 1)
+                try:
+                    nested = self._keep(origin, _bounded(archive, entry))
+                except _TooLargeError as refusal:
+                    skipped.append(Skipped(origin, "too_large", str(refusal)))
                     continue
-
-                media_type = MEDIA_TYPES.get(suffix)
-                if media_type is None:
-                    skipped.append(Skipped(origin, "unknown_format", suffix or "(no suffix)"))
+                except zipfile.BadZipFile as error:
+                    skipped.append(Skipped(origin, "unreadable_archive", str(error)))
                     continue
+                self._walk(nested, origin, found, skipped, depth=depth + 1, index=index)
+                continue
 
-                keyed = _KEYED.match(Path(entry.filename).stem)
-                if keyed is None:
-                    # Keyed by path instead would make `key_derivation` false
-                    # for this unit and true for its neighbours, with nothing in
-                    # the manifest saying which is which.
-                    skipped.append(
-                        Skipped(origin, "no_page_id", "the name carries no 32-character page id")
-                    )
-                    continue
+            media_type = MEDIA_TYPES.get(suffix)
+            if media_type is None:
+                skipped.append(Skipped(origin, "unknown_format", suffix or "(no suffix)"))
+                continue
 
-                found.append(
-                    Found(
-                        key_parts=(f"{keyed['page']}{suffix}",),
-                        media_type=media_type,
-                        size_bytes=entry.file_size,
-                        origin=origin,
-                        # A zip entry's timestamp is when the *export* wrote it,
-                        # not when the note was written, and every entry in one
-                        # export shares it. Passing it on would give a corpus a
-                        # single date and call it history (ADR-0022).
-                        modified_at=None,
-                    )
+            keyed = _KEYED.match(Path(entry.filename).stem)
+            if keyed is None:
+                # Keyed by path instead would make `key_derivation` false for
+                # this unit and true for its neighbours, with nothing in the
+                # manifest saying which is which.
+                skipped.append(
+                    Skipped(origin, "no_page_id", "the name carries no 32-character page id")
                 )
+                continue
+
+            found.append(
+                Found(
+                    key_parts=(f"{keyed['page']}{suffix}",),
+                    media_type=media_type,
+                    size_bytes=entry.file_size,
+                    origin=origin,
+                    # A zip entry's timestamp is when the *export* wrote it, not
+                    # when the note was written, and every entry in one export
+                    # shares it. Passing it on would give a corpus a single date
+                    # and call it history (ADR-0022).
+                    modified_at=None,
+                )
+            )
 
     # -- stage two: one thing, opened --------------------------------------
 
@@ -217,44 +259,111 @@ class NotionSource:
 
         So the archives are walked again and the origin is **rebuilt** by the
         same expression that built it, and compared whole. The two sides cannot
-        drift, because there is only one side. It costs a second walk of an
-        archive already in memory, which is what the first walk cost.
+        drift, because there is only one side.
+
+        **What that used to cost, and does not now.** `read()` is called once
+        per unit, and it used to inflate the whole export each time: measured at
+        400 pages, doubling them more than tripled the time, and the bytes
+        touched grew as pages squared. A real export is thousands of pages and
+        hundreds of megabytes, where that is not slow but unusable ([#78]).
+
+        Three changes make it linear, and the third is the one that was not
+        obvious. The outer archive is **opened on its path**, so it costs a
+        central directory rather than its size. The nested parts -- the
+        expensive thing, because a `Part-N.zip` is inflated whole -- are held
+        under a byte budget. And the origins are **indexed once**, because
+        scanning `infolist()` for the target on every call is cheap per entry
+        and still quadratic over a run; caching the inflate alone left the curve
+        exactly where it was.
         """
-        for archive in self._archives():
-            body = _locate(archive.read_bytes(), archive.name, found.origin, self._maximum_depth)
-            if body is not None:
-                return body
-        raise SourceError(f"{found.origin} is not where discovery said it was")
+        where = self._index().get(found.origin)
+        if where is None:
+            raise SourceError(f"{found.origin} is not where discovery said it was")
 
+        holder, name = where
+        try:
+            if holder is None:
+                path = next(p for p in self._archives() if p.name == found.origin.split("!")[0])
+                with zipfile.ZipFile(path) as outer:
+                    return _bounded(outer, outer.getinfo(name))
+            nested = self._part(holder)
+            return _bounded(nested, nested.getinfo(name))
+        except _TooLargeError as refusal:
+            raise SourceError(f"{found.origin} was not read: {refusal}") from refusal
+        except (zipfile.BadZipFile, KeyError, StopIteration) as error:
+            raise SourceError(f"{found.origin} could not be opened: {error}") from error
 
-def _locate(payload: bytes, inside: str, target: str, depth: int) -> bytes | None:
-    """The bytes of the entry whose origin is `target`, or ``None``.
+    def _index(self) -> Mapping[str, tuple[str | None, str]]:
+        """Origin to (the archive holding it, its entry name), built once.
 
-    Mirrors ``NotionSource._walk``'s descent and its ``f"{inside}!{name}"``, and
-    exists to be the *same* construction rather than its inverse.
-    """
-    if depth < 0:
-        return None
-    try:
+        **Still the same construction, not its inverse.** The keys come from the
+        same `f"{inside}!{entry.filename}"` expression `_walk` uses, so a title
+        containing `!` cannot desynchronise the two sides -- which was the whole
+        point of rebuilding rather than parsing, and is preserved here.
+
+        What changes is when it is built: once, rather than per unit. `read()`
+        is called once per unit, and a linear scan inside it is a quadratic over
+        the run.
+        """
+        if self._origins is None:
+            found: list[Found] = []
+            skipped: list[Skipped] = []
+            index: dict[str, tuple[str | None, str]] = {}
+            for path in self._archives():
+                with zipfile.ZipFile(path) as outer:
+                    self._walk(outer, path.name, found, skipped, depth=0, index=index)
+            self._origins = index
+        return self._origins
+
+    def _part(self, origin: str) -> zipfile.ZipFile:
+        """A nested archive, **open**, from the cache or inflated again.
+
+        The cache holds the opened archive rather than its bytes, and that is
+        not a detail. Constructing a `ZipFile` reads a central directory, which
+        is linear in the entries -- so caching only the payload left the run
+        quadratic with a smaller constant, which is what the measurement said
+        after the first attempt at this.
+        """
+        held = self._nested.get(origin)
+        if held is not None:
+            self._nested.move_to_end(origin)
+            return held.archive
+
+        holder, name = self._index()[origin]
+        if holder is None:
+            path = next(p for p in self._archives() if p.name == origin.split("!")[0])
+            with zipfile.ZipFile(path) as outer:
+                payload = _bounded(outer, outer.getinfo(name))
+        else:
+            inner = self._part(holder)
+            payload = _bounded(inner, inner.getinfo(name))
+        return self._keep(origin, payload)
+
+    def _keep(self, origin: str, payload: bytes) -> zipfile.ZipFile:
+        """Open a nested archive and hold it, if the budget allows.
+
+        Least-recently-used, bounded in **bytes** rather than in entries,
+        because the thing being bounded is memory and a part can be any size.
+
+        The budget rather than an unbounded cache: this reads an export that
+        came from somewhere else, and a dictionary that grows with the input is
+        the same unbounded-appetite problem `MAXIMUM_ENTRY_BYTES` exists for.
+        The budget rather than a cache of one: the pipeline sorts units by key
+        and a Notion key is a page id, so reads arrive in an order unrelated to
+        which part they are in, and a single slot would thrash.
+
+        An export larger than the budget degrades to the previous behaviour --
+        correct, and slow, with a bound somebody chose rather than none.
+        """
         archive = zipfile.ZipFile(io.BytesIO(payload))
-    except zipfile.BadZipFile as error:
-        raise SourceError(f"{inside} could not be opened: {error}") from error
-
-    with archive:
-        for entry in archive.infolist():
-            if entry.is_dir():
-                continue
-            origin = f"{inside}!{entry.filename}"
-            try:
-                if origin == target:
-                    return _bounded(archive, entry)
-                if Path(entry.filename).suffix.lower() == ".zip" and target.startswith(
-                    f"{origin}!"
-                ):
-                    return _locate(_bounded(archive, entry), origin, target, depth - 1)
-            except _TooLargeError as refusal:
-                raise SourceError(f"{origin} was not read: {refusal}") from refusal
-    return None
+        if len(payload) <= self._budget:
+            self._nested[origin] = _Part(archive=archive, size=len(payload))
+            self._held += len(payload)
+            while self._held > self._budget and len(self._nested) > 1:
+                _, evicted = self._nested.popitem(last=False)
+                self._held -= evicted.size
+                evicted.archive.close()
+        return archive
 
 
 class _TooLargeError(Exception):

@@ -1,9 +1,10 @@
 # The schemas moved into the package
 
-Both contracts now live in [`../src/musubi/schemas/`](../src/musubi/schemas/):
+The contracts now live in [`../src/musubi/schemas/`](../src/musubi/schemas/):
 
 | contract | file |
 |---|---|
+| `musubi.run-journal/1-draft` | [`musubi-run-journal-1.json`](../src/musubi/schemas/musubi-run-journal-1.json) |
 | `musubi.sync-manifest/1-draft` | [`musubi-sync-manifest-1.json`](../src/musubi/schemas/musubi-sync-manifest-1.json) |
 | `musubi.trace-map/1-draft` | [`musubi-trace-map-1.json`](../src/musubi/schemas/musubi-trace-map-1.json) |
 

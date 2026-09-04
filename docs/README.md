@@ -26,9 +26,11 @@ This convention is taken from the sibling projects `kiseki`, `tsumugi` and
 | `docs/contracts.md` | The SyncManifest and TraceMap contracts, for producers and consumers — including what the schemas cannot say |
 | `docs/sources.md` | Per source: its key derivation, its rule pack, and `kiseki`'s ten questions answered |
 | `docs/configuration.md` | Every setting, where they are read from, and which algorithms a setting can name |
+| `tools/demo.py` | A nine-step walk over a generated vault, ending in a citation resolved back to the original file. `uv run python tools/demo.py` |
+| `docs/measurements.md` | Every number, the script that produced it, and what it does not cover — including **two of the design's own falsification conditions being met** |
+| `docs/using-a-corpus.md` | For a consumer: the three commands, and how to load the export into LangChain, LlamaIndex, `datasets` or a vector store |
 | `docs/threat-model.md` | What a synced folder and a trace map contain, and what they become if they leak |
 | `docs/evaluation-corpus.md` | The generated dataset: its shape, its plants, and what it cannot tell you |
-| `docs/measurements.md` | Traceable coverage, map size, screener recall and the re-read ratio, with the tools that produced them |
 | `docs/adr/` | Decisions as they were made, with their reasons — history |
 | `docs/proposals/` | Proposed or planned work — not necessarily implemented |
 | [GitHub milestones](https://github.com/Nananananana/musubi/milestones?state=all) | One per roadmap chapter: where each stands, and every correction the roadmap cannot carry |
@@ -48,7 +50,11 @@ corrections rather than progress:
   it might.
 - **v0.4** — one item is calendar-bound and should start now rather than there:
   the two real exports taken weeks apart, which are collected and cannot be
-  generated.
+  generated. And **two of §10's falsification conditions are now met** — the
+  trace map is 10.7× the corpus and the re-read ratio is 0.91 — with the map's
+  predicted remedy (*the fix is converter-side*) turning out to be wrong about
+  half of it. `docs/measurements.md` holds the numbers; the milestone holds what
+  they mean.
 - **v0.6** — the seam in that chapter is `mamori`, not `tsumugi`.
 
 ## The rules that keep them apart
@@ -69,7 +75,7 @@ corrections rather than progress:
   number does not cover.
 - **"What exists" is updated in the same pull request as the code it describes.**
   This project's whole claim is that its documents and its code do not diverge, so
-  a README saying *nothing is built* over a working command costs more credibility
+  a README that still denies the existence of a working command costs more credibility
   than any other kind of staleness. It happened once, in the four days between the
   design landing and the CLI working, and this line is the answer to it.
 
@@ -109,7 +115,11 @@ request as the code it describes.
 |---|---|
 | `musubi plan` | Reads a folder and reports what a sync would do, writing nothing ([ADR-0012](adr/0012-a-dry-run-comes-first.md)) |
 | Sources | `FilesystemSource`, `ObsidianSource`, `NotionSource`. Two stages: `discover()` opens nothing, `read()` opens one thing. Notion keys by the **page id** and skips anything without one, so `key_derivation` is true of every unit in a run ([`sources.md`](sources.md)) |
-| Converters | Markdown and plain text — decoding, line endings, and a trace map over both |
+| Converters | Markdown and plain text — decoding, line endings, and a trace map over both. **ISO-2022-JP and the other self-describing stateful encodings are read by round trip**; before [ADR-0031](adr/0031-a-guess-with-its-uncertainty-attached-is-not-the-guess-that-was-forbidden.md) they decoded as UTF-8 into their own escape sequences with exit 0 |
+| Decoding | `encoding = "detect"` reads a file that is not UTF-8 — a Shift-JIS vault, a Latin-1 note — and **records the detected encoding with every offset**. Optional (`pip install 'musubi[encoding]'`), off by default, and the refusal in `strict` mode now names what the file looks like and which setting reads it |
+| `trafilatura@1` | **Optional** (`pip install 'musubi[html]'`). Main-content extraction that wins its benchmarks, with the map **recovered by alignment** rather than built while converting. Measured on one generated page: 6/6 planted boilerplate strings rejected against `html@1`'s 3/6, and **99.7% traceable against 93.5%** ([ADR-0028](adr/0028-a-dependency-outside-the-domain-buys-quality-and-still-owes-a-map.md), `tools/html_coverage.py`). Offered, never claimed: installing it changes no folder's output until a settings file names it |
+| `pdfium@1` | **Optional** (`pip install 'musubi[pdf]'`). Chrome's PDF engine, behind a dependency-free BSD-3-Clause wheel. The case is **reach, not quality**: `pdf_text@1` scans for `N 0 obj` and reports `no_pages` on a PDF 1.5, where the page lives in a compressed object stream — which is what almost every current producer writes ([ADR-0029](adr/0029-a-better-reader-does-not-buy-a-finer-locator.md), `tools/pdf_coverage.py`). Same `src` spans as `pdf_text@1`, asserted by a test: a corpus rebuilt with it still cites *page three* |
+| Alignment | `domain/alignment.py`. Finds an extractor's text in the source and tiles what is left: verbatim where a run is there, transformed where it is not, `removal` for a stretch that produced nothing. A forward scan with a bounded window, not a diff |
 | `html@1` | HTML, where the output is a minority of the input: boilerplate removed as `removal` segments with rules, entities `transformed`, structure `synthetic`. The first converter whose traceable coverage is a measurement |
 | `pdf_text@1` | A PDF's text layer, page by page. The first map whose source is **not** characters: `src` is a page range and `source_unit` is `opaque` ([ADR-0025](adr/0025-a-map-with-no-verbatim-run-composes-whatever-it-measures.md)). A page with no text layer is reported, not guessed at |
 | The tiling | Segments, composition, merging, coverage ([ADR-0004](adr/0004-a-conversion-carries-a-map-back-to-its-source.md)) |
@@ -120,6 +130,9 @@ request as the code it describes.
 | The emitter | Front matter, the trace sidecar, staging, atomic promotion, and withdrawal |
 | The contracts | Both schemas, shipped in the wheel, validated against real output ([`contracts.md`](contracts.md)) |
 | The invariants | What the schemas cannot express, asserted against generated corpora — and a guard that fails if the enumeration grows an entry nothing runs |
+| `musubi.convert(path)` | **The Python API** ([ADR-0032](adr/0032-the-shortest-way-in-is-the-one-that-keeps-the-map.md)). One file, text **and the map as a value** — `doc.where(13, 18)` rather than a sidecar read back off disk. Same converters, cleansing and screener as a sync, chosen by the same configuration; a credential raises rather than being returned. `musubi.sync()` and `musubi.media_type_of()` beside it |
+| `musubi mcp` | **A Model Context Protocol server** on stdio, standard library only. Three read-only tools -- `musubi_convert`, `musubi_trace`, `musubi_plan` -- so an agent can convert a document and then **cite it back to the byte in the same session**. Rooted at the folder given: every path outside it is refused ([ADR-0007](adr/0007-musubi-reads-exports-never-services.md)). Answers both the `initialize` handshake and 2026-07-28's `server/discover` |
+| `musubi export` | The corpus as **JSON Lines**, one document per line, for the readers that already exist ([ADR-0030](adr/0030-an-envelope-is-not-a-contract.md)). The id is `source_id:unit_key` and survives a re-sync, so a vector store upserts rather than duplicates; `trace_map` and `corpus` travel with every line, so a citation coming back out of somebody else's index can still be resolved to a place in the owner's file |
 | `musubi config` | Every setting in effect **with the thing that decided it**, and the files found and not read. Reads a `musubi.toml`, a `[tool.musubi]` table or the environment; the nearest file wins whole ([ADR-0027](adr/0027-the-nearest-file-wins-whole-and-every-value-says-where-it-came-from.md)) |
 | `musubi verify` | The same invariants, run against a folder rather than a run — plus the one no test can make, that each document still hashes to what the manifest recorded |
 
@@ -127,15 +140,18 @@ request as the code it describes.
 
 - **`musubi rules`**, `musubi eval`, `musubi doctor`. Named in the design, none
   written.
+- **Office formats.** No `.docx`, `.pptx` or `.xlsx`. The README's comparison
+  table says so and names the libraries that do read them.
 - **The incremental path.** A sync withdraws an artefact whose unit is gone, by
   reading the previous manifest as its ledger — but it still re-reads, converts
   and rewrites every unit that *is* there. `Change` exists and nothing calls it,
   so every run is a cold one.
 - **Notion, Slack, HTML, PDF.** v0.3, and the milestone where traceable coverage
   stops being 1.0 by construction and starts being a measurement.
-- **Every number in `docs/measurements.md`**, because that file does not exist.
-  No recall is claimed for the screener and no coverage is claimed for any
-  format; v0.4 owes both.
+- **Cleansing precision and screener recall.** `docs/measurements.md` now exists
+  and holds four of the six numbers v0.4 owes. These two are still owed, and the
+  ~70% recall figure [ADR-0008] quotes is from the literature rather than from a
+  measurement of this screener.
 - **`docs/architecture.md`**, deliberately. An ADR before the code is legitimate,
   because it records a decision that has been made. A current-state document
   before the code is fiction — and this table is the current-state document until

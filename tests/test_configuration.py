@@ -118,9 +118,17 @@ def test_every_option_can_be_set_from_the_environment_or_says_why_not() -> None:
             with pytest.raises(ContractError, match="cannot be set from the environment"):
                 load(Path.cwd(), {option.environment: "anything"})
         else:
-            sample = "core" if option.choices and "core" in option.choices else None
-            value = sample or (option.choices[0] if option.choices else "x")
-            assert load(Path.cwd(), {option.environment: value})[option.name]
+            # A sample the option can actually take. The first version handed
+            # every non-table option the string `"x"`, which a float refuses --
+            # so the guard was about to start failing for the right reason on a
+            # setting it was supposed to be checking.
+            if option.choices:
+                value = option.choices[0]
+            elif option.kind is float:
+                value = str(option.default)
+            else:
+                value = "x"
+            assert load(Path.cwd(), {option.environment: value})[option.name] is not None
 
 
 # -- what it refuses --------------------------------------------------------
@@ -188,7 +196,7 @@ def test_a_converter_override_is_resolved_before_the_run_not_during_it() -> None
     one format, reported as `no_converter` on every file of it -- which reads as
     a sentence about the input."""
     with pytest.raises(ContractError, match="not registered"):
-        chooser({"text/html": "trafilatura@1"})
+        chooser({"text/html": "a-converter-nobody-wrote@1"})
 
 
 def test_an_override_changes_only_the_media_type_it_names() -> None:

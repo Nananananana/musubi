@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
+from ..domain.journal import Entry, changes
 from ..domain.manifest import Manifest, render
 from ..errors import CredentialFoundError, EmptySourceError
 from ..ports.emitter import Emitter
@@ -74,7 +75,8 @@ def sync(
     nothing and a corpus already exists, because withdrawal would then take all
     of it. ``withdraw_all`` is the operator saying they have looked.
     """
-    held = emitter.previously_written()
+    before = emitter.previous()
+    held = before.written
 
     emitter.begin()
     outcome = run(source, settings, emitter, write=True)
@@ -110,5 +112,19 @@ def sync(
     # After the promotion, never before it. Deleting first and failing to
     # promote would leave the corpus missing documents that nothing replaced.
     removed = emitter.withdraw(withdrawn)
+
+    # Last, and only once the corpus is what the entry says it is. An entry
+    # written before the promotion would describe a run that could still refuse
+    # ([ADR-0034]).
+    emitter.append_journal(
+        Entry(
+            run_id=manifest.run_id,
+            parent=before.run_id,
+            created_at=manifest.created_at,
+            musubi_version=manifest.musubi_version,
+            kind=manifest.kind,
+            change=changes(before.artefacts, {a.path: a.content_hash for a in manifest.artefacts}),
+        )
+    )
 
     return Synced(manifest=manifest, promoted=promoted, withdrawn=removed)

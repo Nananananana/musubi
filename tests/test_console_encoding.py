@@ -200,6 +200,117 @@ def test_a_config_still_reports_on_a_console_that_cannot_show_it(
     assert b"musubi config" in console.written()
 
 
+def test_an_export_still_writes_a_document_on_a_console_that_cannot_show_it(
+    tmp_path: Path, vault: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The sixth command, and the guard's second catch.
+
+    `export` writes a *document*, so the failure it can have is the worse of the
+    two ADR-0020 names: not a crash, but a file that is not valid UTF-8 with
+    exit 0 and no error anywhere. The report goes to standard error and the
+    document to the buffer beneath standard output, so a narrow console costs a
+    glyph in the report and nothing at all in the file.
+    """
+    console = narrow_console(monkeypatch)
+    into = tmp_path / "corpus"
+    main(["sync", str(vault), "--into", str(into)])
+    console.flush()
+    console.raw_buffer.truncate(0)
+    console.raw_buffer.seek(0)
+
+    assert main(["export", str(into)]) == 0
+    written = console.written()
+    document, _, report = written.partition(b"musubi export")
+    assert document, "nothing was written"
+    body = json.loads(document.decode("utf-8"))
+    assert body["text"].endswith(NOTE), "the document did not survive the console"
+    assert report, "the report was not printed at all"
+
+
+def test_the_mcp_server_speaks_utf8_whatever_the_console_is(
+    tmp_path: Path, vault: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The seventh command, and the guard's third catch.
+
+    `mcp` is the worst case ADR-0020 describes rather than the mild one. A
+    protocol stream that lost a character is not a glyph missing from a report
+    -- it is JSON a client cannot parse, or worse, JSON it *can* parse with a
+    document quietly mangled inside it. The server writes to the stream it is
+    handed, so this hands it one that cannot encode the note.
+    """
+    console = narrow_console(monkeypatch)
+    request = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {"name": "musubi_convert", "arguments": {"path": "設計メモ.md"}},
+    }
+    # Through `main`, with a real stdin, rather than by calling `serve`: the
+    # guard below asks whether the **command** was exercised, and a test that
+    # reached past the command would satisfy the letter of it while leaving
+    # `_readable()` and the argument parsing uncovered.
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(request) + "\n"))
+    assert main(["mcp", str(vault)]) == 0
+
+    answer = json.loads(console.written().decode("utf-8"))
+    body = json.loads(answer["result"]["content"][0]["text"])
+    assert NOTE.strip() in body["text"], "the document did not survive the round trip"
+
+
+def test_a_log_names_files_a_narrow_console_cannot_show(
+    tmp_path: Path, vault: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`log` prints filenames, which is a harder case than a heading.
+
+    An em dash is musubi's own character and could in principle be avoided. A
+    path is the owner's, and this one is `𩸽.md` -- so the guarantee being
+    tested is the one ADR-0020 actually makes, that a console cannot fail a run
+    over *other people's* text.
+    """
+    (vault / "𩸽.md").write_text(NOTE, encoding="utf-8")
+    into = tmp_path / "corpus"
+    assert main(["sync", str(vault), "--into", str(into)]) == 0
+
+    stream = narrow_console(monkeypatch)
+    assert main(["log", str(into)]) == 0
+
+    shown = stream.written().decode("cp932")
+    assert "runs" in shown
+    assert ".md" in shown, "the report named no file at all"
+
+
+def test_a_diff_reports_on_a_console_that_cannot_show_it(
+    tmp_path: Path, vault: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (vault / "𩸽.md").write_text(NOTE, encoding="utf-8")
+    into = tmp_path / "corpus"
+    assert main(["sync", str(vault), "--into", str(into)]) == 0
+    (vault / "𩸽.md").unlink()
+    assert main(["sync", str(vault), "--into", str(into)]) == 0
+
+    stream = narrow_console(monkeypatch)
+    assert main(["diff", str(into)]) == 0
+    assert "removed" in stream.written().decode("cp932")
+
+
+def test_a_log_as_a_document_is_utf8_whatever_the_console_is(
+    tmp_path: Path, vault: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The worse half of ADR-0020: `--json` did not crash, it wrote a document
+    that was not valid UTF-8, with exit 0 and nothing in the report."""
+    (vault / "𩸽.md").write_text(NOTE, encoding="utf-8")
+    into = tmp_path / "corpus"
+    assert main(["sync", str(vault), "--into", str(into)]) == 0
+
+    stream = narrow_console(monkeypatch)
+    assert main(["log", str(into), "--json"]) == 0
+
+    body = json.loads(stream.written().decode("utf-8"))
+    assert any("𩸽" in path for path in body[0]["added"]), (
+        "the document lost the character that a cp932 console cannot hold"
+    )
+
+
 def test_every_command_the_parser_knows_is_exercised_here() -> None:
     """The drift guard, and the reason this file needs one.
 

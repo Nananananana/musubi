@@ -41,13 +41,30 @@ ALLOWED: dict[str, frozenset[str]] = {
     "application": frozenset({"domain", "ports", "errors"}),
     "evaluation": frozenset({"domain", "ports", "application", "infrastructure", "errors"}),
     "config": frozenset({"domain", "ports", "application", "infrastructure", "errors"}),
+    # ``api.py`` is an interface, exactly like the command line, and sits at the
+    # same level: it composes rather than decides, and it may reach everything
+    # the CLI reaches. It is **not** a layer of its own with privileges -- a
+    # convenience surface that could see more than the CLI would be a second
+    # place for policy to live (ADR-0032).
+    "api": frozenset(
+        {"domain", "ports", "application", "infrastructure", "evaluation", "config", "errors"}
+    ),
     "interfaces": frozenset(
         {"domain", "ports", "application", "infrastructure", "evaluation", "config", "errors"}
     ),
     # The package's own ``__init__`` is the public surface. It re-exports and
     # decides nothing.
     "public": frozenset(
-        {"domain", "ports", "application", "infrastructure", "evaluation", "config", "errors"}
+        {
+            "domain",
+            "ports",
+            "application",
+            "infrastructure",
+            "evaluation",
+            "config",
+            "api",
+            "errors",
+        }
     ),
 }
 

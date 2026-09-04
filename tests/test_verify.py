@@ -75,8 +75,12 @@ def test_it_says_how_much_it_looked_at(tmp_path: Path) -> None:
     """A report of no faults is worth what the number of checks behind it is
     worth. Zero checks and zero faults reads exactly like a corpus that holds."""
     checked = verify(Corpus(built(tmp_path)))
-    assert checked.checks == 5
-    assert "5 checks" in checked.summary()
+    # Four of the manifest and its history -- run_id, coverage totals, records
+    # naming units, the journal agreeing with the corpus -- and one per
+    # artefact. The number is written out rather than derived, so that adding a
+    # check without counting it fails here.
+    assert checked.checks == 4 + checked.artefacts == 6
+    assert "6 checks" in checked.summary()
 
 
 # -- damage done after the run ----------------------------------------------

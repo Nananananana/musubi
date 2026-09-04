@@ -23,16 +23,21 @@ from pathlib import Path
 from typing import Any
 
 from ... import __version__
+from ...application.export import SHAPES, as_line, documents
 from ...application.pipeline import Outcome, Settings, run
 from ...application.sync import Synced, empties_the_corpus, sync, withdrawals
 from ...application.trace import Resolution, resolve
 from ...application.verify import Verified, verify
 from ...config import SOURCES, Configuration, describe, destination, settings_from, source_from
 from ...config import load as load_configuration
+from ...domain.journal import CONTRACT as JOURNAL_CONTRACT
+from ...domain.journal import folded, run_named
 from ...domain.manifest import Manifest, render
 from ...domain.span import Span
 from ...domain.trace import CHARACTERS
-from ...errors import MusubiError, TraceError
+from ...errors import ContractError, MusubiError, TraceError
+from ...infrastructure.converters import claimed_converters
+from ...infrastructure.converters.external import available, unavailable
 from ...infrastructure.corpus import Corpus
 from ...infrastructure.emitters import DOCUMENTS, MANIFEST, TRACES, DocumentEmitter
 from ...infrastructure.screeners import EntropyScreener
@@ -169,6 +174,109 @@ def _parser() -> argparse.ArgumentParser:
         help="the corpus to check (default: ./synced)",
     )
     checking.add_argument("--json", action="store_true", help="print the findings as a document")
+
+    exporting = commands.add_parser(
+        "export",
+        help="write the corpus as JSON Lines, one document per line",
+        description=(
+            "Reads a corpus musubi already wrote and emits one JSON object per line, "
+            "which every retrieval framework takes. The metadata is musubi's own -- "
+            "including the trace map and the corpus root, so that a citation coming "
+            "back out of somebody else's index can still be turned into a place in "
+            "your own file."
+        ),
+    )
+    exporting.add_argument(
+        "destination",
+        type=Path,
+        nargs="?",
+        default=Path("synced"),
+        help="the corpus to read (default: ./synced)",
+    )
+    exporting.add_argument(
+        "--format",
+        dest="shape",
+        choices=sorted(SHAPES),
+        default="jsonl",
+        help="which field names to use (default: jsonl). The shapes differ by one key",
+    )
+    exporting.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="a file to write (default: standard output, so it can be piped)",
+    )
+
+    history = commands.add_parser(
+        "log",
+        help="what each run did to this corpus, newest first",
+        description=(
+            "The corpus's own history. Every sync appends one line saying which "
+            "artefacts it added, changed and removed, and which run it followed -- so a "
+            "document that is being questioned can be asked when it entered the corpus "
+            "and which run put it there. It is history and not storage: musubi keeps "
+            "one version of each document, and cannot give back what a run replaced."
+        ),
+    )
+    history.add_argument(
+        "destination",
+        type=Path,
+        nargs="?",
+        default=Path("synced"),
+        help="the corpus to read (default: ./synced)",
+    )
+    history.add_argument(
+        "--limit", type=int, default=10, help="how many runs to show (default: 10, 0 for all)"
+    )
+    history.add_argument(
+        "--paths",
+        type=int,
+        default=5,
+        help="how many paths to name per run before summarising (default: 5)",
+    )
+    history.add_argument("--json", action="store_true", help="print the history as a document")
+
+    difference = commands.add_parser(
+        "diff",
+        help="what changed across a range of runs, folded into one answer",
+        description=(
+            "Not what one run did -- what the corpus did across several. Added then "
+            "removed cancels; a document that left and came back is reported as "
+            "changed, because the journal knows it was removed and knows it was added "
+            "and does not keep the bytes to say whether they came back the same."
+        ),
+    )
+    difference.add_argument(
+        "destination",
+        type=Path,
+        nargs="?",
+        default=Path("synced"),
+        help="the corpus to read (default: ./synced)",
+    )
+    difference.add_argument(
+        "--since",
+        default=None,
+        help="a run id, or enough of one to be unique (default: the run before the last)",
+    )
+    difference.add_argument("--json", action="store_true", help="print the answer as a document")
+
+    serving = commands.add_parser(
+        "mcp",
+        help="serve musubi over the Model Context Protocol, on stdin and stdout",
+        description=(
+            "Speaks JSON-RPC over stdio so an agent can convert a document and then "
+            "cite it back to the byte in the same session. Rooted at the folder given: "
+            "every path outside it is refused (ADR-0007). Reads only -- there is "
+            "deliberately no tool that writes a corpus."
+        ),
+    )
+    serving.add_argument(
+        "root",
+        type=Path,
+        nargs="?",
+        default=Path(),
+        help="the folder this server may read (default: the working directory)",
+    )
 
     setting = commands.add_parser(
         "config",
@@ -526,13 +634,47 @@ def _coverage(manifest: Manifest, verb: str) -> None:
     coverage = manifest.coverage
     print("\nCoverage")
     print(f"  {coverage.emitted} documents {verb}, {coverage.skipped} skipped")
-    print(
-        f"  {coverage.traceable_characters} of {coverage.characters} characters traceable "
-        f"({coverage.traceable_coverage:.1%})"
-    )
+    if coverage.characters:
+        print(
+            f"  {coverage.traceable_characters} of {coverage.characters} characters traceable "
+            f"({coverage.traceable_coverage:.1%})"
+        )
+    else:
+        # Rather than `0 of 0 characters traceable (100.0%)`, which is what a
+        # ratio of nothing came out as.
+        print("  no characters were emitted, so there is no coverage to report")
     for source_record in manifest.sources:
         for cap in source_record.caps:
             print(f"  cap: {cap}")
+    _unused_converters(manifest)
+
+
+def _unused_converters(manifest: Manifest) -> None:
+    """Say when a better converter is installed and is not being used.
+
+    [ADR-0028] is deliberate: an installed extra is **offered, never claimed**,
+    so a dependency appearing in an environment cannot change what a folder
+    builds. The cost of that is a trap — somebody installs `musubi[pdf]`
+    *because* their PDFs came back as `no_pages`, runs it again, and gets
+    exactly the same `no_pages`, because nothing named the new converter.
+
+    Saying so costs a line and breaks nothing. The decision stays theirs; what
+    changes is that they know there is one to make.
+    """
+    refused = {"no_pages", "no_text_layer", "no_main_content", "undecodable", "unreadable"}
+    if not any(skip.reason in refused for skip in manifest.skipped):
+        return
+
+    claimed = {converter.name for converter in claimed_converters()}
+    offered = [extractor for extractor in available() if extractor.name not in claimed]
+    if not offered:
+        return
+
+    print("\nInstalled and not used")
+    for extractor in offered:
+        types = ", ".join(extractor.media_types)
+        print(f"  {extractor.name} reads {types}, and may read what was refused above.")
+        print(f'    musubi.toml:  [converters]  "{extractor.media_types[0]}" = "{extractor.name}"')
 
 
 def _limits(manifest: Manifest) -> None:
@@ -543,6 +685,166 @@ def _limits(manifest: Manifest) -> None:
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
+
+
+def _log(arguments: argparse.Namespace) -> int:
+    """The corpus's history, newest first.
+
+    Reads and writes nothing, like `verify`: a history is a thing to consult
+    when a document in the corpus is being questioned, which is exactly when
+    nobody wants the tool touching the folder.
+    """
+    corpus = Corpus(arguments.destination)
+    entries = corpus.journal()
+
+    if arguments.json:
+        _document(
+            json.dumps(
+                [entry.document() for entry in reversed(entries)], ensure_ascii=False, indent=2
+            )
+            + "\n"
+        )
+        return 0
+
+    if not entries:
+        print(f"musubi log — no history in {arguments.destination}")
+        print("  a corpus written before this feature keeps none. The next sync starts one.")
+        return 0
+
+    shown = (
+        list(reversed(entries))[: arguments.limit] if arguments.limit else list(reversed(entries))
+    )
+    print(f"musubi log — {len(entries)} runs, {arguments.destination}")
+    for entry in shown:
+        print(f"  {entry.short}  {entry.created_at or '(no time)'}  {entry.kind}")
+        print(f"    corpus {entry.short_run}")
+        print(f"    {entry.change.summary()}")
+        for label, names in (
+            ("+", entry.change.added),
+            ("~", entry.change.changed),
+            ("-", entry.change.removed),
+        ):
+            for path in names[: arguments.paths]:
+                print(f"    {label} {path}")
+            if len(names) > arguments.paths:
+                print(f"    {label} ... and {len(names) - arguments.paths} more")
+    if arguments.limit and len(entries) > len(shown):
+        print(f"  ... and {len(entries) - len(shown)} older runs")
+
+    print("\n  This is history, not storage. musubi holds one version of each document;")
+    print("  the journal says what changed and cannot give you back what was replaced.")
+    return 0
+
+
+def _diff(arguments: argparse.Namespace) -> int:
+    """What changed across a range of runs, folded into one answer."""
+    corpus = Corpus(arguments.destination)
+    entries = corpus.journal()
+    if not entries:
+        print(f"musubi diff — no history in {arguments.destination}")
+        return 0
+
+    if arguments.since is None:
+        # The run before the last one, so the default answers "what did the
+        # last sync do" -- the question somebody types `diff` for.
+        start = entries[-2] if len(entries) > 1 else None
+        chosen = entries[-1:]
+    else:
+        try:
+            index = run_named(entries, arguments.since)
+        except LookupError as error:
+            raise ContractError(f"{error}. `musubi log` lists them.") from error
+        start = entries[index]
+        chosen = entries[index + 1 :]
+
+    since = start.short if start is not None else "the empty corpus"
+    heading = f"{since}..{entries[-1].short}"
+
+    change = folded(chosen)
+    if not chosen and start is not None:
+        # Nothing between the named run and the end of the history. The corpus
+        # is whatever that run left, and saying "0 artefacts" would read as an
+        # empty corpus rather than an empty range.
+        change = replace(change, unchanged=start.change.total)
+
+    if arguments.json:
+        _document(
+            json.dumps(
+                {
+                    "contract": JOURNAL_CONTRACT,
+                    "from_entry": start.entry_id if start is not None else None,
+                    "from_run": start.run_id if start is not None else None,
+                    "to_entry": entries[-1].entry_id,
+                    "to_run": entries[-1].run_id,
+                    "runs": len(chosen),
+                    "added": list(change.added),
+                    "changed": list(change.changed),
+                    "removed": list(change.removed),
+                    "unchanged": change.unchanged,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n"
+        )
+        return 0
+
+    print(f"musubi diff — {heading}, {len(chosen)} runs")
+    print(f"  {change.summary()}")
+    for label, names in (
+        ("+", change.added),
+        ("~", change.changed),
+        ("-", change.removed),
+    ):
+        for path in names:
+            print(f"  {label} {path}")
+    if change.removed:
+        print("\n  A removed document is gone. The journal records that it left,")
+        print("  and does not keep a copy to restore.")
+    return 0
+
+
+def _export(arguments: argparse.Namespace) -> int:
+    """The corpus as one file, and a line saying what a reader now has.
+
+    Written to standard output by default and as **bytes**, for ADR-0020's
+    reason: a document is UTF-8 whatever the console is, and passing JSON
+    through a `cp932` terminal produced a file that was not valid UTF-8 with
+    exit 0 and no error. The count goes to standard error, so that a pipe gets
+    the document and a person still gets the report.
+    """
+    corpus = Corpus(arguments.destination)
+    lines = [
+        as_line(record, arguments.shape)
+        for record in documents(corpus, str(arguments.destination.resolve()))
+    ]
+    body = "".join(lines).encode("utf-8")
+
+    if arguments.out is None:
+        sys.stdout.flush()
+        sys.stdout.buffer.write(body)
+        sys.stdout.buffer.flush()
+    else:
+        arguments.out.parent.mkdir(parents=True, exist_ok=True)
+        arguments.out.write_bytes(body)
+
+    where = arguments.out if arguments.out is not None else "standard output"
+    print(
+        f"musubi export — {len(lines)} documents, {arguments.shape} shape, to {where}",
+        file=sys.stderr,
+    )
+    print(
+        "  every line carries trace_map and corpus, so a citation can be traced back",
+        file=sys.stderr,
+    )
+    return 0
+
+
+def _mcp(arguments: argparse.Namespace) -> int:
+    """Serve until stdin closes. Prints nothing to stdout but protocol."""
+    from ..mcp import serve
+
+    return serve(arguments.root)
 
 
 def _config(arguments: argparse.Namespace) -> int:
@@ -562,6 +864,15 @@ def _config(arguments: argparse.Namespace) -> int:
                 {
                     "read": str(configuration.read) if configuration.read else None,
                     "passed_over": [str(path) for path in configuration.passed_over],
+                    "optional_converters": {
+                        extractor.name: {
+                            "installed": extractor in available(),
+                            "extra": extractor.extra,
+                            "licence": extractor.licence,
+                            "media_types": list(extractor.media_types),
+                        }
+                        for extractor in (*available(), *unavailable())
+                    },
                     "settings": {
                         name: {"value": configuration[name], "origin": configuration.origin(name)}
                         for name, _, _, _ in rows
@@ -586,9 +897,32 @@ def _config(arguments: argparse.Namespace) -> int:
         print("  found further up and not read, because the nearest file wins whole:")
         for path in configuration.passed_over:
             print(f"    {path}")
+
+    offered = available()
+    missing = unavailable()
+    if offered or missing:
+        print()
+        print("Optional converters (ADR-0028). Installed ones are offered, never claimed:")
+        for extractor in offered:
+            print(
+                f"  {extractor.name:<16} available    "
+                f"{', '.join(extractor.media_types)}  [{extractor.licence}]"
+            )
+        for extractor in missing:
+            print(f"  {extractor.name:<16} not installed  pip install '{extractor.extra}'")
     return 0
 
 
 COMMANDS.update(
-    {"plan": _plan, "sync": _sync, "trace": _trace, "verify": _verify, "config": _config}
+    {
+        "plan": _plan,
+        "sync": _sync,
+        "trace": _trace,
+        "verify": _verify,
+        "export": _export,
+        "log": _log,
+        "diff": _diff,
+        "mcp": _mcp,
+        "config": _config,
+    }
 )

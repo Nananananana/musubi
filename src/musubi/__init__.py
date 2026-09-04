@@ -5,12 +5,25 @@ zip, a Slack archive, a shelf of PDFs -- into clean, normalized documents that
 can still point back at the byte they came from. No network, no service
 credentials, no model.
 
-Nothing is built yet. See ``docs/proposals/0001-the-design.md`` for the design
-and ``docs/adr/`` for the decisions behind it.
+    >>> import musubi
+    >>> converted = musubi.convert("notes/gear.md")
+    >>> converted.text[:20]
+    '# ギア設計
+
+テントは 2.4kg'
+    >>> converted.where(11, 16)          # and this is the part nothing else does
+    Where(span=Span(start=8, end=13), unit='characters', ...)
+
+``musubi plan``, ``sync``, ``trace``, ``verify``, ``export`` and ``config``
+work on the command line. ``docs/README.md`` is the list of what does and does
+not exist and is the one to trust; ``docs/adr/`` holds the decisions behind it.
 """
 
 from __future__ import annotations
 
+__version__ = "0.1.0.dev0"
+
+from .api import Document, Where, convert, history, media_type_of, sync
 from .errors import (
     ContractError,
     ConversionError,
@@ -20,14 +33,18 @@ from .errors import (
     TraceError,
 )
 
-__version__ = "0.1.0.dev0"
-
 __all__ = [
     "ContractError",
     "ConversionError",
     "CredentialFoundError",
+    "Document",
     "MusubiError",
     "SourceError",
     "TraceError",
+    "Where",
     "__version__",
+    "convert",
+    "history",
+    "media_type_of",
+    "sync",
 ]

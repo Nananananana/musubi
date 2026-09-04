@@ -45,7 +45,11 @@ def _markdown() -> list[Path]:
     found = sorted(
         p
         for p in ROOT.rglob("*.md")
-        if not {".venv", ".git", "node_modules", ".hypothesis"} & set(p.parts)
+        # `demo/sample-vault` is **generated** by `demo/make_sample.py` and is
+        # not documentation: it is a folder of somebody's notes, deliberately
+        # including one that is not even UTF-8. Walking it here read a Shift-JIS
+        # note as Markdown and looked for links in mojibake.
+        if not {".venv", ".git", "node_modules", ".hypothesis", "sample-vault"} & set(p.parts)
     )
     assert found, "no markdown found; this test is measuring nothing"
     return found

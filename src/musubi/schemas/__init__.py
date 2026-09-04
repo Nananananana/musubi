@@ -28,6 +28,7 @@ __all__ = ["CONTRACTS", "load", "path_to", "schemas"]
 
 #: Contract identifier (without the `-draft` suffix) to the file that defines it.
 CONTRACTS: dict[str, str] = {
+    "musubi.run-journal/1": "musubi-run-journal-1.json",
     "musubi.sync-manifest/1": "musubi-sync-manifest-1.json",
     "musubi.trace-map/1": "musubi-trace-map-1.json",
 }

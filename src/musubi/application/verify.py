@@ -43,6 +43,7 @@ of code.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from itertools import pairwise
 from typing import Any
 
 from ..domain.hashing import Canonical, content_hash, hash_of
@@ -116,6 +117,9 @@ def verify(corpus: CorpusReader) -> Verified:
     checks += 1
     faults.extend(_records_name_units_the_run_saw(document, units))
 
+    checks += 1
+    faults.extend(_journal_agrees(corpus, document))
+
     for entry in entries:
         checks += 1
         faults.extend(_artefact_holds(corpus, entry))
@@ -127,6 +131,58 @@ def verify(corpus: CorpusReader) -> Verified:
         checks=checks,
         faults=tuple(faults),
     )
+
+
+# -- journal ---------------------------------------------------------------
+
+
+def _journal_agrees(corpus: CorpusReader, document: dict[str, Any]) -> list[Fault]:
+    """The history's last entry names the corpus that is actually here.
+
+    A corpus with **no** journal passes: one written before [ADR-0034] keeps no
+    history and is not thereby broken. A corpus with a journal whose last entry
+    names a different run is a corpus and a history that have come apart --
+    somebody restored `manifest.json` from a backup, or copied documents in
+    over the top, or ran a musubi old enough not to append.
+
+    This is the check that makes the journal worth trusting. Without it the
+    file is a log: something written beside the corpus that nothing ever
+    compares against, and therefore something that can drift for a year without
+    anybody finding out.
+
+    The chain is checked too. Every entry but the first names its predecessor's
+    run as its parent, and a break in that says the file was edited or a line
+    was lost -- which matters more here than in most places, because
+    ``musubi diff`` folds a range of entries and a missing line silently
+    removes the changes it recorded.
+    """
+    entries = corpus.journal()
+    if not entries:
+        return []
+
+    faults = []
+    stated = str(document.get("run_id", ""))
+    if entries[-1].run_id != stated:
+        faults.append(
+            Fault(
+                "journal 1",
+                "run_id",
+                f"the corpus is run {stated} and its history ends at "
+                f"{entries[-1].run_id}. The two have come apart.",
+            )
+        )
+
+    for older, newer in pairwise(entries):
+        if newer.parent != older.run_id:
+            faults.append(
+                Fault(
+                    "journal 2",
+                    f"entry {newer.short}",
+                    f"names parent {newer.parent or '(none)'} and follows run "
+                    f"{older.run_id}. A line was edited or lost.",
+                )
+            )
+    return faults
 
 
 def _artefacts(document: dict[str, Any]) -> list[dict[str, Any]]:

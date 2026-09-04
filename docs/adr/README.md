@@ -42,6 +42,13 @@ later ADR supersedes it and says so.
 | [0025](0025-a-map-with-no-verbatim-run-composes-whatever-it-measures.md) | A map with no verbatim run composes whatever it measures |
 | [0026](0026-a-prefix-in-the-middle-of-a-blob-is-not-a-credential.md) | A prefix in the middle of a blob is not a credential |
 | [0027](0027-the-nearest-file-wins-whole-and-every-value-says-where-it-came-from.md) | The nearest file wins whole, and every value says where it came from |
+| [0028](0028-a-dependency-outside-the-domain-buys-quality-and-still-owes-a-map.md) | A dependency outside the domain buys quality, and still owes a map |
+| [0029](0029-a-better-reader-does-not-buy-a-finer-locator.md) | A better reader does not buy a finer locator |
+| [0030](0030-an-envelope-is-not-a-contract.md) | An envelope is not a contract |
+| [0031](0031-a-guess-with-its-uncertainty-attached-is-not-the-guess-that-was-forbidden.md) | A guess with its uncertainty attached is not the guess that was forbidden |
+| [0032](0032-the-shortest-way-in-is-the-one-that-keeps-the-map.md) | The shortest way in is the one that keeps the map |
+| [0033](0033-a-threshold-that-nobody-swept-is-a-number-fitted-to-one-corpus.md) | A threshold that nobody swept is a number fitted to one corpus |
+| [0034](0034-a-corpus-that-remembers-what-it-was.md) | A corpus that remembers what it was |
 
 [0004](0004-a-conversion-carries-a-map-back-to-its-source.md) is the one to read
 first. The rest of the design is arranged around it, and

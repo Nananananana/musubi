@@ -26,3 +26,9 @@ synced/
 **/traces/
 **/manifest.json
 .musubi-staging/
+
+# Built by demo/make_sample.py. Generated, not committed:
+# it is a folder of notes, one of which is deliberately not UTF-8.
+demo/sample-vault/
+demo/corpus/
+demo/*.jsonl

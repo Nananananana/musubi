@@ -50,9 +50,15 @@ The constitution, to be enforced by construction rather than by promise:
 
 ## Architecture map
 
-There is no `docs/architecture.md` yet, on purpose: nothing is built, and a
-current-state document written before the code is fiction. The planned shape is
-`docs/proposals/0001-the-design.md` §4.
+There is no `docs/architecture.md` yet, on purpose. The reason has changed and
+is worth restating: it used to be that there was no code to describe, and there
+is plenty now.
+It is that **the table below is executable and a prose document would not be** —
+`tests/test_architecture.py` parses every module and asserts these rules, so a
+separate description could drift while the build stayed green. When there is
+enough architecture that the table stops being sufficient, the document gets
+written and `test_there_is_no_architecture_document_yet` is deleted in the same
+commit.
 
 ```text
 interfaces ──> application ──> domain
@@ -69,6 +75,7 @@ interfaces ──> application ──> domain
 | `application/` | `domain`, `ports`, `errors` |
 | `infrastructure/` | `domain`, `ports`, `errors` |
 | `config.py` | everything above |
+| `api.py` | everything above — an interface, at the same level as the CLI |
 | `interfaces/` | everything above |
 
 This table is executable: `tests/test_architecture.py` parses every module and
@@ -218,7 +225,10 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   `tests/test_invariants.py` — the producer checking itself, in the same
   package. A contract freezes when something else needed it.
 - **License: Apache-2.0. Python: 3.12+. Runtime dependencies: 0**, checked in CI
-  by installing the wheel with no extras and asserting nothing came along.
+  by installing the wheel with no extras and asserting nothing came along. The
+  `html` extra (ADR-0028) does not change that number: it is optional, it is
+  *offered* rather than claimed, and the CI check is the thing that keeps the
+  two facts from drifting.
 - **Built:** `domain/` — `span`, `text`, `trace`, `hashing`, `record`, `removal`,
   `cleansing`, `screening`, `frontmatter`, `manifest`; `ports/` (`screener`,
   `source`, `converter`, `emitter`); `infrastructure/` (`rules`, `screeners`,
@@ -462,6 +472,37 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   named for the numbered entries, and a guard fails if the list grows an entry
   nothing runs. Everything there is asserted against a **real sync** of a
   generated vault, never against a document a test assembled.
+- **Outside the domain, a dependency is allowed; inside it, never** (ADR-0028).
+  `domain/` is standard-library only and the architecture test asserts it. An
+  adapter for somebody else's extractor lives in `infrastructure/converters/
+  external.py`, imports its dependency **inside a function**, and is *offered*
+  rather than registered — installing an extra must not change what any folder
+  already builds.
+- **An envelope is not a contract, and that is the whole of what `export` is
+  allowed to be** (ADR-0030). `page_content`/`metadata` carries no meaning;
+  the metadata inside it is musubi's own fields only, and the three shapes
+  differ by the name of one key. The moment a shape needs to know something a
+  framework *believes* -- a chunking convention, a required key, a namespace --
+  it has stopped being an envelope and ADR-0013 applies again.
+- **Alignment needs a source that is text, and PDF is where that stops.**
+  `PagedConverter` exists for sources that are not (ADR-0029): the locator stays
+  a page and `pdf_text@1` and `pdfium@1` produce **the same `src` spans**, which
+  a test asserts. `pdfium` will report a character box per glyph; musubi
+  declines it, because *page three* is a claim a reader can check by opening the
+  file and *page three, character 47* is not. What the dependency buys here is
+  **reach**, not precision -- a scan for `N 0 obj` reports `no_pages` on every
+  PDF 1.5.
+- **An extractor that returns only text still owes a map.** `domain/alignment.py`
+  recovers one by finding the output's lines in the source: verbatim where they
+  are there, transformed where they are not, and `removal` for a stretch that
+  produced nothing. It is a forward scan with a bounded window and not a diff,
+  for ADR-0016's reason — a scan running unattended over arbitrary documents
+  must not be able to hang. Measured: 99.7% traceable through `trafilatura@1`
+  against 93.5% for the built-in `html@1`, on the same page
+  (`tools/html_coverage.py`).
+- **Only permissive licences in an extra.** PyMuPDF is the fastest PDF reader in
+  Python and is AGPL-3.0. `test_every_adapter_states_a_permissive_licence` is
+  what keeps it out, because an extra is still a dependency the user ships.
 - **A setting arrives from four places and says which one.** `--flag` beats
   `MUSUBI_*` beats the nearest `musubi.toml` beats the default, the nearest file
   wins **whole** rather than merging, and `musubi config` prints the origin
@@ -477,6 +518,87 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   run anything. A converter from elsewhere is registered by a program that
   imported musubi deliberately, and is then nameable because the table is read
   when the question is asked rather than at import.
+- **A protocol stream is UTF-8, and a console codec will silently eat it.**
+  ADR-0020 records this for `--json`; `musubi mcp` had it again, and worse --
+  `--json` is read by a person who might notice, a protocol stream by a parser.
+  On cp932 it wrote JSON a client cannot decode, or with `errors="replace"` in
+  front of it, JSON it *can* decode with the document mangled inside. Anything
+  machine-facing goes to `sys.stdout.buffer` as bytes.
+- **Every numeric constant in `src/` is registered in
+  `tests/test_thresholds.py` as a bound, a measurement or a threshold, and the
+  build fails when a new one is not** (ADR-0033). A threshold must cite a sweep
+  (`tools/sensitivity.py`), a published measurement of its tier, or a filed
+  issue. Two were resolved rather than classified: the PDF kerning cut is a
+  cliff and became a setting, and `alignment._is_blank`'s two numbers were
+  deleted by passing the caller's string in and calling `strip()`.
+- **`traceable_coverage` can move the wrong way, and `answer_width` is the
+  companion that catches it.** An alignment that matches nothing produces one
+  transformed segment over the whole source: every offset resolves, to the
+  entire document, and coverage reads **100%**. Publish both, and never quote
+  coverage on an aligned converter without it.
+- **ADR-0020 protects the commands, not the values.** `main()` reconfigures the
+  streams with `errors="replace"`, so the CLI cannot fail a run on a narrow
+  console. A library value gets none of that. `Where.__str__` used an en dash
+  and `print(doc.where(0, 34))` raised `UnicodeEncodeError` on an
+  un-reconfigured Japanese Windows console -- a crash in the three-line README
+  example, from a typographic choice. **Anything a caller might `print`
+  themselves stays ASCII**, asserted in `tests/test_api.py`.
+- **`demo/` is a test that runs the way a person does, and it earns its keep.**
+  Two real defects came out of building it and neither had a failing test:
+  `trace` re-read a Shift-JIS source with the strict decoder and reported *the
+  source has changed* about an untouched file, and the above. Every fixture in
+  the suite was UTF-8 and every test printed nothing.
+- **`musubi.convert(path)` is a doorway, never a second pipeline** (ADR-0032).
+  It calls the same converters, ruleset and screener the CLI calls, chosen by
+  the same configuration, and `tests/test_api.py` asserts its text equals what a
+  real sync writes minus the front matter. `api.py` sits beside `interfaces/` in
+  the layer table for the same reason: a convenience surface that could see more
+  than the command line would be a second place for policy to live.
+- **A removal occupies no output, so `Span.overlaps` will not find one.** That
+  is correct -- an empty span has to overlap nothing or every insertion collides
+  with the run it sits in -- and it means any code selecting segments *by
+  overlap* silently drops removals. `Document.where` did, and reported where a
+  range came from while omitting what had been taken out of it, which is the one
+  thing ADR-0005 exists to keep visible.
+- **A successful decode is not a correct one, and ISO-2022-JP is where that
+  bites.** It is seven-bit, so a Japanese file in it decoded as UTF-8 with no
+  error and came back as its own escape sequences, reported as `utf-8`, exit
+  zero -- the exact failure `decode`'s docstring exists to prevent, arriving
+  through the *success* path. `decode` now refuses a UTF-8 reading that contains
+  `U+001B` and reads the ISO-2022 family by round trip instead, which needs no
+  dependency because **those encodings declare their character set inline**.
+  Self-describing is the property that separates them from cp932 (ADR-0031).
+- **`Path.write_text` truncates before it encodes.** A script that built a
+  replacement string containing a lone surrogate opened `tests/test_converters.py`
+  for writing, failed on the encode, and left **a zero-byte file**. Restored from
+  git. Write bytes, or write a temporary file and rename.
+- **A cached byte is not a cached parse.** Reading N entries out of an archive
+  was quadratic (#78); caching the inflated part's *bytes* and building a
+  `ZipFile` from them per read left the curve where it was, because constructing
+  one reads a central directory. **Both intermediate states passed every
+  functional test**, which is why `tests/test_archive_reads_stay_linear.py`
+  **counts archive opens** rather than asserting behaviour, and why the
+  invariant is written as *the count does not change when the pages double*
+  rather than as a bound on one fixture.
+- **`docs/measurements.md` is where a number goes, with the script that produced
+  it and what it does not cover.** Two of the design's own falsification
+  conditions are met and recorded there. A number in any other document is a
+  number somebody will quote without its denominator.
+- **A hang is a result, and something has to turn it into one.** pytest has
+  nothing to say about a test that is still running, so a property whose failure
+  mode is non-termination goes in a **subprocess with a deadline**
+  (`tests/test_the_scan_cannot_run_away.py`), and `tools/mutate.py` reports a
+  timed-out mutant as `[did not terminate]` rather than as one it could not
+  kill. Where the bound can be counted, count it in the docstring; `mamori`'s
+  version of this on the same day: **where it cannot, saying so is more accurate
+  than a number.**
+- **A mutation score is a statement about the test selection.**
+  `tools/mutate.py` changes one operator, runs the tests, and asks whether
+  anything noticed. `domain/screening.py` scored **74% against its own test file
+  and 100% against the suite**, unchanged in between -- so quote the `--tests`
+  argument with any number, and never narrow it to make a sweep faster. Not
+  `mutmut`: it refuses to run outside WSL on Windows, and a CI job for a tool
+  nobody here can run is a check whose failures nobody can reproduce.
 - **A refusal is only as good as the inputs it was pointed at, and the six in
   `tests/test_the_refusals_that_did_not_fire.py` were each already written.**
   Overlapping replacements were refused and an insertion *inside* one was not,
