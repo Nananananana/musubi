@@ -46,6 +46,7 @@ later ADR supersedes it and says so.
 | [0029](0029-a-better-reader-does-not-buy-a-finer-locator.md) | A better reader does not buy a finer locator |
 | [0030](0030-an-envelope-is-not-a-contract.md) | An envelope is not a contract |
 | [0031](0031-a-guess-with-its-uncertainty-attached-is-not-the-guess-that-was-forbidden.md) | A guess with its uncertainty attached is not the guess that was forbidden |
+| [0032](0032-the-shortest-way-in-is-the-one-that-keeps-the-map.md) | The shortest way in is the one that keeps the map |
 
 [0004](0004-a-conversion-carries-a-map-back-to-its-source.md) is the one to read
 first. The rest of the design is arranged around it, and

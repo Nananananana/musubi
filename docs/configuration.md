@@ -114,7 +114,7 @@ on a Japanese Windows machine before about 2015 is Shift-JIS**, and musubi
 reports every one of those files as `undecodable`.
 
 ```bash
-pip install 'musubi[encoding]'
+pip install "musubi[encoding] @ git+https://github.com/Nananananana/musubi"
 ```
 
 ```toml
@@ -159,8 +159,8 @@ dependency. Those are **extras**, and installing one adds a name without
 changing anything:
 
 ```bash
-pip install 'musubi[html]'      # better main-content extraction
-pip install 'musubi[pdf]'       # reads the PDFs a scan of `N 0 obj` cannot
+pip install "musubi[html] @ git+https://github.com/Nananananana/musubi"      # better main-content extraction
+pip install "musubi[pdf] @ git+https://github.com/Nananananana/musubi"       # reads the PDFs a scan of `N 0 obj` cannot
 ```
 
 ```toml

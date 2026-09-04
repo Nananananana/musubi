@@ -6,7 +6,7 @@ reasoning is in [ADR-0030](adr/0030-an-envelope-is-not-a-contract.md).
 ## Three commands
 
 ```bash
-pip install musubi
+pip install "musubi @ git+https://github.com/Nananananana/musubi"   # not on PyPI yet
 musubi plan   ~/notes                       # writes nothing, tells you everything
 musubi sync   ~/notes --into ./corpus       # builds it, or refuses and builds nothing
 musubi export ./corpus > corpus.jsonl       # one JSON object per document
@@ -33,6 +33,20 @@ musubi export ./corpus > corpus.jsonl       # one JSON object per document
   }
 }
 ```
+
+## Or one file, in three lines
+
+```python
+import musubi
+
+doc = musubi.convert("notes/gear.md")
+print(doc.text)
+print(doc.where(13, 18))        # characters [13:18], in your file
+```
+
+No corpus, no manifest, nothing written — and the map is a value you can hold
+rather than a sidecar you have to read back off disk. `doc.coverage`,
+`doc.removals` and `doc.converter` are all there too.
 
 ## Loading it
 

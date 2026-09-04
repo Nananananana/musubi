@@ -1,21 +1,85 @@
 # musubi（結び）
 
-**Local-first ingestion for generative AI.** Turn the exports and folders you
-already have — an Obsidian vault, a Notion zip, a Slack archive, a shelf of PDFs
-— into a clean corpus in which **every character still knows which byte of which
-original file it came from.** No network, no service tokens, no model.
+[![CI](https://github.com/Nananananana/musubi/actions/workflows/ci.yml/badge.svg)](https://github.com/Nananananana/musubi/actions/workflows/ci.yml)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/downloads/)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
+[![Runtime dependencies: 0](https://img.shields.io/badge/runtime%20dependencies-0-brightgreen)](docs/adr/0001-the-domain-depends-on-nothing.md)
 
-> **Status: v0.1 in progress.** `musubi plan` works: it reads a folder, converts
-> it, cleanses it, screens it for credentials, and tells you exactly what a sync
-> would do — **without writing anything**. `musubi sync` and `musubi trace` are
-> next. Nothing is released and the public API is not stable. What exists and
-> what does not is in [`docs/README.md`](docs/README.md); the design and the rest
-> of the roadmap are in
-> [`docs/proposals/0001-the-design.md`](docs/proposals/0001-the-design.md).
+**Turn the exports and folders you already have into a clean corpus for a
+language model — and keep knowing which byte of which original file every
+character came from.**
 
----
+An Obsidian vault, a Notion zip, a shelf of PDFs. No network, no service tokens,
+no model.
 
-## Try it
+```python
+import musubi
+
+doc = musubi.convert("notes/gear.md")
+
+doc.text                  # '# ギア設計
+
+テントは 2.4kg。https://example.test/a
+'
+doc.coverage              # 1.0
+doc.where(13, 18)         # characters [13:18]  ← in your file, not in the copy
+```
+
+Every other converter in this space — `markitdown`, `docling`, `unstructured`,
+`trafilatura` — has the signature `bytes -> str`. **That last line is the one
+they cannot write**, because the correspondence is discarded inside the library.
+
+## Install
+
+Not on PyPI yet. Until it is:
+
+```bash
+pip install "musubi @ git+https://github.com/Nananananana/musubi"
+```
+
+Optional extras, each one opt-in and none of them changing what a folder builds
+until a setting names it:
+
+```bash
+pip install "musubi[html] @ git+..."       # trafilatura: main-content extraction
+pip install "musubi[pdf] @ git+..."        # pdfium: reads PDF 1.5 object streams
+pip install "musubi[encoding] @ git+..."   # reads Shift-JIS, EUC-JP, Latin-1
+```
+
+## Three commands
+
+```bash
+musubi plan   ~/notes                   # writes nothing, tells you everything
+musubi sync   ~/notes --into ./corpus   # builds it, or refuses and builds nothing
+musubi export ./corpus > corpus.jsonl   # one JSON object per document
+```
+
+`corpus.jsonl` loads straight into LangChain, LlamaIndex, Hugging Face
+`datasets` or any vector store — and carries an **id that survives a re-sync**,
+so an upsert updates rather than duplicates.
+[`docs/using-a-corpus.md`](docs/using-a-corpus.md) is the whole of it.
+
+## How it compares
+
+| | musubi | markitdown | docling | unstructured |
+|---|---|---|---|---|
+| bytes → text | ✅ | ✅ | ✅ | ✅ |
+| **text → where it came from** | ✅ | — | — | — |
+| Records what it removed, and why | ✅ | — | — | — |
+| Stops on a credential | ✅ | — | — | — |
+| Runs with no network | ✅ | ✅ | ✅ | ✅ |
+| Runs with no model | ✅ | ✅ | optional | optional |
+| Runtime dependencies | **0** | many | many | many |
+| Office formats (`.docx`, `.pptx`) | — | ✅ | ✅ | ✅ |
+| Tables, layout, OCR | — | some | ✅ | ✅ |
+
+**The last two rows are the honest half.** If you need a `.docx` read or a table
+reconstructed, use one of the others — musubi does not do it yet. What it does
+is the row nobody else has, and the extras let you put `trafilatura` or `pdfium`
+*underneath* musubi so that you get their extraction **and** a map back to the
+source.
+
+## What a plan looks like
 
 ```bash
 musubi plan ~/notes
@@ -42,15 +106,22 @@ Limits
   …
 ```
 
-It leads with what would **not** happen, and ends with what the run does not
-establish. That is a deliberate reversal of what every ingestion tool prints, and
-it is why the page can be handed to somebody deciding whether to trust this with
-their notes.
+It leads with what would **not** happen and ends with what the run does not
+establish. That is a deliberate reversal of what every ingestion tool prints,
+and it is why the page can be handed to somebody deciding whether to trust this
+with their notes.
 
-The 56.9% is real and worth explaining: on a short note, the front matter musubi
-adds is a large share of the output, and musubi wrote it, so it does not count as
-traceable. Coverage publishes its numerator and its denominator rather than a
-ratio for exactly this reason.
+The 56.9% is real and worth explaining: on a short note the front matter musubi
+adds is a large share of the output, and musubi wrote it, so it does not count
+as traceable. Coverage publishes its numerator and its denominator rather than a
+ratio, for exactly this reason.
+
+> **Status: not released, and the public API is not stable.** `plan`, `sync`,
+> `trace`, `verify`, `export` and `config` all work.
+> [`docs/README.md`](docs/README.md) is the list of what exists and what does
+> not, and is the one to trust over any sentence on this page.
+> [`docs/measurements.md`](docs/measurements.md) holds every number, including
+> **two of this design's own falsification conditions being met**.
 
 ---
 
@@ -134,7 +205,7 @@ still resolves to a place in your own file.
 
 - **Zero runtime dependencies**, and the extras are opt-in. musubi is pointed at
   everything you have ever written; every dependency is a third party with
-  unsupervised read access to it. `pip install musubi` installs nothing, and an
+  unsupervised read access to it. Installing musubi brings nothing with it, and an
   extra that is installed is *offered* rather than claimed — it adds a converter
   a settings file can select and changes no folder's output on its own
   ([ADR-0001](docs/adr/0001-the-domain-depends-on-nothing.md),
@@ -225,7 +296,7 @@ already had, and **no component in that chain imports another**.
 | [`docs/proposals/0001-the-design.md`](docs/proposals/0001-the-design.md) | The design, the roadmap, and what would falsify it |
 | [`docs/contracts.md`](docs/contracts.md) | The two contracts, for producers and consumers — including what the schemas cannot say |
 | [`docs/concept.md`](docs/concept.md) | The conceptual model, and the picture across five projects |
-| [`docs/adr/`](docs/adr/README.md) | Thirty-one decisions, with their reasons and their costs |
+| [`docs/adr/`](docs/adr/README.md) | Thirty-two decisions, with their reasons and their costs |
 | [`AGENTS.md`](AGENTS.md) | The rules for anyone — human or model — changing this repository |
 
 ## License

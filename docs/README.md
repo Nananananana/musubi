@@ -129,6 +129,7 @@ request as the code it describes.
 | The emitter | Front matter, the trace sidecar, staging, atomic promotion, and withdrawal |
 | The contracts | Both schemas, shipped in the wheel, validated against real output ([`contracts.md`](contracts.md)) |
 | The invariants | What the schemas cannot express, asserted against generated corpora — and a guard that fails if the enumeration grows an entry nothing runs |
+| `musubi.convert(path)` | **The Python API** ([ADR-0032](adr/0032-the-shortest-way-in-is-the-one-that-keeps-the-map.md)). One file, text **and the map as a value** — `doc.where(13, 18)` rather than a sidecar read back off disk. Same converters, cleansing and screener as a sync, chosen by the same configuration; a credential raises rather than being returned. `musubi.sync()` and `musubi.media_type_of()` beside it |
 | `musubi export` | The corpus as **JSON Lines**, one document per line, for the readers that already exist ([ADR-0030](adr/0030-an-envelope-is-not-a-contract.md)). The id is `source_id:unit_key` and survives a re-sync, so a vector store upserts rather than duplicates; `trace_map` and `corpus` travel with every line, so a citation coming back out of somebody else's index can still be resolved to a place in the owner's file |
 | `musubi config` | Every setting in effect **with the thing that decided it**, and the files found and not read. Reads a `musubi.toml`, a `[tool.musubi]` table or the environment; the nearest file wins whole ([ADR-0027](adr/0027-the-nearest-file-wins-whole-and-every-value-says-where-it-came-from.md)) |
 | `musubi verify` | The same invariants, run against a folder rather than a run — plus the one no test can make, that each document still hashes to what the manifest recorded |
@@ -137,6 +138,8 @@ request as the code it describes.
 
 - **`musubi rules`**, `musubi eval`, `musubi doctor`. Named in the design, none
   written.
+- **Office formats.** No `.docx`, `.pptx` or `.xlsx`. The README's comparison
+  table says so and names the libraries that do read them.
 - **The incremental path.** A sync withdraws an artefact whose unit is gone, by
   reading the previous manifest as its ledger — but it still re-reads, converts
   and rewrites every unit that *is* there. `Change` exists and nothing calls it,

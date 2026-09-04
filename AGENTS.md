@@ -75,6 +75,7 @@ interfaces ──> application ──> domain
 | `application/` | `domain`, `ports`, `errors` |
 | `infrastructure/` | `domain`, `ports`, `errors` |
 | `config.py` | everything above |
+| `api.py` | everything above — an interface, at the same level as the CLI |
 | `interfaces/` | everything above |
 
 This table is executable: `tests/test_architecture.py` parses every module and
@@ -517,6 +518,18 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   run anything. A converter from elsewhere is registered by a program that
   imported musubi deliberately, and is then nameable because the table is read
   when the question is asked rather than at import.
+- **`musubi.convert(path)` is a doorway, never a second pipeline** (ADR-0032).
+  It calls the same converters, ruleset and screener the CLI calls, chosen by
+  the same configuration, and `tests/test_api.py` asserts its text equals what a
+  real sync writes minus the front matter. `api.py` sits beside `interfaces/` in
+  the layer table for the same reason: a convenience surface that could see more
+  than the command line would be a second place for policy to live.
+- **A removal occupies no output, so `Span.overlaps` will not find one.** That
+  is correct -- an empty span has to overlap nothing or every insertion collides
+  with the run it sits in -- and it means any code selecting segments *by
+  overlap* silently drops removals. `Document.where` did, and reported where a
+  range came from while omitting what had been taken out of it, which is the one
+  thing ADR-0005 exists to keep visible.
 - **A successful decode is not a correct one, and ISO-2022-JP is where that
   bites.** It is seven-bit, so a Japanese file in it decoded as UTF-8 with no
   error and came back as its own escape sequences, reported as `utf-8`, exit
