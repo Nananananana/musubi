@@ -71,6 +71,25 @@ def test_the_converter_names_itself_for_the_manifest() -> None:
 # -- the source side, and what it takes to turn it into bytes ---------------
 
 
+#: Text a converter is expected to accept.
+#:
+#: **Escapes are excluded, and that is a decision rather than a convenience.**
+#: ADR-0031 made a UTF-8 decode containing `U+001B` a refusal: ISO-2022-JP is
+#: seven-bit, so it used to decode as UTF-8 into its own escape sequences and be
+#: reported as `utf-8` with exit zero. A strategy that still generated one would
+#: be generating documents this library deliberately does not accept, and
+#: `tests/test_decoding.py` covers the refusal itself.
+#:
+#: `codec="utf-8"` is not decoration. Naming an alphabet at all drops the
+#: surrogate exclusion `st.text()` applies by default, and the first version of
+#: this generated a lone `\ud800`, which no encoder will take. Narrowing a
+#: strategy widened it.
+DOCUMENTS = st.text(
+    alphabet=st.characters(codec="utf-8", exclude_characters="\x1b"),
+    max_size=200,
+)
+
+
 def test_the_source_side_is_measured_in_characters() -> None:
     result = convert("紡ぎ".encode())
     assert result.trace.source_unit == CHARACTERS
@@ -350,7 +369,7 @@ def test_the_equal_length_rule_applies_only_while_both_sides_count_characters() 
 # -- the invariants ---------------------------------------------------------
 
 
-@given(st.text(max_size=200))
+@given(DOCUMENTS)
 def test_any_text_converts_with_a_tiling_that_holds(source: str) -> None:
     result = convert(source.encode())
     at = 0
@@ -361,7 +380,7 @@ def test_any_text_converts_with_a_tiling_that_holds(source: str) -> None:
     assert result.trace.source_length == len(source)
 
 
-@given(st.text(max_size=200))
+@given(DOCUMENTS)
 def test_every_verbatim_run_reads_the_same_on_both_sides(source: str) -> None:
     """The round trip. If this fails, `musubi trace` points readers at the wrong
     place in their own files."""
@@ -371,7 +390,7 @@ def test_every_verbatim_run_reads_the_same_on_both_sides(source: str) -> None:
             assert segment.src.slice(source) == segment.out.slice(result.text)
 
 
-@given(st.text(max_size=200))
+@given(DOCUMENTS)
 def test_converting_twice_gives_the_same_answer(source: str) -> None:
     raw = source.encode()
     assert convert(raw) == convert(raw)

@@ -40,6 +40,7 @@ from ..errors import ContractError
 from ..ports.converter import Converter
 from ..ports.screener import Screener
 from .converters import converter_for, known_converters
+from .decoding import Decoding
 from .rules import CORE
 from .screeners import default_screener
 
@@ -76,7 +77,9 @@ def screener_named(name: str) -> Screener:
     return default_screener(entropy=SCREENERS[name])
 
 
-def chooser(overrides: Mapping[str, str]) -> Callable[[str], Converter | None]:
+def chooser(
+    overrides: Mapping[str, str], *, detect: bool = False
+) -> Callable[[str], Converter | None]:
     """A `converter_for` that consults the overrides first.
 
     Returned as a callable rather than by mutating the registry: the registry is
@@ -100,7 +103,11 @@ def chooser(overrides: Mapping[str, str]) -> Callable[[str], Converter | None]:
         chosen[media_type] = known[name]
 
     def pick(media_type: str) -> Converter | None:
-        return chosen.get(media_type) or converter_for(media_type)
+        found = chosen.get(media_type) or converter_for(media_type)
+        # Wrapped whichever converter it is, so the encoding policy is one
+        # decision in one place rather than a parameter every converter has to
+        # remember to honour (ADR-0031).
+        return None if found is None else Decoding(found, detect=detect)
 
     return pick
 

@@ -44,6 +44,20 @@ KEPT = "kept"
 #: The kind :func:`normalize_line_endings` reports.
 LINE_ENDING = "line_ending"
 
+#: U+001B. Its presence in a successful UTF-8 decode means the bytes were not
+#: UTF-8 at all -- see :func:`decode`.
+ESCAPE = ""
+
+#: The seven-bit stateful encodings, tried by name when a UTF-8 decode comes
+#: back holding escape sequences.
+#:
+#: **A list rather than a detector, and deliberately.** `charset-normalizer`
+#: answers `iso2022_jp` for one paragraph of the same document and `utf_8` for
+#: four, because the bytes are pure ASCII either way and the longer sample looks
+#: more like plain text. A reading that changes with the length of the file is
+#: not a reading. These are checked by round trip instead, which is an equality.
+STATEFUL: tuple[str, ...] = ("iso2022_jp", "iso2022_jp_2", "iso2022_kr")
+
 
 @dataclass(frozen=True, slots=True)
 class Replacement:
@@ -265,13 +279,46 @@ def decode(data: bytes) -> Decoded:
                 codec=codec,
             )
     try:
-        return Decoded(text=data.decode("utf-8"), encoding="utf-8", bom_length=0)
+        text = data.decode("utf-8")
     except UnicodeDecodeError as error:
         raise ValueError(
             f"not decodable as UTF-8 or as UTF-16 with a byte-order mark "
             f"(byte {error.start} is {data[error.start]:#04x}); musubi does not guess an "
             f"encoding, because a wrong guess is indistinguishable from a successful read"
         ) from error
+
+    # A successful decode is not the same as a correct one, and this is the case
+    # where the difference is invisible. **ISO-2022-JP is seven-bit**: a Japanese
+    # file in it is pure ASCII, so it decodes as UTF-8 without an error and comes
+    # back as `# 設計メモ` -- escape sequences where the words were,
+    # reported as `utf-8`, exit zero.
+    #
+    # That is exactly the failure the paragraph above says this function exists
+    # to prevent, arriving through the *success* path instead of the guessing
+    # one. Refusing needs no detection and no dependency: an escape character is
+    # not something prose contains, and text that holds one is either a stateful
+    # encoding or terminal control codes. Neither is a document.
+    if ESCAPE not in text:
+        return Decoded(text=text, encoding="utf-8", bom_length=0)
+
+    # It is stateful, so read it as what it says it is. This is **not** the
+    # guessing the docstring refuses: an ISO-2022 file declares its character
+    # set inline, in the escape sequences themselves, and the round trip below
+    # checks the reading against the bytes rather than against a probability.
+    # Self-describing is the property that separates this from cp932.
+    for candidate in STATEFUL:
+        try:
+            reading = data.decode(candidate)
+        except (LookupError, UnicodeDecodeError):
+            continue
+        if ESCAPE not in reading and reading.encode(candidate) == data:
+            return Decoded(text=reading, encoding=candidate, bom_length=0, codec=candidate)
+
+    raise ValueError(
+        f"decodes as UTF-8 and contains an escape character at {text.index(ESCAPE)}, so "
+        f"it is not text; it is stateful or terminal output, and none of "
+        f"{', '.join(STATEFUL)} reads it back to the same bytes"
+    )
 
 
 def _refuse_overlaps(ordered: Sequence[Replacement]) -> None:

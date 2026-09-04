@@ -517,6 +517,18 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   run anything. A converter from elsewhere is registered by a program that
   imported musubi deliberately, and is then nameable because the table is read
   when the question is asked rather than at import.
+- **A successful decode is not a correct one, and ISO-2022-JP is where that
+  bites.** It is seven-bit, so a Japanese file in it decoded as UTF-8 with no
+  error and came back as its own escape sequences, reported as `utf-8`, exit
+  zero -- the exact failure `decode`'s docstring exists to prevent, arriving
+  through the *success* path. `decode` now refuses a UTF-8 reading that contains
+  `U+001B` and reads the ISO-2022 family by round trip instead, which needs no
+  dependency because **those encodings declare their character set inline**.
+  Self-describing is the property that separates them from cp932 (ADR-0031).
+- **`Path.write_text` truncates before it encodes.** A script that built a
+  replacement string containing a lone surrogate opened `tests/test_converters.py`
+  for writing, failed on the encode, and left **a zero-byte file**. Restored from
+  git. Write bytes, or write a temporary file and rename.
 - **A cached byte is not a cached parse.** Reading N entries out of an archive
   was quadratic (#78); caching the inflated part's *bytes* and building a
   `ZipFile` from them per read left the curve where it was, because constructing

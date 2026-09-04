@@ -895,6 +895,7 @@ source = { editable = "." }
 
 [package.optional-dependencies]
 dev = [
+    { name = "charset-normalizer" },
     { name = "hypothesis" },
     { name = "import-linter" },
     { name = "jsonschema" },
@@ -907,6 +908,9 @@ dev = [
     { name = "trafilatura" },
     { name = "types-jsonschema" },
 ]
+encoding = [
+    { name = "charset-normalizer" },
+]
 html = [
     { name = "trafilatura" },
 ]
@@ -916,6 +920,8 @@ pdf = [
 
 [package.metadata]
 requires-dist = [
+    { name = "charset-normalizer", marker = "extra == 'dev'", specifier = ">=3" },
+    { name = "charset-normalizer", marker = "extra == 'encoding'", specifier = ">=3" },
     { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6.90" },
     { name = "import-linter", marker = "extra == 'dev'", specifier = ">=2" },
     { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4" },
@@ -930,7 +936,7 @@ requires-dist = [
     { name = "trafilatura", marker = "extra == 'html'", specifier = ">=2.0" },
     { name = "types-jsonschema", marker = "extra == 'dev'" },
 ]
-provides-extras = ["html", "pdf", "dev"]
+provides-extras = ["html", "pdf", "encoding", "dev"]
 
 [[package]]
 name = "mypy"

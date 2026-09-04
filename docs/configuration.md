@@ -64,6 +64,7 @@ allow     = ["stripe.secret-key:archive/2019-invoice.md"]
 | `rules` | `core`, `none` | `core` | which cleansing pack runs ([ADR-0016](adr/0016-a-rule-is-a-matcher-not-a-regular-expression.md)) |
 | `converters` | a table of media type → converter | *(empty)* | overrides the built-in claim for a format |
 | `allow` | a list of `rule:unit_key` | *(empty)* | credential hits already looked at and decided against |
+| `encoding` | `strict`, `detect` | `strict` | whether a file that is not UTF-8 is refused or read by detection ([ADR-0031](adr/0031-a-guess-with-its-uncertainty-attached-is-not-the-guess-that-was-forbidden.md)) |
 
 Environment variables are the key uppercased with `MUSUBI_` in front:
 `MUSUBI_SOURCE`, `MUSUBI_SCREENER`. A list is comma-separated. **A table is
@@ -101,6 +102,55 @@ import.
 The wiring — which class implements `notion`, which pack `core` names — lives in
 `musubi/config.py`, the composition root the architecture map reserves for it.
 An interface prints a configuration or runs one; neither needs to know.
+
+## Reading notes that are not UTF-8
+
+musubi reads UTF-8 and UTF-16-with-a-mark. Everything else is refused, because a
+wrongly guessed encoding writes plausible nonsense into a corpus and looks
+exactly like a successful read.
+
+That is right and it is unusable on its own: **a vault holding anything written
+on a Japanese Windows machine before about 2015 is Shift-JIS**, and musubi
+reports every one of those files as `undecodable`.
+
+```bash
+pip install 'musubi[encoding]'
+```
+
+```toml
+# musubi.toml
+encoding = "detect"
+```
+
+With the extra installed and `strict` still set, the refusal tells you what the
+file is:
+
+```text
+skipped  design/古いメモ.md  undecodable
+  not decodable as UTF-8 or as UTF-16 with a byte-order mark (byte 2 is 0x90).
+  It looks like cp932 (98% coherent); set `encoding = "detect"` in musubi.toml
+  to read it, and the detected encoding will be recorded with every offset
+```
+
+With `detect`, it is read, and **the detected encoding is written into the trace
+map** — so an offset still converts to a byte offset in your original file, and
+the corpus says what musubi had to assume.
+
+**Measured** with `uv run python tools/encoding_detection.py`, six languages
+against seven encodings, comparing the recovered *text* rather than the label:
+
+| sample | recovered exactly |
+|---|---|
+| a paragraph | **17 of 19** |
+| one line | **16 of 19** |
+
+Both constant failures are French in Latin-1 or cp1252 read as cp1250. Every
+multi-byte encoding was right at paragraph length. **Detection gets worse as the
+file gets shorter**, and the extra failure there is Russian in KOI8-R read as
+Japanese — and every one of these misses reports 100% coherence, so the
+confidence number will not warn you.
+
+That is why `strict` is the default rather than `detect`.
 
 ## Optional converters
 

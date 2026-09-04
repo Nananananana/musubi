@@ -54,6 +54,13 @@ html = ["trafilatura>=2.0"]
 # such a file it reports `no_pages`, correctly and uselessly. Measured with
 # tools/pdf_coverage.py.
 pdf = ["pypdfium2>=4"]
+# Reads a note that is not UTF-8. MIT, **no dependencies of its own**.
+#
+# Without it, a vault holding anything written on a Japanese Windows machine
+# before about 2015 reports every file as `undecodable` -- a correct answer and
+# a library nobody can use. With it and `encoding = "detect"`, the file is read
+# and the detected encoding is recorded with every offset (ADR-0031).
+encoding = ["charset-normalizer>=3"]
 dev = [
     "pytest>=8",
     "pytest-cov",
@@ -75,6 +82,7 @@ dev = [
     # that has never run.
     "trafilatura>=2.0",
     "pypdfium2>=4",
+    "charset-normalizer>=3",
 ]
 
 # There is deliberately no `siblings` extra yet. The only sibling musubi ever

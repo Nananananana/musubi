@@ -150,6 +150,13 @@ OPTIONS: tuple[Option, ...] = (
         "media type -> converter name, overriding the built-in claim",
     ),
     Option("allow", list, [], "credential hits already looked at, as rule:unit_key"),
+    Option(
+        "encoding",
+        str,
+        "strict",
+        "whether a file that is not UTF-8 is refused or detected (ADR-0031)",
+        ("strict", "detect"),
+    ),
 )
 
 DEFAULTS: Mapping[str, Any] = {option.name: option.default for option in OPTIONS}
@@ -375,7 +382,9 @@ def settings_from(
     return Settings(
         ruleset=ruleset_named(configuration["rules"]),
         screener=screener_named(configuration["screener"]),
-        converter_for=chooser(configuration["converters"]),
+        converter_for=chooser(
+            configuration["converters"], detect=configuration["encoding"] == "detect"
+        ),
         musubi_version=musubi_version,
         allowed=frozenset(configuration["allow"]),
         created_at=created_at,
