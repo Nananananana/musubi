@@ -1,0 +1,7 @@
+source   = "filesystem"
+into     = "corpus"
+encoding = "detect"
+
+[converters]
+"application/pdf" = "pdfium@1"
+"text/html"       = "trafilatura@1"

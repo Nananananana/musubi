@@ -36,7 +36,7 @@ from pathlib import Path
 
 from ..domain.hashing import content_hash
 from ..domain.span import Span
-from ..domain.text import decode
+from ..domain.text import Decoded, decode
 from ..domain.trace import CHARACTERS, Kind, Segment
 from ..errors import TraceError
 from ..ports.corpus import CorpusReader, SourceReference
@@ -129,11 +129,10 @@ def _against_the_file(corpus: CorpusReader, resolution: Resolution) -> Resolutio
         # text and hand back a byte range into mojibake.
         return replace(resolution, source_path=path, changed=changed)
 
-    try:
-        decoded = decode(raw)
-    except ValueError:
-        # No longer decodable, so certainly edited. The character range is
-        # still what the map holds.
+    decoded = _as_the_map_read_it(raw, resolution.source.encoding)
+    if decoded is None:
+        # No longer readable the way it was read, so certainly edited. The
+        # character range is still what the map holds.
         return replace(resolution, source_path=path, changed=True)
 
     span = resolution.source_span
@@ -150,6 +149,37 @@ def _against_the_file(corpus: CorpusReader, resolution: Resolution) -> Resolutio
         source_excerpt=span.slice(decoded.text),
         changed=changed,
     )
+
+
+def _as_the_map_read_it(raw: bytes, encoding: str) -> Decoded | None:
+    """Decode the source the way the run that wrote the map decoded it.
+
+    **The map records the encoding for exactly this.** [ADR-0018] says a
+    character offset becomes a byte offset given the encoding, the mark's length
+    and the file, and the map carries the first two so that this can have the
+    third.
+
+    Reading it back with `domain.text.decode` instead was a real defect and a
+    quiet one: that reader takes UTF-8, UTF-16 with a mark and the self-
+    describing stateful encodings, and a Shift-JIS note read under
+    `encoding = "detect"` ([ADR-0031]) is none of those. It raised, and `trace`
+    concluded **the source has changed since the sync** about a file nobody had
+    touched. The demo found it; nothing else did, because every test fixture was
+    UTF-8.
+
+    `decode` is still tried first, because it is the one that reports a
+    byte-order mark, and a mark is bytes the offsets have to step over.
+    """
+    try:
+        return decode(raw)
+    except ValueError:
+        pass
+    if not encoding:
+        return None
+    try:
+        return Decoded(text=raw.decode(encoding), encoding=encoding, bom_length=0, codec=encoding)
+    except (LookupError, UnicodeDecodeError):
+        return None
 
 
 def _bears_on(segment: Segment, out: Span) -> bool:

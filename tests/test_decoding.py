@@ -261,3 +261,67 @@ def test_the_offsets_still_convert_to_bytes_in_the_original_file(tmp_path: Path)
     byte_at = len(source_text[:at].encode(held.source.encoding))
 
     assert raw[byte_at : byte_at + 5] == b"2.4kg"
+
+
+# -- reading it back, which is what the recorded encoding is for -------------
+
+
+@available
+def test_trace_reads_the_source_back_with_the_encoding_the_map_recorded(
+    tmp_path: Path,
+) -> None:
+    """The defect the demo found, and nothing else did.
+
+    [ADR-0018] says a character offset becomes a byte offset given the encoding,
+    the mark's length and the file, and the map carries the first two so that
+    `trace` can supply the third. `trace` ignored them and re-read the source
+    with `domain.text.decode`, which takes UTF-8, UTF-16 with a mark and the
+    self-describing stateful encodings -- and a Shift-JIS note read under
+    `encoding = "detect"` is none of those.
+
+    So it raised, and `trace` reported **the source has changed since the sync**
+    about a file nobody had touched, with no byte offset. Every fixture in the
+    suite was UTF-8, so nothing caught it until a demo folder had one real
+    Shift-JIS note in it.
+    """
+    from musubi.application.trace import resolve
+    from musubi.domain.span import Span
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    raw = (NOTE * 3).encode("cp932")
+    (vault / "old.md").write_bytes(raw)
+    into = tmp_path / "corpus"
+    sync(FilesystemSource(vault), settings(detect=True), DocumentEmitter(into))
+
+    corpus = Corpus(into)
+    text = corpus.artefact("old.md")
+    at = text.index("2.4kg")
+    found = resolve(corpus, "old.md", Span(at, at + 5))
+
+    assert not found.changed, "an untouched file was reported as edited"
+    assert found.source_excerpt == "2.4kg"
+    assert found.source_bytes is not None, "no byte offset, though the file is right there"
+    assert raw[found.source_bytes.start : found.source_bytes.end] == b"2.4kg"
+
+
+@available
+def test_a_source_that_really_did_change_is_still_reported(tmp_path: Path) -> None:
+    """The other half. A fix that stopped noticing edits would be worse than
+    the false alarm it replaced."""
+    from musubi.application.trace import resolve
+    from musubi.domain.span import Span
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "old.md").write_bytes((NOTE * 3).encode("cp932"))
+    into = tmp_path / "corpus"
+    sync(FilesystemSource(vault), settings(detect=True), DocumentEmitter(into))
+
+    (vault / "old.md").write_bytes(("# 別のもの\n\n" + NOTE * 3).encode("cp932"))
+
+    text = Corpus(into).artefact("old.md")
+    at = text.index("2.4kg")
+    found = resolve(Corpus(into), "old.md", Span(at, at + 5))
+
+    assert found.changed, "the file was rewritten and nothing said so"

@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 import musubi
+from musubi.api import Where
 from musubi.application.pipeline import Settings
 from musubi.application.sync import sync as run_sync
 from musubi.domain.trace import CHARACTERS, OPAQUE, Kind
@@ -257,3 +258,45 @@ def test_the_kinds_a_range_passes_through_are_reported(note: Path) -> None:
     assert Kind.REMOVAL in where.kinds
     assert "url_query" in where.rules
     assert {removal.rule for removal in converted.removals} == {"tracking.utm-family"}
+
+
+# -- what a caller might print themselves -----------------------------------
+
+
+def test_everything_a_caller_prints_survives_a_narrow_console() -> None:
+    """[ADR-0020] protects musubi's *commands*, not its values.
+
+    `main()` reconfigures the streams with `errors="replace"`, so the CLI cannot
+    fail a run on a console that cannot show a character. A library value gets
+    none of that: `print(doc.where(0, 34))` goes straight to whatever encoding
+    the caller's terminal has.
+
+    This used an en dash between page numbers, and the three-line example in the
+    README raised `UnicodeEncodeError` on an un-reconfigured Japanese Windows
+    console. The demo found it; every test until now printed nothing.
+
+    `cp932` because it is the default on Japanese Windows, which is where this
+    library is written and where its hardest inputs come from.
+    """
+    from musubi.domain.span import Span
+    from musubi.domain.trace import CHARACTERS, OPAQUE, Kind
+
+    printable = [
+        str(Where(Span(13, 18), CHARACTERS, (Kind.VERBATIM,), ())),
+        str(Where(Span(0, 1), OPAQUE, (Kind.TRANSFORMED,), ("pdf.page",))),
+        str(Where(Span(2, 5), OPAQUE, (Kind.TRANSFORMED,), ("pdf.page",))),
+    ]
+    for rendering in printable:
+        rendering.encode("cp932")
+        assert rendering.isascii(), f"{rendering!r} is not ASCII"
+
+    assert "page 1 " in printable[1], "a single page should not read as a range"
+    assert "pages 3-5" in printable[2]
+
+
+def test_a_document_that_is_printed_whole_survives_it_too(note: Path) -> None:
+    """The text is the owner's and may be anything; what musubi *adds* to it
+    must not be the thing that breaks the print."""
+    converted = musubi.convert(note)
+    for field in (converted.converter, converted.media_type, converted.encoding):
+        assert field.isascii(), f"{field!r} is not ASCII"

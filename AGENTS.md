@@ -536,6 +536,18 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   transformed segment over the whole source: every offset resolves, to the
   entire document, and coverage reads **100%**. Publish both, and never quote
   coverage on an aligned converter without it.
+- **ADR-0020 protects the commands, not the values.** `main()` reconfigures the
+  streams with `errors="replace"`, so the CLI cannot fail a run on a narrow
+  console. A library value gets none of that. `Where.__str__` used an en dash
+  and `print(doc.where(0, 34))` raised `UnicodeEncodeError` on an
+  un-reconfigured Japanese Windows console -- a crash in the three-line README
+  example, from a typographic choice. **Anything a caller might `print`
+  themselves stays ASCII**, asserted in `tests/test_api.py`.
+- **`demo/` is a test that runs the way a person does, and it earns its keep.**
+  Two real defects came out of building it and neither had a failing test:
+  `trace` re-read a Shift-JIS source with the strict decoder and reported *the
+  source has changed* about an untouched file, and the above. Every fixture in
+  the suite was UTF-8 and every test printed nothing.
 - **`musubi.convert(path)` is a doorway, never a second pipeline** (ADR-0032).
   It calls the same converters, ruleset and screener the CLI calls, chosen by
   the same configuration, and `tests/test_api.py` asserts its text equals what a

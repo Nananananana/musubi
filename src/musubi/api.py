@@ -89,10 +89,24 @@ class Where:
         return bool(self.kinds) and all(kind is Kind.VERBATIM for kind in self.kinds)
 
     def __str__(self) -> str:
+        """ASCII only, and that is not fussiness.
+
+        [ADR-0020] makes the *command line* incapable of failing a run on a
+        narrow console: `main()` reconfigures the streams with
+        `errors="replace"`. **A library value has no such protection.** This
+        used an en dash between page numbers, and `print(doc.where(0, 34))` on
+        an un-reconfigured Japanese Windows console raised
+        `UnicodeEncodeError` — a crash in the three-line example, from a
+        typographic choice.
+
+        The rule that follows: musubi may print what it likes through its own
+        commands, and anything a caller might `print` themselves stays in ASCII.
+        """
         if self.unit == CHARACTERS:
             return f"characters [{self.span.start}:{self.span.end}]"
-        pages = "page" if self.span.length == 1 else "pages"
-        return f"{pages} {self.span.start + 1}–{self.span.end} (opaque locator)"
+        if self.span.length == 1:
+            return f"page {self.span.start + 1} (opaque locator)"
+        return f"pages {self.span.start + 1}-{self.span.end} (opaque locator)"
 
 
 @dataclass(frozen=True, slots=True)
