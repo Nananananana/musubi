@@ -101,6 +101,10 @@ class DocumentEmitter:
     def __init__(self, destination: Path) -> None:
         self.destination = destination.expanduser().resolve()
         self.staging = self.destination / STAGING
+        # Resolved once each. `_inside` is called twice per artefact and a
+        # root's resolution cannot change during a run.
+        self._resolved_destination = self.destination.resolve()
+        self._resolved_staging = self.staging.resolve()
         self._staged: list[str] = []
 
     # -- staging -----------------------------------------------------------
@@ -176,7 +180,7 @@ class DocumentEmitter:
 
     def _write(self, relative: Path, body: str) -> None:
         target = self.staging / relative
-        if not _inside(target, self.staging):
+        if not _inside(target, self._resolved_staging):
             raise ConversionError(f"{relative} would be written outside the staging area")
         target.parent.mkdir(parents=True, exist_ok=True)
         # Written as UTF-8 with LF, on every platform. A corpus whose bytes
@@ -277,7 +281,7 @@ class DocumentEmitter:
         removed: list[str] = []
         for relative in sorted(paths):
             target = self.destination / relative
-            if not _inside(target, self.destination) or not target.is_file():
+            if not _inside(target, self._resolved_destination) or not target.is_file():
                 continue
             target.unlink()
             removed.append(relative)
@@ -290,6 +294,16 @@ def _render_trace(document: Document, text: str, trace: TraceMap, relative: str)
 
     Written with a stable key order and a trailing newline, so that two runs
     over the same input produce the same bytes.
+
+    **Minified, and it used to be indented.** The reason given was that this is
+    the file a reviewer opens, which was fair when nobody had measured the file.
+    Measured (#76, `tools/scaling.py --only map`), the indentation is about as
+    many bytes as the data -- 36,241 down to 16,093 for one HTML map, with
+    `traces/` at 10.7x the documents it describes.
+
+    And it is not only storage: encoding these was **27% of a 300-document
+    sync** in the profile, most of it whitespace. A reviewer who wants to read
+    one pipes it through `jq`; nobody gets the disk back.
     """
     body = {
         "contract": TRACE_CONTRACT,
@@ -320,12 +334,18 @@ def _render_trace(document: Document, text: str, trace: TraceMap, relative: str)
             for segment in trace.segments
         ],
     }
-    return json.dumps(body, ensure_ascii=False, indent=2) + "\n"
+    return json.dumps(body, ensure_ascii=False, separators=(",", ":")) + "\n"
 
 
 def _inside(target: Path, root: Path) -> bool:
+    """Does this path stay under that root?
+
+    `root` arrives **already resolved**. This is called twice per artefact, and
+    resolving the root each time was 7% of a 300-document sync: a syscall per
+    check, for an answer that cannot change during a run.
+    """
     try:
-        target.resolve().relative_to(root.resolve())
+        target.resolve().relative_to(root)
     except (OSError, ValueError):
         return False
     return True

@@ -14,7 +14,8 @@ wrong fix for. That is the falsification section working.
 | Metric | Value | Verdict |
 |---|---|---|
 | Traceable coverage, HTML | 93.5% built-in, **99.7%** via `trafilatura@1` | holds |
-| Trace map size | **10.7× the corpus** | **falsified** |
+| Trace map size | 10.7× → **4.9× the corpus** | half fixed ([#76](https://github.com/Nananananana/musubi/issues/76)) |
+| Composition | **quadratic** → linear, 33× faster | fixed |
 | Re-read ratio | **0.91** | **falsified** |
 | Archive reads per unit | **O(1)** archives opened | fixed in [#78](https://github.com/Nananananana/musubi/issues/78) |
 | Screener precision, synthetic | **0.00%** false stops after ADR-0026 | holds |
@@ -39,9 +40,10 @@ uv run python tools/scaling.py --only map
 ```
 
 §10 says: *if a map routinely exceeds its document, the guarantee costs more
-storage than the corpus*. It does, by an order of magnitude, and the proposal's
-predicted remedy — *the fix is converter-side* — is **wrong about roughly half
-of it**:
+storage than the corpus*. It did, by an order of magnitude, and the proposal's
+predicted remedy — *the fix is converter-side* — was **wrong about roughly half
+of it**. Minifying the sidecar took it from 10.7× to **4.9×**; the numbers below
+are the measurement that showed where to look:
 
 - **`indent=2`.** The sidecar is written indented on the stated grounds that it
   is *the file a reviewer opens*. The indentation is about as many bytes as the
@@ -56,6 +58,48 @@ of it**:
   216 segments for 2.6 kB.
 
 Filed as [#76](https://github.com/Nananananana/musubi/issues/76).
+
+## Composition was quadratic, and 112 kB took five seconds
+
+```text
+links     bytes      sync   growth        after
+  100    13,840     0.09s                 0.04s
+  200    27,840     0.18s     2.1x        0.05s
+  400    55,840     0.62s     3.5x        0.09s
+  800   111,840     5.29s     8.5x        0.16s   **33x**
+ 1600   225,040         -                 0.35s
+ 3200   452,240         -                 0.86s
+```
+
+The page is a blog index or a newsletter archive — links with tracking
+parameters on them, so the converter's map and the cleanser's map are **both
+dense**. `TraceMap.followed_by` scanned every segment of the earlier map for
+every segment of the later one, and the growth factor was still rising at
+800 links.
+
+The segments tile the output in order, so `out.end` is non-decreasing and the
+window is a bisection. `tests/test_composition_is_linear.py` keeps the old
+algorithm and compares the two on generated maps, because an optimisation to
+the core of [ADR-0004] that quietly changed an answer would make every citation
+in every corpus built afterwards wrong with nothing to say so.
+
+## A 300-document sync, by where the time went
+
+```text
+before   4.83s
+after    1.52s     **3.2x**
+```
+
+| | share of the profile | what it was |
+|---|---|---|
+| encoding the sidecars | 27% | `indent=2`, most of it whitespace |
+| composition | 18% | the quadratic above |
+| `Path.resolve()` in `_inside` | 7% | a syscall per check, twice per artefact |
+
+The first of those is also half of the map-size problem above: minified, one
+HTML map goes from 36,241 bytes to 16,588, and `traces/` from 10.7× the
+documents to **4.9×**. The reason for indenting was that a reviewer opens these;
+a reviewer can pipe one through `jq`, and nobody gets the disk back.
 
 ## Re-read ratio — 0.91
 
