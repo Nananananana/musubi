@@ -116,6 +116,20 @@ Every run leads with what it removed, what it skipped, and what share of the
 output is traceable. A partial job whose boundary is printed on the artefact is
 worth more than a complete-looking one whose edges cannot be examined.
 
+## Using it with what you already have
+
+```bash
+musubi sync   ~/notes --into ./corpus
+musubi export ./corpus > corpus.jsonl
+```
+
+One JSON object per document, which LangChain, LlamaIndex, `datasets` and every
+vector store already read. Two things travel with it that no other loader can
+give you: an **id that survives a re-sync** (so an upsert updates rather than
+duplicates), and the **trace map**, so a citation coming back out of an index
+still resolves to a place in your own file.
+[`docs/using-a-corpus.md`](docs/using-a-corpus.md) is the whole of it.
+
 ## Design in five lines
 
 - **Zero runtime dependencies**, and the extras are opt-in. musubi is pointed at
@@ -211,7 +225,7 @@ already had, and **no component in that chain imports another**.
 | [`docs/proposals/0001-the-design.md`](docs/proposals/0001-the-design.md) | The design, the roadmap, and what would falsify it |
 | [`docs/contracts.md`](docs/contracts.md) | The two contracts, for producers and consumers — including what the schemas cannot say |
 | [`docs/concept.md`](docs/concept.md) | The conceptual model, and the picture across five projects |
-| [`docs/adr/`](docs/adr/README.md) | Twenty-nine decisions, with their reasons and their costs |
+| [`docs/adr/`](docs/adr/README.md) | Thirty decisions, with their reasons and their costs |
 | [`AGENTS.md`](AGENTS.md) | The rules for anyone — human or model — changing this repository |
 
 ## License

@@ -200,6 +200,33 @@ def test_a_config_still_reports_on_a_console_that_cannot_show_it(
     assert b"musubi config" in console.written()
 
 
+def test_an_export_still_writes_a_document_on_a_console_that_cannot_show_it(
+    tmp_path: Path, vault: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The sixth command, and the guard's second catch.
+
+    `export` writes a *document*, so the failure it can have is the worse of the
+    two ADR-0020 names: not a crash, but a file that is not valid UTF-8 with
+    exit 0 and no error anywhere. The report goes to standard error and the
+    document to the buffer beneath standard output, so a narrow console costs a
+    glyph in the report and nothing at all in the file.
+    """
+    console = narrow_console(monkeypatch)
+    into = tmp_path / "corpus"
+    main(["sync", str(vault), "--into", str(into)])
+    console.flush()
+    console.raw_buffer.truncate(0)
+    console.raw_buffer.seek(0)
+
+    assert main(["export", str(into)]) == 0
+    written = console.written()
+    document, _, report = written.partition(b"musubi export")
+    assert document, "nothing was written"
+    body = json.loads(document.decode("utf-8"))
+    assert body["text"].endswith(NOTE), "the document did not survive the console"
+    assert report, "the report was not printed at all"
+
+
 def test_every_command_the_parser_knows_is_exercised_here() -> None:
     """The drift guard, and the reason this file needs one.
 

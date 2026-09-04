@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from ... import __version__
+from ...application.export import SHAPES, as_line, documents
 from ...application.pipeline import Outcome, Settings, run
 from ...application.sync import Synced, empties_the_corpus, sync, withdrawals
 from ...application.trace import Resolution, resolve
@@ -170,6 +171,38 @@ def _parser() -> argparse.ArgumentParser:
         help="the corpus to check (default: ./synced)",
     )
     checking.add_argument("--json", action="store_true", help="print the findings as a document")
+
+    exporting = commands.add_parser(
+        "export",
+        help="write the corpus as JSON Lines, one document per line",
+        description=(
+            "Reads a corpus musubi already wrote and emits one JSON object per line, "
+            "which every retrieval framework takes. The metadata is musubi's own -- "
+            "including the trace map and the corpus root, so that a citation coming "
+            "back out of somebody else's index can still be turned into a place in "
+            "your own file."
+        ),
+    )
+    exporting.add_argument(
+        "destination",
+        type=Path,
+        nargs="?",
+        default=Path("synced"),
+        help="the corpus to read (default: ./synced)",
+    )
+    exporting.add_argument(
+        "--format",
+        dest="shape",
+        choices=sorted(SHAPES),
+        default="jsonl",
+        help="which field names to use (default: jsonl). The shapes differ by one key",
+    )
+    exporting.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="a file to write (default: standard output, so it can be piped)",
+    )
 
     setting = commands.add_parser(
         "config",
@@ -546,6 +579,42 @@ if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
 
 
+def _export(arguments: argparse.Namespace) -> int:
+    """The corpus as one file, and a line saying what a reader now has.
+
+    Written to standard output by default and as **bytes**, for ADR-0020's
+    reason: a document is UTF-8 whatever the console is, and passing JSON
+    through a `cp932` terminal produced a file that was not valid UTF-8 with
+    exit 0 and no error. The count goes to standard error, so that a pipe gets
+    the document and a person still gets the report.
+    """
+    corpus = Corpus(arguments.destination)
+    lines = [
+        as_line(record, arguments.shape)
+        for record in documents(corpus, str(arguments.destination.resolve()))
+    ]
+    body = "".join(lines).encode("utf-8")
+
+    if arguments.out is None:
+        sys.stdout.flush()
+        sys.stdout.buffer.write(body)
+        sys.stdout.buffer.flush()
+    else:
+        arguments.out.parent.mkdir(parents=True, exist_ok=True)
+        arguments.out.write_bytes(body)
+
+    where = arguments.out if arguments.out is not None else "standard output"
+    print(
+        f"musubi export — {len(lines)} documents, {arguments.shape} shape, to {where}",
+        file=sys.stderr,
+    )
+    print(
+        "  every line carries trace_map and corpus, so a citation can be traced back",
+        file=sys.stderr,
+    )
+    return 0
+
+
 def _config(arguments: argparse.Namespace) -> int:
     """What this folder would run with, and why.
 
@@ -613,5 +682,12 @@ def _config(arguments: argparse.Namespace) -> int:
 
 
 COMMANDS.update(
-    {"plan": _plan, "sync": _sync, "trace": _trace, "verify": _verify, "config": _config}
+    {
+        "plan": _plan,
+        "sync": _sync,
+        "trace": _trace,
+        "verify": _verify,
+        "export": _export,
+        "config": _config,
+    }
 )

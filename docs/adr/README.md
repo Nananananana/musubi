@@ -44,6 +44,7 @@ later ADR supersedes it and says so.
 | [0027](0027-the-nearest-file-wins-whole-and-every-value-says-where-it-came-from.md) | The nearest file wins whole, and every value says where it came from |
 | [0028](0028-a-dependency-outside-the-domain-buys-quality-and-still-owes-a-map.md) | A dependency outside the domain buys quality, and still owes a map |
 | [0029](0029-a-better-reader-does-not-buy-a-finer-locator.md) | A better reader does not buy a finer locator |
+| [0030](0030-an-envelope-is-not-a-contract.md) | An envelope is not a contract |
 
 [0004](0004-a-conversion-carries-a-map-back-to-its-source.md) is the one to read
 first. The rest of the design is arranged around it, and

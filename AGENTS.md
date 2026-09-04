@@ -471,6 +471,12 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   external.py`, imports its dependency **inside a function**, and is *offered*
   rather than registered — installing an extra must not change what any folder
   already builds.
+- **An envelope is not a contract, and that is the whole of what `export` is
+  allowed to be** (ADR-0030). `page_content`/`metadata` carries no meaning;
+  the metadata inside it is musubi's own fields only, and the three shapes
+  differ by the name of one key. The moment a shape needs to know something a
+  framework *believes* -- a chunking convention, a required key, a namespace --
+  it has stopped being an envelope and ADR-0013 applies again.
 - **Alignment needs a source that is text, and PDF is where that stops.**
   `PagedConverter` exists for sources that are not (ADR-0029): the locator stays
   a page and `pdf_text@1` and `pdfium@1` produce **the same `src` spans**, which
