@@ -536,6 +536,14 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   transformed segment over the whole source: every offset resolves, to the
   entire document, and coverage reads **100%**. Publish both, and never quote
   coverage on an aligned converter without it.
+- **`tests/test_converter_conformance.py` is the standard every converter meets,
+  and it is parametrised over the registry rather than over a list.** Before it,
+  each converter had its own file and a new one could ship with a map that does
+  not tile and every test would stay green -- each only saw its own half. A
+  converter registered through `offer_converter` is held to it with no change to
+  the file, which is what makes it a conformance suite rather than more tests.
+  It asserts the map is **structurally honest**; whether the *text* is good is a
+  per-format question `tools/*_coverage.py` answers with numbers.
 - **ADR-0020 protects the commands, not the values.** `main()` reconfigures the
   streams with `errors="replace"`, so the CLI cannot fail a run on a narrow
   console. A library value gets none of that. `Where.__str__` used an en dash

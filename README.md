@@ -5,9 +5,9 @@
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 [![Runtime dependencies: 0](https://img.shields.io/badge/runtime%20dependencies-0-brightgreen)](docs/adr/0001-the-domain-depends-on-nothing.md)
 
-**Turn the exports and folders you already have into a clean corpus for a
-language model — and keep knowing which byte of which original file every
-character came from.**
+**Evidence-preserving ingestion.** Turn the exports and folders you already
+have into a clean corpus for a language model — and keep knowing which byte of
+which original file every character came from.
 
 An Obsidian vault, a Notion zip, a shelf of PDFs. No network, no service tokens,
 no model.
