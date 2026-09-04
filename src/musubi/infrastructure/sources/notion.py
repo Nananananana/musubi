@@ -74,6 +74,18 @@ MEDIA_TYPES: dict[str, str] = {
 #: thing a downloaded file can be.
 MAXIMUM_DEPTH = 4
 
+#: What one entry may inflate to before it is refused.
+#:
+#: `ZipFile.read` decides how much memory to take from a number the archive
+#: supplies, and a Notion export is a file downloaded from a service over a
+#: network. A few hundred bytes of compressed zeroes take the process down, and
+#: a process that died has not refused anything: [ADR-0008] is fail-closed, and
+#: there is no manifest, no message, and the same exit code as an interrupt.
+#:
+#: A page of Notion Markdown is kilobytes. This is the largest single note
+#: anybody has, several times over.
+MAXIMUM_ENTRY_BYTES = 256 * 1024 * 1024
+
 
 class NotionSource:
     """Satisfies :class:`~musubi.ports.source.Source`.
@@ -154,7 +166,12 @@ class NotionSource:
                     if depth + 1 > self._maximum_depth:
                         skipped.append(Skipped(origin, "too_deep", f"{depth + 1} levels"))
                         continue
-                    self._walk(archive.read(entry), origin, found, skipped, depth=depth + 1)
+                    try:
+                        payload = _bounded(archive, entry)
+                    except _TooLargeError as refusal:
+                        skipped.append(Skipped(origin, "too_large", str(refusal)))
+                        continue
+                    self._walk(payload, origin, found, skipped, depth=depth + 1)
                     continue
 
                 media_type = MEDIA_TYPES.get(suffix)
@@ -189,20 +206,72 @@ class NotionSource:
     # -- stage two: one thing, opened --------------------------------------
 
     def read(self, found: Found) -> bytes:
-        """The entry's bytes, reached back through the archives it sits in."""
-        outer, _, rest = found.origin.partition("!")
-        archive = self.root if self.root.is_file() else self.root / outer
-        if not archive.is_file():
-            raise SourceError(f"{archive} is not where discovery said it was")
-        return _entry(archive.read_bytes(), rest, found.origin)
+        """The entry's bytes, reached back through the archives it sits in.
+
+        **The origin is not parsed to get back here.** It reads
+        `outer.zip!Part-1.zip!Title <id>.md`, and the obvious thing is to split
+        it on `!` -- which works until a page is called `Done!`, and a Notion
+        title may contain any character a filename may. Then `plan` lists the
+        page and `sync` cannot open it: two commands disagreeing about the same
+        export, over a punctuation mark.
+
+        So the archives are walked again and the origin is **rebuilt** by the
+        same expression that built it, and compared whole. The two sides cannot
+        drift, because there is only one side. It costs a second walk of an
+        archive already in memory, which is what the first walk cost.
+        """
+        for archive in self._archives():
+            body = _locate(archive.read_bytes(), archive.name, found.origin, self._maximum_depth)
+            if body is not None:
+                return body
+        raise SourceError(f"{found.origin} is not where discovery said it was")
 
 
-def _entry(payload: bytes, path: str, origin: str) -> bytes:
-    """Follow `a.zip!b.zip!c.md` down to the bytes of `c.md`."""
-    name, _, rest = path.partition("!")
+def _locate(payload: bytes, inside: str, target: str, depth: int) -> bytes | None:
+    """The bytes of the entry whose origin is `target`, or ``None``.
+
+    Mirrors ``NotionSource._walk``'s descent and its ``f"{inside}!{name}"``, and
+    exists to be the *same* construction rather than its inverse.
+    """
+    if depth < 0:
+        return None
     try:
-        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
-            body = archive.read(name)
-    except (zipfile.BadZipFile, KeyError) as error:
-        raise SourceError(f"{origin} could not be opened: {error}") from error
-    return _entry(body, rest, origin) if rest else body
+        archive = zipfile.ZipFile(io.BytesIO(payload))
+    except zipfile.BadZipFile as error:
+        raise SourceError(f"{inside} could not be opened: {error}") from error
+
+    with archive:
+        for entry in archive.infolist():
+            if entry.is_dir():
+                continue
+            origin = f"{inside}!{entry.filename}"
+            try:
+                if origin == target:
+                    return _bounded(archive, entry)
+                if Path(entry.filename).suffix.lower() == ".zip" and target.startswith(
+                    f"{origin}!"
+                ):
+                    return _locate(_bounded(archive, entry), origin, target, depth - 1)
+            except _TooLargeError as refusal:
+                raise SourceError(f"{origin} was not read: {refusal}") from refusal
+    return None
+
+
+class _TooLargeError(Exception):
+    """One entry claimed more room than the archive is worth."""
+
+    def __init__(self, name: str, limit: int) -> None:
+        super().__init__(f"{name} inflates past {limit:,} bytes")
+
+
+def _bounded(archive: zipfile.ZipFile, entry: zipfile.ZipInfo) -> bytes:
+    """The entry's bytes, or a refusal -- never more than the limit.
+
+    Reads one byte past the limit rather than trusting `entry.file_size`, which
+    is a number written in the archive by whoever built it.
+    """
+    with archive.open(entry) as stream:
+        body = stream.read(MAXIMUM_ENTRY_BYTES + 1)
+    if len(body) > MAXIMUM_ENTRY_BYTES:
+        raise _TooLargeError(entry.filename, MAXIMUM_ENTRY_BYTES)
+    return body

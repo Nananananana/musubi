@@ -145,6 +145,16 @@ class Corpus:
                 f"{document}. This is not the layout musubi writes."
             )
         key = artefact_path[len(document) :]
+        # The prefix says where it starts, not where it ends up. `documents/`
+        # followed by `../../` leaves the corpus, and on Windows followed by
+        # `C:/` leaves it without a `..` in sight, because joining an absolute
+        # path discards everything to its left. `verify` would then hash a file
+        # nobody synced and report on it by a name that is not its own.
+        if not self._stays_inside(key):
+            raise ContractError(
+                f"the manifest puts a document at {artefact_path!r}, which does not stay "
+                f"under {document}. Refusing rather than reading a file outside the corpus."
+            )
         expected = f"{traces}{key}.json"
         if trace_path != expected:
             raise ContractError(
@@ -152,6 +162,22 @@ class Corpus:
                 f"layout puts it at {expected!r}"
             )
         return key
+
+    def _stays_inside(self, key: str) -> bool:
+        """Does joining this key actually land under `documents/`?
+
+        Asked of the filesystem rather than of the string, because the ways out
+        are platform-shaped. `../..` is the obvious one. `C:/Windows/win.ini` is
+        not: it holds no `..`, it is not absolute by POSIX rules, and joining it
+        on Windows **discards everything to its left**. A syntactic check would
+        have to know which platform it is on to be right; this one does not.
+        """
+        under = self.destination / DOCUMENTS
+        try:
+            (under / key).resolve().relative_to(under.resolve())
+        except (OSError, ValueError):
+            return False
+        return bool(key) and not key.endswith("/")
 
     def roots(self) -> dict[str, str]:
         """Where each source read from, as the manifest recorded it.

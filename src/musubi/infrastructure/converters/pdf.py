@@ -48,7 +48,16 @@ from ...domain.span import Span
 from ...domain.trace import OPAQUE, Kind, Segment, TraceMap
 from ...ports.converter import Converted, Unconvertible
 
-__all__ = ["PdfConverter"]
+__all__ = ["MAXIMUM_STREAM_BYTES", "PdfConverter"]
+
+#: What one content stream may inflate to before the file is refused.
+#:
+#: A page of text is kilobytes. This is three orders of magnitude above that,
+#: and four below the point where a laptop starts swapping -- wide enough that
+#: no document a person wrote reaches it, narrow enough that a few hundred bytes
+#: of compressed zeroes cannot take the process down. There is no bound in
+#: `zlib.decompress`: it allocates what the stream asks for.
+MAXIMUM_STREAM_BYTES = 64 * 1024 * 1024
 
 #: `N G obj … endobj`. Scanned for rather than reached through the cross-reference
 #: table: a real shelf of PDFs contains files whose xref offsets are wrong, and a
@@ -101,7 +110,10 @@ class PdfConverter:
                 "not_a_pdf", "the file does not begin with a PDF header", self.name
             )
 
-        pages = _pages(content)
+        try:
+            pages = _pages(content)
+        except _TooLargeError as refusal:
+            return Unconvertible("stream_too_large", str(refusal), self.name)
         if not pages:
             return Unconvertible("no_pages", "no page objects were found in the file", self.name)
 
@@ -194,22 +206,41 @@ def _content_of(page: bytes, objects: dict[int, bytes]) -> bytes:
     return b"\n".join(streams)
 
 
+class _TooLargeError(Exception):
+    """One compressed stream claimed more room than a page of text can need."""
+
+    def __init__(self, limit: int) -> None:
+        super().__init__(f"a content stream inflates past {limit:,} bytes")
+        self.limit = limit
+
+
 def _inflate(payload: bytes, header: bytes) -> bytes:
     """Undo `FlateDecode`, or hand back what was there.
 
     Only Flate. It is what every producer uses, it is in the standard library,
     and a stream in `LZWDecode` or a JBIG2 image is a page this converter
     reports as having no text rather than one it decodes badly.
+
+    **Bounded.** `zlib.decompress` on a stream musubi did not write decides how
+    much memory to take from a number the file supplies; a few hundred bytes of
+    zeroes inflate to gigabytes, and the process dies before any refusal can be
+    recorded. [ADR-0008] is fail-closed and a killed process is not closed, it
+    is *absent* -- the same exit code as an interrupted run, with no manifest
+    and no message. So the limit is here, and passing it is a refusal with a
+    reason like any other.
     """
     if b"/FlateDecode" not in header:
         return payload
-    try:
-        return zlib.decompress(payload)
-    except zlib.error:
+    for wbits in (zlib.MAX_WBITS, -zlib.MAX_WBITS):
+        machine = zlib.decompressobj(wbits)
         try:
-            return zlib.decompressobj().decompress(payload)
+            body = machine.decompress(payload, MAXIMUM_STREAM_BYTES + 1)
         except zlib.error:
-            return b""
+            continue
+        if len(body) > MAXIMUM_STREAM_BYTES:
+            raise _TooLargeError(MAXIMUM_STREAM_BYTES)
+        return body
+    return b""
 
 
 def _text_of(stream: bytes) -> str:

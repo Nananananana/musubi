@@ -97,10 +97,23 @@ class Signature:
 
         A linear scan: find the prefix, then count how far the alphabet runs.
         Nothing here can backtrack.
+
+        **The prefix has to start something.** A match whose preceding character
+        the body alphabet would have accepted is not a token that begins with
+        the prefix -- it is a longer run of the same alphabet with the prefix
+        somewhere in the middle of it, which is what a base64 blob is. See
+        [ADR-0026] for the measurement; under [ADR-0008] a hit stops the run, so
+        this is the difference between a gate and an obstacle.
+
+        A signature with no body -- a PEM header names itself -- has no alphabet
+        to test against and is unaffected.
         """
         found: list[Span] = []
         at = 0
         while (start := text.find(self.prefix, at)) != -1:
+            if start and text[start - 1] in self.alphabet:
+                at = start + 1
+                continue
             end = start + len(self.prefix)
             while end < len(text) and text[end] in self.alphabet:
                 end += 1

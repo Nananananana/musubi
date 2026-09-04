@@ -462,6 +462,27 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   named for the numbered entries, and a guard fails if the list grows an entry
   nothing runs. Everything there is asserted against a **real sync** of a
   generated vault, never against a document a test assembled.
+- **A refusal is only as good as the inputs it was pointed at, and the six in
+  `tests/test_the_refusals_that_did_not_fire.py` were each already written.**
+  Overlapping replacements were refused and an insertion *inside* one was not,
+  because an empty span overlaps nothing by definition. A credential prefix was
+  found and never asked whether it *started* anything, so 3.33% of base64url
+  documents stopped a sync (ADR-0026). A PDF with no text layer was refused and
+  one whose stream inflates to 64 MB killed the process, which is not
+  fail-closed but *absent*. All six passed 871 tests. When adding a refusal, the
+  question is not whether it fires -- it is which neighbouring input it does not
+  fire on, and that input is the test.
+- **Do not use a character the data can contain as a separator.** A Notion
+  origin is `outer.zip!Part-1.zip!Title <id>.md` and was split on `!` to read
+  the entry back, so a page called `Done!` was listed by `plan` and could not be
+  opened by `sync`. The fix is not an escaping rule: the path is **rebuilt by
+  the same expression that built it** and compared whole, so there are not two
+  sides to keep in step.
+- **Decompression is unbounded unless somebody bounds it.** `zlib.decompress`
+  and `ZipFile.read` both size their buffer from a number the file supplies.
+  musubi reads archives downloaded from services and PDFs from anywhere, so
+  `MAXIMUM_STREAM_BYTES` and `MAXIMUM_ENTRY_BYTES` are limits with reasons
+  attached, and passing one is a refusal with a token in the manifest.
 - **A cp932 fixture made of ordinary Japanese proves nothing.** `設計メモ` and
   `テントは 2.4kg。` round-trip through cp932 without a mark, so every test in
   `test_console_encoding.py` would have passed with musubi's encoding handling

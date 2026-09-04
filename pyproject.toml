@@ -110,7 +110,7 @@ empty_parameter_set_mark = "fail_at_collect"
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["src", "tests"]
+src = ["src", "tests", "tools"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "C4", "S", "RUF"]
@@ -128,6 +128,10 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S105", "S106", "S108"]
+# A measurement script generates a population. `random` is the right tool for
+# that and `secrets` is not; the seed is printed with every number precisely so
+# that it is reproducible, which is the opposite of what S311 is warning about.
+"tools/*" = ["S311"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -137,7 +141,7 @@ python_version = "3.12"
 # unchecked long enough to accumulate an annotation the library had outgrown
 # (`validator(schema: Path)` had been taking a `Traversable` since #58 and
 # survived only because both have `read_text`).
-files = ["src/musubi", "tests"]
+files = ["src/musubi", "tests", "tools"]
 strict = true
 warn_unreachable = true
 
