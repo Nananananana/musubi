@@ -3,6 +3,10 @@
 Every command below was run to write this page, and every block of output is
 what it printed.
 
+**In a hurry?** `uv run python tools/demo.py` does the whole thing by itself in
+a temporary folder and prints a transcript. This page is the version you type,
+so that you can stop and poke at each step.
+
 ## Setup
 
 ```bash

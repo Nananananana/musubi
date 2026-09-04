@@ -10,6 +10,10 @@ Everything is written under a temporary folder and printed; nothing touches
 anything you have. `--keep` leaves it on disk and prints where, so the commands
 in the transcript can be run by hand afterwards.
 
+`demo/README.md` is the same walk with the commands written out to type
+yourself, against a sample folder that stays where you can look at it. This one
+is for *does it work*; that one is for *what does it do*.
+
 This exists because the interesting claim is hard to see from a README. The
 last step takes a range of text that has been converted, cleansed, given front
 matter and written to a corpus, and turns it back into a byte offset in the
