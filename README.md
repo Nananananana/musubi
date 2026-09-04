@@ -76,8 +76,10 @@ so an upsert updates rather than duplicates.
 ## And a corpus that remembers what it was
 
 ```bash
-musubi log  ./corpus            # what each run did, newest first
-musubi diff ./corpus --since 3f34b18e31b8
+musubi log   ./corpus                       # what each run did, newest first
+musubi log   ./corpus --path design/gear.md # one document's part of it
+musubi blame ./corpus                       # which run put each document here
+musubi diff  ./corpus --since 3f34b18e31b8
 ```
 
 Every `sync` appends one line to `corpus/runs.jsonl` saying what it added,
@@ -95,8 +97,19 @@ musubi log — 4 runs, ./corpus
 ```
 
 It stores **changes, not snapshots** — a no-change re-sync writes about 250
-bytes, so a history does not grow with the corpus. `musubi verify` checks that
-the history and the corpus still agree.
+bytes, so a history grows with the work and not with the corpus. `musubi verify`
+checks that the history and the corpus still agree.
+
+Each entry carries the content hash on both sides of every path it names, which
+is what content addressing was already paying for:
+
+```text
+> documents/stove.md -> documents/cooking.md   (same bytes)
+```
+
+A **rename is reported as a move** rather than as a deletion next to an
+unrelated new file, and folding a range of runs is exact — a document removed
+and restored unchanged comes out as no change at all.
 
 **It is history, not storage.** musubi keeps one version of each document, so
 `log` can tell you a file changed on Tuesday and nothing can give you back
@@ -353,7 +366,7 @@ already had, and **no component in that chain imports another**.
 | [`docs/proposals/0001-the-design.md`](docs/proposals/0001-the-design.md) | The design, the roadmap, and what would falsify it |
 | [`docs/contracts.md`](docs/contracts.md) | The three contracts, for producers and consumers — including what the schemas cannot say |
 | [`docs/concept.md`](docs/concept.md) | The conceptual model, and the picture across five projects |
-| [`docs/adr/`](docs/adr/README.md) | Thirty-four decisions, with their reasons and their costs |
+| [`docs/adr/`](docs/adr/README.md) | Thirty-five decisions, with their reasons and their costs |
 | [`AGENTS.md`](AGENTS.md) | The rules for anyone — human or model — changing this repository |
 
 ## License

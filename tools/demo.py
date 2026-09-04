@@ -86,7 +86,17 @@ def run(command: list[str], cwd: Path, *, show: int | None = None, quiet: bool =
         lines = (finished.stdout + finished.stderr).rstrip().splitlines()
         print(textwrap.indent("\n".join(lines if show is None else lines[:show]), "   "))
         if show is not None and len(lines) > show:
-            print(f"   ... {len(lines) - show} more lines, ending in the Limits block")
+            # What was actually cut, rather than what usually is. Most reports
+            # end in the Limits block and `blame` does not, and a transcript
+            # that describes output it did not print is the one thing a
+            # demonstration must not do.
+            cut = lines[show:]
+            ending = (
+                "ending in the Limits block"
+                if any(line.strip().startswith("Limits") for line in cut)
+                else "more of the same"
+            )
+            print(f"   ... {len(cut)} more lines, {ending}")
     return finished.stdout
 
 
@@ -161,6 +171,12 @@ def main() -> int:
     print("   not among them: a run that stopped wrote nothing, including here.")
     print("   The middle two share a corpus id and differ in their own -- the same")
     print("   folder synced twice is the same corpus and two different runs.")
+
+    print("\n   $ musubi blame corpus\n")
+    run(["blame", "corpus"], root, show=8)
+    print("\n   Which run put each document where it is. An artefact this history")
+    print("   cannot account for prints as unknown rather than being attributed to")
+    print("   the oldest run it happens to sit beside.")
 
     step(8, "One file, three lines of Python.")
     print(

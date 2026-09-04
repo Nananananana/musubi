@@ -32,10 +32,12 @@ from musubi.domain.journal import (
     CONTRACT,
     Change,
     Entry,
+    attribution,
     changes,
     entry_from,
     folded,
     run_named,
+    touching,
 )
 from musubi.domain.manifest import render
 from musubi.errors import ContractError, CredentialFoundError
@@ -128,15 +130,15 @@ def test_the_lists_are_sorted(before: dict[str, str], after: dict[str, str]) -> 
 
 
 @given(corpora=st.lists(CORPORA, min_size=1, max_size=6))
-def test_folding_a_history_agrees_with_comparing_its_ends(corpora: list[dict[str, str]]) -> None:
-    """`musubi diff` over a range says what `changes` would say end to end.
+def test_folding_a_history_is_comparing_its_ends(corpora: list[dict[str, str]]) -> None:
+    """`musubi diff` over a range says exactly what `changes()` says end to end.
 
-    With one documented divergence, and the test names it rather than
-    excluding it: a path that was removed and then added back with **identical
-    content** is `changed` in the fold and untouched end to end. The journal
-    knows it left and knows it returned; it does not keep the bytes, so it
-    cannot know the two versions were the same. Reporting *changed* is the
-    claim that is never false about the history.
+    **Plain equality, with no exception named.** The first version of this
+    asserted equality *except* for a path that was removed and added back with
+    identical content, which the fold could only call `changed` -- it had the
+    verbs and not the bytes. [ADR-0035] carried the hashes and the exception
+    went away, so the test says so: an allowance kept after the reason for it
+    is gone is an allowance that hides the next regression.
     """
     entries = []
     parent = None
@@ -148,15 +150,10 @@ def test_folding_a_history_agrees_with_comparing_its_ends(corpora: list[dict[str
     fold = folded(entries)
     direct = changes(corpora[0], corpora[-1])
 
-    resurrected = {
-        path
-        for path in set(fold.changed) - set(direct.changed)
-        if path in corpora[0] and path in corpora[-1]
-    }
-    assert set(fold.added) == set(direct.added)
-    assert set(fold.removed) == set(direct.removed)
-    assert set(fold.changed) - set(direct.changed) == resurrected
-    assert set(direct.changed) <= set(fold.changed)
+    assert fold.added == direct.added
+    assert fold.changed == direct.changed
+    assert fold.removed == direct.removed
+    assert fold.exact
 
 
 def test_added_then_removed_cancels() -> None:
@@ -182,19 +179,247 @@ def test_added_then_changed_is_still_added() -> None:
     assert not fold.changed
 
 
-def test_removed_then_added_is_changed_and_the_docstring_says_why() -> None:
+def test_removed_then_added_with_the_same_bytes_is_no_change_at_all() -> None:
+    """What [ADR-0035] bought, stated as the smallest case.
+
+    A document deleted on Monday and restored on Tuesday from a backup: the
+    corpus on Wednesday is the corpus of Sunday, and a reader asking what
+    changed over the week should be told nothing did.
+    """
     fold = folded(
         [
-            entry("a", None, Change(added=(), changed=(), removed=("x",), unchanged=0)),
-            entry("b", "a", Change(added=("x",), changed=(), removed=(), unchanged=0)),
+            entry("a", None, Change((), (), ("x",), 0, previous=(("x", "h1"),))),
+            entry("b", "a", Change(("x",), (), (), 0, hashes=(("x", "h1"),))),
+        ]
+    )
+    assert fold.is_empty
+    assert fold.exact
+
+
+def test_removed_then_added_with_different_bytes_is_changed() -> None:
+    fold = folded(
+        [
+            entry("a", None, Change((), (), ("x",), 0, previous=(("x", "h1"),))),
+            entry("b", "a", Change(("x",), (), (), 0, hashes=(("x", "h2"),))),
         ]
     )
     assert fold.changed == ("x",)
     assert not fold.added and not fold.removed
 
 
+def test_a_range_containing_an_unhashed_line_falls_back_and_says_so() -> None:
+    """A journal that spans [ADR-0035] has lines of both kinds.
+
+    The conservative answer *and* the flag. Either alone is worse than both:
+    the answer without the flag is a guess presented as a fact, and the flag
+    without the answer is a refusal where something useful could be said.
+    """
+    fold = folded(
+        [
+            entry("a", None, Change((), (), ("x",), 0)),
+            entry("b", "a", Change(("x",), (), (), 0)),
+        ]
+    )
+    assert fold.changed == ("x",)
+    assert not fold.exact
+
+
 def test_folding_nothing_says_nothing() -> None:
     assert folded([]).is_empty
+
+
+# -- a rename, which a journal of paths alone cannot see -------------------
+
+
+def test_a_path_that_left_and_a_path_that_arrived_holding_the_same_bytes_is_a_move() -> None:
+    change = changes({"old.md": "hA", "k.md": "hK"}, {"new.md": "hA", "k.md": "hK"})
+    assert change.moves == (("old.md", "new.md"),)
+    # And the lists still say what the corpus did, because that is what it did.
+    assert change.added == ("new.md",)
+    assert change.removed == ("old.md",)
+
+
+def test_a_move_is_counted_once_in_the_headline() -> None:
+    """*1 added, 1 removed* is two events, neither of which happened."""
+    change = changes({"old.md": "hA"}, {"new.md": "hA"})
+    assert change.summary() == "1 moved, 0 unchanged"
+
+
+def test_two_files_with_the_same_content_are_not_evidence_about_which_became_which() -> None:
+    """The pairing rule, and the reason for it.
+
+    Two empty notes, or a stub copied twice. Guessing a pair would put a
+    confident wrong answer exactly where an honest silence belongs, and the
+    reader would have no way to tell it from a real one.
+    """
+    change = changes({"a.md": "h", "b.md": "h"}, {"c.md": "h", "d.md": "h"})
+    assert change.moves == ()
+    assert change.added == ("c.md", "d.md")
+    assert change.removed == ("a.md", "b.md")
+
+
+def test_a_move_needs_hashes_and_says_nothing_without_them() -> None:
+    assert Change(added=("new.md",), changed=(), removed=("old.md",), unchanged=0).moves == ()
+
+
+def test_a_rename_in_a_real_vault_reads_as_a_move(tmp_path: Path) -> None:
+    vault = tmp_path / "notes"
+    vault.mkdir()
+    (vault / "stove.md").write_text("# stove\n\nalcohol\n", encoding="utf-8")
+    destination = tmp_path / "synced"
+    synced(vault, destination, at="2026-09-05T00:00:00+00:00")
+
+    (vault / "stove.md").rename(vault / "cooking.md")
+    synced(vault, destination, at="2026-09-05T00:00:01+00:00")
+
+    last = Corpus(destination).journal()[-1]
+    assert last.change.moves == (("documents/stove.md", "documents/cooking.md"),)
+
+
+# -- one document's part of the history --------------------------------------
+
+
+def test_touching_gives_one_documents_history(tmp_path: Path) -> None:
+    vault = tmp_path / "notes"
+    vault.mkdir()
+    (vault / "gear.md").write_text("# gear\n", encoding="utf-8")
+    (vault / "stove.md").write_text("# stove\n", encoding="utf-8")
+    destination = tmp_path / "synced"
+    synced(vault, destination, at="2026-09-05T00:00:00+00:00")
+
+    (vault / "gear.md").write_text("# gear\n\nedited\n", encoding="utf-8")
+    synced(vault, destination, at="2026-09-05T00:00:01+00:00")
+    (vault / "stove.md").write_text("# stove\n\nedited\n", encoding="utf-8")
+    synced(vault, destination, at="2026-09-05T00:00:02+00:00")
+
+    entries = Corpus(destination).journal()
+    gear = touching(entries, "documents/gear.md")
+    assert [one.created_at for one in gear] == [
+        "2026-09-05T00:00:00+00:00",
+        "2026-09-05T00:00:01+00:00",
+    ]
+
+
+def test_a_removal_is_part_of_a_documents_history() -> None:
+    """The one event that explains why the corpus does not hold something a
+    reader expected. Leaving it out makes a deleted document look like one
+    that was never there."""
+    entries = [
+        entry("a", None, Change(("x",), (), (), 0)),
+        entry("b", "a", Change((), (), ("x",), 0)),
+    ]
+    assert touching(entries, "x") == tuple(entries)
+
+
+# -- which run put this document here ---------------------------------------
+
+
+def test_attribution_names_the_run_that_added_and_the_run_that_last_changed() -> None:
+    first = entry("a", None, Change(("x",), (), (), 0), at="1")
+    second = entry("b", "a", Change((), ("x",), (), 0), at="2")
+    third = entry("c", "b", Change((), ("x",), (), 0), at="3")
+
+    (one,) = attribution([first, second, third], ["x"])
+    assert one.first_seen is first
+    assert one.last_touched is third
+    assert one.revisions == 2
+    assert one.is_answered
+
+
+def test_attribution_abstains_for_an_artefact_the_history_never_saw() -> None:
+    """The answer that matters most, and the one a report is tempted to drop.
+
+    Attributing an artefact to the oldest run it happens to sit beside would
+    be a confident wrong answer in the one place this library exists to prevent
+    one -- and it would be invisible, because it would look exactly like a real
+    answer.
+    """
+    (one,) = attribution([entry("a", None, Change(("x",), (), (), 0))], ["y"])
+    assert one.first_seen is None
+    assert one.last_touched is None
+    assert not one.is_answered
+
+
+def test_attribution_returns_every_path_it_was_asked_about() -> None:
+    """Dropping the unanswerable ones would make the answer look complete when
+    it is the corpus that is complete and the history that is short."""
+    found = attribution([entry("a", None, Change(("x",), (), (), 0))], ["x", "y", "z"])
+    assert [one.path for one in found] == ["x", "y", "z"]
+
+
+def test_a_document_removed_and_added_again_is_attributed_to_the_run_that_put_it_back() -> None:
+    """The artefact in the corpus now is the one that run put there. The
+    earlier life is still in `musubi log --path`."""
+    entries = [
+        entry("a", None, Change(("x",), (), (), 0), at="1"),
+        entry("b", "a", Change((), (), ("x",), 0), at="2"),
+        entry("c", "b", Change(("x",), (), (), 0), at="3"),
+    ]
+    (one,) = attribution(entries, ["x"])
+    assert one.first_seen is entries[2]
+    assert one.revisions == 0
+
+
+def test_blame_over_a_real_corpus(tmp_path: Path) -> None:
+    vault = tmp_path / "notes"
+    vault.mkdir()
+    (vault / "gear.md").write_text("# gear\n", encoding="utf-8")
+    destination = tmp_path / "synced"
+    synced(vault, destination, at="2026-09-05T00:00:00+00:00")
+    (vault / "gear.md").write_text("# gear\n\nedited\n", encoding="utf-8")
+    synced(vault, destination, at="2026-09-05T00:00:01+00:00")
+
+    entries = Corpus(destination).journal()
+    (one,) = attribution(entries, ["documents/gear.md"])
+    assert one.first_seen is not None and one.first_seen.created_at == "2026-09-05T00:00:00+00:00"
+    assert one.last_touched is not None and one.last_touched.created_at == (
+        "2026-09-05T00:00:01+00:00"
+    )
+    assert one.revisions == 1
+
+
+# -- the join the hashes opened ---------------------------------------------
+
+
+def test_verify_finds_a_corpus_whose_documents_the_history_does_not_recognise(
+    tmp_path: Path,
+) -> None:
+    """`journal 3`. Two files now say what a document hashes to, and a
+    duplicated fact nothing compares is a fact free to drift."""
+    vault = tmp_path / "notes"
+    vault.mkdir()
+    (vault / "gear.md").write_text("# gear\n", encoding="utf-8")
+    destination = tmp_path / "synced"
+    synced(vault, destination)
+    assert verify(Corpus(destination)).holds
+
+    body = json.loads((destination / "manifest.json").read_text(encoding="utf-8"))
+    body["artefacts"][0]["content_hash"] = "sha256:" + "0" * 64
+    (destination / "manifest.json").write_text(
+        json.dumps(body, ensure_ascii=False), encoding="utf-8"
+    )
+
+    checked = verify(Corpus(destination))
+    assert any(fault.invariant == "journal 3" for fault in checked.faults)
+
+
+def test_a_history_without_hashes_does_not_fail_the_join(tmp_path: Path) -> None:
+    """Absent is not the same as wrong. Treating it as wrong would fail every
+    corpus written before [ADR-0035] the first time anybody verified one."""
+    vault = tmp_path / "notes"
+    vault.mkdir()
+    (vault / "gear.md").write_text("# gear\n", encoding="utf-8")
+    destination = tmp_path / "synced"
+    synced(vault, destination)
+
+    lines = []
+    for line in (destination / JOURNAL).read_text(encoding="utf-8").splitlines():
+        body = json.loads(line)
+        body.pop("hashes", None)
+        lines.append(json.dumps(body, ensure_ascii=False))
+    (destination / JOURNAL).write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+
+    assert verify(Corpus(destination)).holds
 
 
 # -- the id that had to exist -----------------------------------------------

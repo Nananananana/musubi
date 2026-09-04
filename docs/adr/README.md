@@ -49,6 +49,7 @@ later ADR supersedes it and says so.
 | [0032](0032-the-shortest-way-in-is-the-one-that-keeps-the-map.md) | The shortest way in is the one that keeps the map |
 | [0033](0033-a-threshold-that-nobody-swept-is-a-number-fitted-to-one-corpus.md) | A threshold that nobody swept is a number fitted to one corpus |
 | [0034](0034-a-corpus-that-remembers-what-it-was.md) | A corpus that remembers what it was |
+| [0035](0035-what-content-addressing-buys-and-where-it-stops.md) | What content addressing buys, and where it stops |
 
 [0004](0004-a-conversion-carries-a-map-back-to-its-source.md) is the one to read
 first. The rest of the design is arranged around it, and

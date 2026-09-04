@@ -311,6 +311,38 @@ def test_a_log_as_a_document_is_utf8_whatever_the_console_is(
     )
 
 
+def test_blame_names_files_a_narrow_console_cannot_show(
+    tmp_path: Path, vault: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`blame` prints one line per artefact, so every filename in the corpus
+    goes through the console. It is the command with the most of the owner's
+    text in its output and therefore the one ADR-0020 is most about."""
+    (vault / "𩸽.md").write_text(NOTE, encoding="utf-8")
+    into = tmp_path / "corpus"
+    assert main(["sync", str(vault), "--into", str(into)]) == 0
+
+    stream = narrow_console(monkeypatch)
+    assert main(["blame", str(into)]) == 0
+
+    shown = stream.written().decode("cp932")
+    assert "artefacts" in shown
+    assert "entered" in shown, "the report attributed nothing"
+
+
+def test_blame_as_a_document_is_utf8_whatever_the_console_is(
+    tmp_path: Path, vault: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (vault / "𩸽.md").write_text(NOTE, encoding="utf-8")
+    into = tmp_path / "corpus"
+    assert main(["sync", str(vault), "--into", str(into)]) == 0
+
+    stream = narrow_console(monkeypatch)
+    assert main(["blame", str(into), "--json"]) == 0
+
+    body = json.loads(stream.written().decode("utf-8"))
+    assert any("𩸽" in one["path"] for one in body)
+
+
 def test_every_command_the_parser_knows_is_exercised_here() -> None:
     """The drift guard, and the reason this file needs one.
 

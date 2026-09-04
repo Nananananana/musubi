@@ -150,9 +150,10 @@ def _journal_agrees(corpus: CorpusReader, document: dict[str, Any]) -> list[Faul
     compares against, and therefore something that can drift for a year without
     anybody finding out.
 
-    The chain is checked too. Every entry but the first names its predecessor's
-    run as its parent, and a break in that says the file was edited or a line
-    was lost -- which matters more here than in most places, because
+    The chain is checked too, and so is each artefact's hash against the last
+    one the history recorded for it ([ADR-0035]). Every entry but the first
+    names its predecessor's run as its parent, and a break in that says the
+    file was edited or a line was lost -- which matters more here than in most places, because
     ``musubi diff`` folds a range of entries and a missing line silently
     removes the changes it recorded.
     """
@@ -182,6 +183,39 @@ def _journal_agrees(corpus: CorpusReader, document: dict[str, Any]) -> list[Faul
                     f"{older.run_id}. A line was edited or lost.",
                 )
             )
+
+    # The join ADR-0035 opened by putting a hash in a second file. The last run
+    # that touched a path recorded what it then held, and no later run that
+    # left it alone had anything to record -- so that hash is still what the
+    # manifest should say. A disagreement is a corpus and a history assembled
+    # from different moments.
+    latest: dict[str, str] = {}
+    for entry in entries:
+        for path, digest in entry.change.hashes:
+            if path in entry.change.removed:
+                latest.pop(path, None)
+            else:
+                latest[path] = digest
+
+    for artefact in document.get("artefacts") or []:
+        path, stated_hash = artefact.get("path"), artefact.get("content_hash")
+        if not isinstance(path, str) or not isinstance(stated_hash, str):
+            continue
+        recorded = latest.get(path)
+        # `None` is not a fault: a path the history never saw, or a line
+        # written before the hashes existed. Absent is not the same as wrong,
+        # and treating it as one would fail every corpus that predates
+        # ADR-0035 the first time anybody verified it.
+        if recorded is not None and recorded != stated_hash:
+            faults.append(
+                Fault(
+                    "journal 3",
+                    path,
+                    f"the manifest holds {stated_hash} and the history last recorded "
+                    f"{recorded}. The corpus and its history are from different moments.",
+                )
+            )
+
     return faults
 
 

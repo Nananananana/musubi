@@ -60,13 +60,16 @@ from .hashing import hash_of
 
 __all__ = [
     "CONTRACT",
+    "Attribution",
     "Change",
     "Entry",
     "abbreviated",
+    "attribution",
     "changes",
     "entry_from",
     "folded",
     "run_named",
+    "touching",
 ]
 
 #: Not frozen. The freeze condition is a second program having needed it, not a
@@ -84,6 +87,64 @@ class Change:
     #: Counted rather than listed. Naming every untouched artefact is what makes
     #: a journal grow with the corpus instead of with the work.
     unchanged: int
+    #: What each path holds **after** this run: every `added` and `changed`
+    #: path, and nothing else. A removed path holds nothing.
+    #:
+    #: A pair sequence rather than a mapping, like `Manifest.rulesets`, because
+    #: a journal line is bytes and [ADR-0003] wants two runs over the same
+    #: inputs to write the same ones ([ADR-0035]).
+    hashes: tuple[tuple[str, str], ...] = ()
+    #: What each path held **before** this run: every `changed` and `removed`
+    #: path. Two maps rather than one with two meanings -- the first draft put
+    #: the after-hash for added and changed and the before-hash for removed
+    #: into a single map, and a fold could then not tell what a changed path
+    #: had been, so a document edited and edited back inside a range read as
+    #: changed. Hypothesis found it in three runs.
+    previous: tuple[tuple[str, str], ...] = ()
+    #: Whether everything this describes was decided by comparing hashes. True
+    #: for a run, which measures its own corpus. False for a `folded()` answer
+    #: over a range containing a line written before [ADR-0035], where some
+    #: path fell back to the conservative verb.
+    exact: bool = True
+
+    def hash_for(self, path: str) -> str | None:
+        """What this path holds after the run, or ``None``.
+
+        ``None`` for a path the run removed or did not touch, and also for a
+        line written before [ADR-0035] -- which is why callers branch on it
+        rather than assuming. A history that spans the change has entries of
+        both kinds.
+        """
+        return _lookup(self.hashes, path)
+
+    def hash_before(self, path: str) -> str | None:
+        """What this path held before the run, or ``None``."""
+        return _lookup(self.previous, path)
+
+    @property
+    def moves(self) -> tuple[tuple[str, str], ...]:
+        """Paths that left and paths that arrived holding the same bytes.
+
+        What content addressing buys, and the reason it was worth carrying the
+        hashes: a rename is a `removed` and an `added` in every journal that
+        records only paths, and there is no way to tell it from a deletion that
+        happened to coincide with an unrelated new file.
+
+        Pairs are made only where a hash matches **exactly one** on each side.
+        Two files with identical content -- an empty note, a stub copied twice
+        -- are not evidence about which became which, and guessing would put a
+        confident wrong answer where an honest silence belongs. Those stay in
+        `added` and `removed`, which is what they are.
+        """
+        gone = _by_hash([(p, h) for p in self.removed if (h := self.hash_before(p))])
+        arrived = _by_hash([(p, h) for p in self.added if (h := self.hash_for(p))])
+        return tuple(
+            sorted(
+                (gone[digest][0], arrived[digest][0])
+                for digest in set(gone) & set(arrived)
+                if len(gone[digest]) == 1 and len(arrived[digest]) == 1
+            )
+        )
 
     @property
     def is_empty(self) -> bool:
@@ -106,16 +167,33 @@ class Change:
         return self.unchanged + len(self.added) + len(self.changed)
 
     def summary(self) -> str:
+        """The one-line account, with moves counted once rather than twice.
+
+        A rename is a `removed` and an `added` in the lists, because that is
+        what the corpus did. Reporting it in the headline as both would have a
+        run that renamed one file read as *1 added, 1 removed* -- two events,
+        neither of which happened.
+        """
         if self.is_empty:
             return f"no change, {self.unchanged} artefacts"
+
+        moved = self.moves
+        paired = {path for pair in moved for path in pair}
         parts = []
         for label, names in (
             ("added", self.added),
             ("changed", self.changed),
             ("removed", self.removed),
         ):
-            if names:
-                parts.append(f"{len(names)} {label}")
+            rest = [path for path in names if path not in paired]
+            if rest:
+                parts.append(f"{len(rest)} {label}")
+        if moved:
+            parts.append(f"{len(moved)} moved")
+        if not parts:
+            # Every path this touched was one half of a rename. The corpus
+            # holds exactly what it held; only the names changed.
+            return f"{len(moved)} moved, {self.unchanged} unchanged"
         return f"{', '.join(parts)}, {self.unchanged} unchanged"
 
 
@@ -207,6 +285,12 @@ class Entry:
             "changed": list(self.change.changed),
             "removed": list(self.change.removed),
             "unchanged": self.change.unchanged,
+            #: Path to content hash, for every path the three lists name. What
+            #: turns a removed-and-added pair into a move, and what lets a fold
+            #: over a range say *unchanged* where it used to have to say
+            #: *changed* ([ADR-0035]).
+            "hashes": dict(self.change.hashes),
+            "previous": dict(self.change.previous),
         }
 
 
@@ -232,11 +316,17 @@ def changes(before: Mapping[str, str], after: Mapping[str, str]) -> Change:
         else:
             same += 1
 
+    # Both sides of every path that moved. The before-hash of a removed
+    # artefact is the last thing known about it, and it is what makes a rename
+    # legible ([ADR-0035]); the before-hash of a changed one is what lets a
+    # fold say that a document edited and edited back is where it started.
     return Change(
         added=tuple(fresh),
         changed=tuple(altered),
         removed=tuple(gone),
         unchanged=same,
+        hashes=tuple(sorted((path, after[path]) for path in fresh + altered)),
+        previous=tuple(sorted((path, before[path]) for path in altered + gone)),
     )
 
 
@@ -270,6 +360,8 @@ def entry_from(document: Mapping[str, object]) -> Entry:
             changed=_names(document.get("changed")),
             removed=_names(document.get("removed")),
             unchanged=unchanged if isinstance(unchanged, int) else 0,
+            hashes=_hashes(document.get("hashes")),
+            previous=_hashes(document.get("previous")),
         ),
     )
 
@@ -282,6 +374,21 @@ def entry_from(document: Mapping[str, object]) -> Entry:
     return entry
 
 
+#: A path the corpus did not hold at one end of a range.
+#:
+#: An explicit marker rather than a key missing from the dict, and the
+#: difference is a bug this had: *not in the corpus then* and *this fold has
+#: not met it yet* are both "no entry", and conflating them made a path added
+#: and then changed inside a range look like a path that was already there.
+ABSENT = "\x00absent"
+
+#: A path the fold knows is in the corpus at one end, and whose content that
+#: range does not record -- a line written before [ADR-0035]. Not the same as
+#: absent and not the same as a known hash, and conflating either with a hash
+#: is how a fold starts claiming things it cannot know.
+PRESENT = "\x00present"
+
+
 def folded(entries: Sequence[Entry]) -> Change:
     """The net effect of a run of entries, oldest first.
 
@@ -289,25 +396,68 @@ def folded(entries: Sequence[Entry]) -> Change:
     across several. Added-then-removed cancels; added-then-changed is still
     added, because the corpus had neither before.
 
-    **A path that left and came back is reported as changed, and that is the
-    storage boundary showing through.** The journal knows it was removed and
-    knows it was added; it does not keep the bytes, so it cannot tell you the
-    two versions were identical. Reporting *changed* is the claim that is never
-    false about the corpus's history, where *unchanged* could be.
-    """
-    state: dict[str, str] = {}
-    for entry in entries:
-        for path in entry.change.added:
-            state[path] = "changed" if state.get(path) == "removed" else "added"
-        for path in entry.change.changed:
-            state[path] = "added" if state.get(path) == "added" else "changed"
-        for path in entry.change.removed:
-            if state.pop(path, None) != "added":
-                state[path] = "removed"
+    **Two states per path rather than a verb.** The first draft folded verbs --
+    added, changed, removed -- and so could not tell a document that left and
+    came back unaltered from one that came back rewritten. It reported
+    *changed* for both, and [ADR-0034] had to publish the divergence as a
+    limit. Carrying the hashes ([ADR-0035]) turns the whole of that into
+    arithmetic: what a path held when the range began against what it holds
+    now. The answer is then exactly what `changes()` gives for the two ends,
+    and there is nothing left to caveat.
 
-    added = tuple(sorted(path for path, verb in state.items() if verb == "added"))
-    changed = tuple(sorted(path for path, verb in state.items() if verb == "changed"))
-    removed = tuple(sorted(path for path, verb in state.items() if verb == "removed"))
+    **A line written before the hashes existed cannot be folded exactly**, and
+    the result says so instead of guessing: those paths compare `PRESENT`
+    against something, which is never equal, so they fall back to *changed* --
+    the claim that is never false -- and `exact` is false for the whole
+    answer. One unhashed line in a range is one place the arithmetic could not
+    reach, and a reader told which half of a mixed history they are looking at
+    can decide what to do about it.
+    """
+    #: path -> what it held when the range began, `ABSENT`, or `PRESENT`.
+    origin: dict[str, str] = {}
+    #: path -> what it holds now, or `ABSENT`.
+    current: dict[str, str] = {}
+    exact = True
+
+    for entry in entries:
+        change = entry.change
+        for path in change.added:
+            # Only if this range has not already decided: a path removed and
+            # then added back began the range with what the removal recorded.
+            origin.setdefault(path, ABSENT)
+            current[path] = change.hash_for(path) or PRESENT
+            exact = exact and change.hash_for(path) is not None
+        for path in change.changed:
+            # Changed without having been added here means it was there before
+            # the range, holding whatever this entry says it held.
+            origin.setdefault(path, change.hash_before(path) or PRESENT)
+            current[path] = change.hash_for(path) or PRESENT
+            exact = exact and None not in (change.hash_before(path), change.hash_for(path))
+        for path in change.removed:
+            origin.setdefault(path, change.hash_before(path) or PRESENT)
+            current[path] = ABSENT
+            exact = exact and change.hash_before(path) is not None
+
+    added, altered, gone = [], [], []
+    hashes: dict[str, str] = {}
+    earlier: dict[str, str] = {}
+    for path in sorted(current):
+        was, now = origin[path], current[path]
+        if was == ABSENT and now == ABSENT:
+            continue  # arrived and left inside the range: the corpus is as it was
+        if was == ABSENT:
+            added.append(path)
+        elif now == ABSENT:
+            gone.append(path)
+        elif was != now or PRESENT in (was, now):
+            altered.append(path)
+        else:
+            continue  # the same bytes at both ends: this range did nothing to it
+
+        if now not in (ABSENT, PRESENT):
+            hashes[path] = now
+        if was not in (ABSENT, PRESENT):
+            earlier[path] = was
 
     # Derived from the last entry rather than carried: an entry says how many
     # artefacts it left untouched, so the corpus it left had
@@ -315,11 +465,92 @@ def folded(entries: Sequence[Entry]) -> Change:
     # this fold did not name is a file no run in the range touched.
     total = entries[-1].change.total if entries else 0
     return Change(
-        added=added,
-        changed=changed,
-        removed=removed,
-        unchanged=max(total - len(added) - len(changed), 0),
+        added=tuple(added),
+        changed=tuple(altered),
+        removed=tuple(gone),
+        unchanged=max(total - len(added) - len(altered), 0),
+        hashes=tuple(sorted(hashes.items())),
+        previous=tuple(sorted(earlier.items())),
+        exact=exact,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class Attribution:
+    """Which runs put one artefact where it is, if the history can say."""
+
+    path: str
+    #: The run that added it, or ``None`` where the history does not reach back
+    #: far enough to have seen it arrive.
+    first_seen: Entry | None
+    #: The run that last added or changed it. ``None`` for the same reason.
+    last_touched: Entry | None
+    #: How many runs in the history changed it after it arrived.
+    revisions: int
+
+    @property
+    def is_answered(self) -> bool:
+        """Whether the history has anything to say about this artefact at all.
+
+        False is a real answer and the report prints it as one. An artefact
+        that predates the journal, or one whose corpus was copied in from
+        somewhere else, has no history here -- and *unknown* is what a
+        provenance tool owes a reader in that case. Attributing it to the
+        oldest run it happens to sit beside would be a confident wrong answer
+        in the exact place this library exists to prevent one.
+        """
+        return self.first_seen is not None or self.last_touched is not None
+
+
+def touching(entries: Sequence[Entry], path: str) -> tuple[Entry, ...]:
+    """The runs that added, changed or removed one artefact, oldest first.
+
+    `git log -- <path>`, and the query the audit question is actually made of:
+    a document is being questioned, and what is wanted is not the corpus's
+    whole history but this document's part of it.
+    """
+    return tuple(
+        entry
+        for entry in entries
+        if path in entry.change.added
+        or path in entry.change.changed
+        # A removal belongs in a document's history. It is the one event that
+        # explains why the corpus does not have something a reader expected.
+        or path in entry.change.removed
+    )
+
+
+def attribution(entries: Sequence[Entry], paths: Iterable[str]) -> tuple[Attribution, ...]:
+    """For each artefact, the run that put it there and the run that last moved it.
+
+    `git blame`, at the granularity musubi keeps -- a document rather than a
+    line, because a document is the unit [ADR-0006] gives an identity to and a
+    line is not something the journal records.
+
+    Every path asked about comes back, including one the history has never
+    heard of. Dropping those would make the answer look complete when it is
+    the corpus that is complete and the history that is short.
+    """
+    found = []
+    for path in sorted(paths):
+        first: Entry | None = None
+        last: Entry | None = None
+        revisions = 0
+        for entry in entries:
+            if path in entry.change.added:
+                # Added again after a removal: the artefact in the corpus now
+                # is the one this run put there, so the clock restarts. The
+                # earlier life is still in `musubi log <path>`.
+                first, last, revisions = entry, entry, 0
+            elif path in entry.change.changed:
+                last = entry
+                revisions += 1
+            elif path in entry.change.removed:
+                first, last, revisions = None, None, 0
+        found.append(
+            Attribution(path=path, first_seen=first, last_touched=last, revisions=revisions)
+        )
+    return tuple(found)
 
 
 def abbreviated(run_id: str, length: int = 12) -> str:
@@ -351,6 +582,39 @@ def run_named(entries: Sequence[Entry], prefix: str) -> int:
     if len(found) > 1:
         raise LookupError(f"{wanted!r} names {len(found)} runs in this corpus; use more of the id")
     return found[0]
+
+
+def _hashes(value: object) -> tuple[tuple[str, str], ...]:
+    """The recorded hashes, or empty for a line written before [ADR-0035].
+
+    Empty rather than a refusal. A journal that spans the change has lines of
+    both kinds, and a reader that rejected the older ones would turn a history
+    with less detail in its early part into no history at all.
+    """
+    if not isinstance(value, Mapping):
+        return ()
+    return tuple(
+        sorted(
+            (path, digest)
+            for path, digest in value.items()
+            if isinstance(path, str) and isinstance(digest, str) and digest
+        )
+    )
+
+
+def _lookup(pairs: tuple[tuple[str, str], ...], path: str) -> str | None:
+    for name, digest in pairs:
+        if name == path:
+            return digest
+    return None
+
+
+def _by_hash(pairs: list[tuple[str, str]]) -> dict[str, list[str]]:
+    """Hash to every path holding it. A list because two files can be equal."""
+    grouped: dict[str, list[str]] = {}
+    for path, digest in pairs:
+        grouped.setdefault(digest, []).append(path)
+    return grouped
 
 
 def _text(value: object) -> str:

@@ -31,7 +31,7 @@ from ...application.verify import Verified, verify
 from ...config import SOURCES, Configuration, describe, destination, settings_from, source_from
 from ...config import load as load_configuration
 from ...domain.journal import CONTRACT as JOURNAL_CONTRACT
-from ...domain.journal import folded, run_named
+from ...domain.journal import Entry, attribution, folded, run_named, touching
 from ...domain.manifest import Manifest, render
 from ...domain.span import Span
 from ...domain.trace import CHARACTERS
@@ -234,7 +234,37 @@ def _parser() -> argparse.ArgumentParser:
         default=5,
         help="how many paths to name per run before summarising (default: 5)",
     )
+    history.add_argument(
+        "--path",
+        default=None,
+        help=(
+            "one document's part of the history, like `git log -- <path>`. Takes a "
+            "corpus-relative key or the path your shell completed"
+        ),
+    )
     history.add_argument("--json", action="store_true", help="print the history as a document")
+
+    blaming = commands.add_parser(
+        "blame",
+        help="which run put each document where it is",
+        description=(
+            "The audit question asked of the corpus rather than of a run: not what "
+            "Tuesday's sync did, but why this document is what it is. Every artefact "
+            "the manifest lists is reported, including the ones the history cannot "
+            "account for -- an artefact that predates the journal is printed as "
+            "unknown rather than attributed to the oldest run it happens to sit "
+            "beside, which would be a confident wrong answer in the one place this "
+            "library exists to prevent one."
+        ),
+    )
+    blaming.add_argument(
+        "destination",
+        type=Path,
+        nargs="?",
+        default=Path("synced"),
+        help="the corpus to read (default: ./synced)",
+    )
+    blaming.add_argument("--json", action="store_true", help="print the answer as a document")
 
     difference = commands.add_parser(
         "diff",
@@ -688,7 +718,7 @@ if __name__ == "__main__":  # pragma: no cover
 
 
 def _log(arguments: argparse.Namespace) -> int:
-    """The corpus's history, newest first.
+    """The corpus's history, newest first, or one document's part of it.
 
     Reads and writes nothing, like `verify`: a history is a thing to consult
     when a document in the corpus is being questioned, which is exactly when
@@ -696,6 +726,10 @@ def _log(arguments: argparse.Namespace) -> int:
     """
     corpus = Corpus(arguments.destination)
     entries = corpus.journal()
+
+    subject = _artefact_path(arguments.path) if arguments.path else None
+    if subject is not None:
+        entries = touching(entries, subject)
 
     if arguments.json:
         _document(
@@ -707,6 +741,14 @@ def _log(arguments: argparse.Namespace) -> int:
         return 0
 
     if not entries:
+        if subject is not None:
+            # Not the same sentence as an empty journal, and the difference
+            # matters: the corpus may hold this document and the history may
+            # simply not reach back to it. Saying "no history" of the corpus
+            # would answer a question nobody asked.
+            print(f"musubi log — no run in this history touched {subject}")
+            print("  either it predates the journal, or the path is not one musubi wrote.")
+            return 0
         print(f"musubi log — no history in {arguments.destination}")
         print("  a corpus written before this feature keeps none. The next sync starts one.")
         return 0
@@ -714,26 +756,119 @@ def _log(arguments: argparse.Namespace) -> int:
     shown = (
         list(reversed(entries))[: arguments.limit] if arguments.limit else list(reversed(entries))
     )
-    print(f"musubi log — {len(entries)} runs, {arguments.destination}")
+    heading = f"{len(entries)} runs, {arguments.destination}"
+    if subject is not None:
+        heading = f"{len(entries)} runs touched {subject}"
+    print(f"musubi log — {heading}")
+
     for entry in shown:
         print(f"  {entry.short}  {entry.created_at or '(no time)'}  {entry.kind}")
         print(f"    corpus {entry.short_run}")
         print(f"    {entry.change.summary()}")
+        moved = dict(entry.change.moves)
         for label, names in (
             ("+", entry.change.added),
             ("~", entry.change.changed),
             ("-", entry.change.removed),
         ):
-            for path in names[: arguments.paths]:
+            listed = [path for path in names if path not in moved and path not in moved.values()]
+            for path in listed[: arguments.paths]:
                 print(f"    {label} {path}")
-            if len(names) > arguments.paths:
-                print(f"    {label} ... and {len(names) - arguments.paths} more")
+            if len(listed) > arguments.paths:
+                print(f"    {label} ... and {len(listed) - arguments.paths} more")
+        for old, new in entry.change.moves:
+            print(f"    > {old} -> {new}")
+
     if arguments.limit and len(entries) > len(shown):
         print(f"  ... and {len(entries) - len(shown)} older runs")
 
     print("\n  This is history, not storage. musubi holds one version of each document;")
     print("  the journal says what changed and cannot give you back what was replaced.")
     return 0
+
+
+def _blame(arguments: argparse.Namespace) -> int:
+    """Which run put each document where it is.
+
+    The audit question asked of the corpus rather than of a run: not *what did
+    Tuesday's sync do* but *why is this document what it is*. Every artefact
+    the manifest lists comes back, including the ones the history cannot
+    account for -- see `Attribution.is_answered` for why those are printed
+    rather than dropped.
+    """
+    corpus = Corpus(arguments.destination)
+    document = corpus.manifest_document()
+    paths = [
+        artefact["path"]
+        for artefact in document.get("artefacts") or []
+        if isinstance(artefact.get("path"), str)
+    ]
+    found = attribution(corpus.journal(), paths)
+
+    if arguments.json:
+        _document(
+            json.dumps(
+                [
+                    {
+                        "path": one.path,
+                        "first_seen": _run_reference(one.first_seen),
+                        "last_touched": _run_reference(one.last_touched),
+                        "revisions": one.revisions,
+                        "answered": one.is_answered,
+                    }
+                    for one in found
+                ],
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n"
+        )
+        return 0
+
+    unanswered = [one for one in found if not one.is_answered]
+    print(f"musubi blame — {len(found)} artefacts, {arguments.destination}")
+    for one in found:
+        if not one.is_answered:
+            print(f"  {one.path}")
+            print("    not in this history")
+            continue
+        entered = one.first_seen
+        latest = one.last_touched
+        assert entered is not None and latest is not None
+        print(f"  {one.path}")
+        print(f"    entered   {entered.short}  {entered.created_at or '(no time)'}")
+        if latest.entry_id != entered.entry_id:
+            revisions = "1 revision" if one.revisions == 1 else f"{one.revisions} revisions"
+            print(f"    changed   {latest.short}  {latest.created_at or '(no time)'}  {revisions}")
+
+    if unanswered:
+        print(f"\n  {len(unanswered)} of {len(found)} are not in this history. That is an answer,")
+        print("  not a gap in the report: they predate the journal or arrived with the")
+        print("  folder, and naming the oldest run they sit beside would be a guess.")
+    return 0
+
+
+def _run_reference(entry: Entry | None) -> dict[str, str] | None:
+    if entry is None:
+        return None
+    return {"entry_id": entry.entry_id, "run_id": entry.run_id, "created_at": entry.created_at}
+
+
+def _artefact_path(given: str) -> str:
+    """What the journal calls the document the user named.
+
+    A journal path is corpus-relative and starts `documents/`, and somebody
+    asking about a file types what they see -- a bare key, or the path their
+    shell completed. Both are accepted, because refusing one of them would be
+    the tool knowing what was meant and declining to act on it.
+    """
+    path = Path(given).as_posix().lstrip("./")
+    if path.startswith(f"{DOCUMENTS}/"):
+        return path
+    marker = f"/{DOCUMENTS}/"
+    if marker in path:
+        return path[path.index(marker) + 1 :]
+    return f"{DOCUMENTS}/{path}"
 
 
 def _diff(arguments: argparse.Namespace) -> int:
@@ -780,7 +915,9 @@ def _diff(arguments: argparse.Namespace) -> int:
                     "added": list(change.added),
                     "changed": list(change.changed),
                     "removed": list(change.removed),
+                    "moved": [{"from": a, "to": b} for a, b in change.moves],
                     "unchanged": change.unchanged,
+                    "exact": change.exact,
                 },
                 ensure_ascii=False,
                 indent=2,
@@ -791,14 +928,27 @@ def _diff(arguments: argparse.Namespace) -> int:
 
     print(f"musubi diff — {heading}, {len(chosen)} runs")
     print(f"  {change.summary()}")
+    moved = dict(change.moves)
     for label, names in (
         ("+", change.added),
         ("~", change.changed),
         ("-", change.removed),
     ):
         for path in names:
+            if path in moved or path in moved.values():
+                continue
             print(f"  {label} {path}")
-    if change.removed:
+    for old_path, new_path in change.moves:
+        print(f"  > {old_path} -> {new_path}   (same bytes)")
+
+    if not change.exact:
+        print("\n  Part of this range predates the recorded hashes, so a document that")
+        print("  left and came back is reported as changed without musubi being able")
+        print("  to say whether the bytes came back the same.")
+    # Only for a removal that is not the leaving half of a rename. Warning
+    # that a document is gone when it is sitting in the corpus under another
+    # name is the report contradicting the line above it.
+    if [path for path in change.removed if path not in moved]:
         print("\n  A removed document is gone. The journal records that it left,")
         print("  and does not keep a copy to restore.")
     return 0
@@ -921,6 +1071,7 @@ COMMANDS.update(
         "verify": _verify,
         "export": _export,
         "log": _log,
+        "blame": _blame,
         "diff": _diff,
         "mcp": _mcp,
         "config": _config,
