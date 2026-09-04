@@ -27,20 +27,18 @@ from ...application.pipeline import Outcome, Settings, run
 from ...application.sync import Synced, empties_the_corpus, sync, withdrawals
 from ...application.trace import Resolution, resolve
 from ...application.verify import Verified, verify
+from ...config import SOURCES, Configuration, describe, destination, settings_from, source_from
+from ...config import load as load_configuration
 from ...domain.manifest import Manifest, render
 from ...domain.span import Span
 from ...domain.trace import CHARACTERS
 from ...errors import MusubiError, TraceError
-from ...infrastructure.converters import converter_for
 from ...infrastructure.corpus import Corpus
 from ...infrastructure.emitters import DOCUMENTS, MANIFEST, TRACES, DocumentEmitter
-from ...infrastructure.rules import CORE
-from ...infrastructure.screeners import EntropyScreener, default_screener
-from ...infrastructure.sources import FilesystemSource, NotionSource, ObsidianSource
+from ...infrastructure.screeners import EntropyScreener
+from ...ports.source import Source
 
 __all__ = ["main"]
-
-_SOURCES = {"obsidian": ObsidianSource, "filesystem": FilesystemSource, "notion": NotionSource}
 
 
 #: Every subcommand and what runs it. A module-level table rather than a local
@@ -172,6 +170,18 @@ def _parser() -> argparse.ArgumentParser:
     )
     checking.add_argument("--json", action="store_true", help="print the findings as a document")
 
+    setting = commands.add_parser(
+        "config",
+        help="print the settings in effect, and where each came from",
+        description=(
+            "The settings this folder would run with, each with the thing that decided "
+            "it. A configuration system's failure mode is a value arriving from "
+            "somewhere the reader is not looking, so the origin is printed beside every "
+            "value and the files that were found and *not* read are printed underneath."
+        ),
+    )
+    setting.add_argument("--json", action="store_true", help="print the settings as a document")
+
     return parser
 
 
@@ -183,18 +193,28 @@ def _shared(command: argparse.ArgumentParser) -> None:
     cannot stop a plan from ceasing to predict a sync.
     """
     command.add_argument("root", type=Path, help="the folder you are naming")
+    # `default=None` on every option a configuration file can also set, so that
+    # "not given" is distinguishable from "given the same value the default
+    # happens to be". Without it a flag can never be reported as the reason for
+    # a setting, and `musubi config` would credit the default for a choice
+    # somebody typed.
     command.add_argument(
         "--as",
-        dest="kind",
-        choices=sorted(_SOURCES),
-        default="obsidian",
-        help="what kind of folder this is (default: obsidian)",
+        dest="source",
+        choices=sorted(SOURCES),
+        default=None,
+        help="what kind of folder this is (default: obsidian, or musubi.toml)",
     )
     command.add_argument(
         "--into",
-        type=Path,
-        default=Path("synced"),
-        help="where the corpus goes (default: ./synced)",
+        default=None,
+        help="where the corpus goes (default: ./synced, or musubi.toml)",
+    )
+    command.add_argument(
+        "--rules",
+        choices=("core", "none"),
+        default=None,
+        help="which cleansing pack runs (default: core)",
     )
     command.add_argument(
         "--source-id",
@@ -225,22 +245,41 @@ def _shared(command: argparse.ArgumentParser) -> None:
     command.add_argument("--json", action="store_true", help="print the manifest instead")
 
 
-def _prepare(arguments: argparse.Namespace) -> tuple[FilesystemSource, Settings, DocumentEmitter]:
-    source_class = _SOURCES[arguments.kind]
-    source = (
-        source_class(arguments.root, source_id=arguments.source_id)
-        if arguments.source_id
-        else source_class(arguments.root)
+def _configured(arguments: argparse.Namespace) -> Configuration:
+    """The file, the environment, and then whatever was typed.
+
+    `--allow` **replaces** the file's list rather than adding to it, like every
+    other flag. That is the fail-closed direction: losing an allowance stops a
+    run that would otherwise have proceeded, and the opposite rule would let a
+    forgotten line in a file two directories up keep a credential moving.
+    """
+    typed = {
+        "source": getattr(arguments, "source", None),
+        "into": getattr(arguments, "into", None),
+        "rules": getattr(arguments, "rules", None),
+        "screener": "signatures+entropy" if getattr(arguments, "screen_entropy", False) else None,
+        "allow": list(arguments.allow) or None,
+    }
+    return load_configuration().overridden_by(typed)
+
+
+def _prepare(arguments: argparse.Namespace) -> tuple[Source, Settings, DocumentEmitter]:
+    """The configuration, turned into the three things a run takes.
+
+    The wiring is in `musubi.config` rather than here: which class implements
+    `notion` and which pack `core` names are not things an interface should
+    know, and a second interface would otherwise have to learn them again.
+    """
+    configuration = _configured(arguments)
+    return (
+        source_from(configuration, arguments.root, arguments.source_id),
+        settings_from(
+            configuration,
+            musubi_version=__version__,
+            created_at=datetime.now(UTC).isoformat(),
+        ),
+        DocumentEmitter(destination(configuration)),
     )
-    settings = Settings(
-        ruleset=CORE,
-        screener=default_screener(entropy=arguments.screen_entropy),
-        converter_for=converter_for,
-        musubi_version=__version__,
-        allowed=frozenset(arguments.allow),
-        created_at=datetime.now(UTC).isoformat(),
-    )
-    return source, settings, DocumentEmitter(arguments.into)
 
 
 def _plan(arguments: argparse.Namespace) -> int:
@@ -268,7 +307,7 @@ def _sync(arguments: argparse.Namespace) -> int:
     if arguments.json:
         _document(render(result.manifest))
     else:
-        _report_sync(result, arguments.into)
+        _report_sync(result, emitter.destination)
     return 0
 
 
@@ -506,4 +545,50 @@ if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
 
 
-COMMANDS.update({"plan": _plan, "sync": _sync, "trace": _trace, "verify": _verify})
+def _config(arguments: argparse.Namespace) -> int:
+    """What this folder would run with, and why.
+
+    Writes nothing and reads nothing but the settings, so it is safe to run
+    before anything else -- which is the point: `plan` is the posture for a
+    corpus (ADR-0012), and this is the same posture one step earlier, for the
+    settings the plan would be made with.
+    """
+    configuration = load_configuration()
+    rows = describe(configuration)
+
+    if arguments.json:
+        _document(
+            json.dumps(
+                {
+                    "read": str(configuration.read) if configuration.read else None,
+                    "passed_over": [str(path) for path in configuration.passed_over],
+                    "settings": {
+                        name: {"value": configuration[name], "origin": configuration.origin(name)}
+                        for name, _, _, _ in rows
+                    },
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n"
+        )
+        return 0
+
+    where = configuration.read or "nothing; every value below is a default"
+    print(f"musubi config — {len(rows)} settings, from {where}")
+    print()
+    for name, value, origin, alternatives in rows:
+        print(f"  {name:<12} {value:<28} {origin}")
+        if alternatives:
+            print(f"  {'':<12} {'':<28} or: {alternatives}")
+    if configuration.passed_over:
+        print()
+        print("  found further up and not read, because the nearest file wins whole:")
+        for path in configuration.passed_over:
+            print(f"    {path}")
+    return 0
+
+
+COMMANDS.update(
+    {"plan": _plan, "sync": _sync, "trace": _trace, "verify": _verify, "config": _config}
+)

@@ -462,6 +462,21 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   named for the numbered entries, and a guard fails if the list grows an entry
   nothing runs. Everything there is asserted against a **real sync** of a
   generated vault, never against a document a test assembled.
+- **A setting arrives from four places and says which one.** `--flag` beats
+  `MUSUBI_*` beats the nearest `musubi.toml` beats the default, the nearest file
+  wins **whole** rather than merging, and `musubi config` prints the origin
+  beside every value plus the files it found and did not read (ADR-0027). Every
+  flag a file can also set has `default=None` in the parser: an `argparse`
+  default cannot be told apart from a typed value, so without it the file could
+  never win and the origin column would credit the wrong layer.
+- **A setting names an algorithm, never an import path.**
+  `infrastructure/algorithms.py` is the table and `musubi/config.py` is the
+  composition root that reads it — the row the architecture map has always
+  reserved for `config.py`, now occupied. musubi is pointed at everything its owner has
+  written, so a settings file that can name a module is a settings file that can
+  run anything. A converter from elsewhere is registered by a program that
+  imported musubi deliberately, and is then nameable because the table is read
+  when the question is asked rather than at import.
 - **A refusal is only as good as the inputs it was pointed at, and the six in
   `tests/test_the_refusals_that_did_not_fire.py` were each already written.**
   Overlapping replacements were refused and an insertion *inside* one was not,

@@ -177,6 +177,29 @@ def test_a_verify_still_reports_on_a_console_that_cannot_show_it(
     assert "—" not in shown, "the em dash could not be encoded and was substituted"
 
 
+def test_a_config_still_reports_on_a_console_that_cannot_show_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The fifth command, and the first one the guard below caught.
+
+    `verify` was added after ADR-0020 and nothing here narrowed a console at it;
+    that was found by hand and the guard was written afterwards. `config` was
+    added after the guard, and the guard turned red on the commit that added it
+    -- which is the whole of what it was for.
+
+    The path is printed, so a settings file under a Japanese folder name is
+    exactly the case: the value is a path this console cannot spell.
+    """
+    console = narrow_console(monkeypatch)
+    folder = tmp_path / "設計 𩸽"
+    folder.mkdir()
+    (folder / "musubi.toml").write_text('into = "corpus"\n', encoding="utf-8")
+    monkeypatch.chdir(folder)
+
+    assert main(["config"]) == 0
+    assert b"musubi config" in console.written()
+
+
 def test_every_command_the_parser_knows_is_exercised_here() -> None:
     """The drift guard, and the reason this file needs one.
 
