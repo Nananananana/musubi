@@ -49,8 +49,14 @@ living in other files, which is where they belong.
 It also found something about itself, which is why `TIMEOUT` exists: mutating
 the advance of `Signature.find`'s `while` loop produces code that does not
 terminate. The first sweep sat spinning with no output and stopped on the fifth
-module. `find`'s own docstring says *nothing here can backtrack*; that is true
+module. `find`'s own docstring said *nothing here can backtrack*; that is true
 of what is written and one character away from being false.
+
+That is now closed from the other side. `find` states its bound -- at most
+`len(text) + 1` iterations, because the prefix can never be empty -- and
+`tests/test_the_scan_cannot_run_away.py` checks the validation that buys it and
+runs the worst-case input in a subprocess with a deadline. **A hang has to be
+made into a failure by somebody**; it will not become one on its own.
 
 ## Running it
 

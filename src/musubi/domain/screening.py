@@ -98,6 +98,20 @@ class Signature:
         A linear scan: find the prefix, then count how far the alphabet runs.
         Nothing here can backtrack.
 
+        **The bound, stated rather than gestured at.** Every iteration leaves
+        `at` strictly greater than it found it: the boundary and minimum-length
+        branches set `at = start + 1` where `start >= at`, and the matching
+        branch sets `at = end` where `end >= start + len(prefix)` and the prefix
+        is **never empty** -- `__post_init__` refuses one. So the loop runs at
+        most `len(text) + 1` times, and the whole scan is linear.
+
+        That the prefix cannot be empty is therefore not a nicety about
+        signature quality. It is what buys termination, and
+        `tests/test_the_scan_cannot_run_away.py` checks both halves: the
+        validation that guarantees it, and a worst-case input in a subprocess
+        with a deadline, so that losing the property fails a test instead of
+        hanging one.
+
         **The prefix has to start something.** A match whose preceding character
         the body alphabet would have accepted is not a token that begins with
         the prefix -- it is a longer run of the same alphabet with the prefix
