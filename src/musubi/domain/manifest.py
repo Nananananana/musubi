@@ -215,11 +215,27 @@ class Manifest:
         }
 
     def summary(self) -> str:
+        """The headline, which must not read as a success when nothing happened.
+
+        `Coverage.traceable_coverage` is 1.0 for an empty artefact, and that is
+        right per document: no character failed the guarantee. Aggregated over a
+        run that emitted **nothing**, it printed
+
+            0 emitted, 1 skipped, 0 removals, **100.0% traceable**
+
+        which is the same shape as the `answer_width` finding ([ADR-0033]) --
+        the number a reader trusts, maximised by total failure. A percentage of
+        nothing is not a percentage.
+        """
         coverage = self.coverage
+        traceable = (
+            f"{coverage.traceable_coverage:.1%} traceable"
+            if coverage.characters
+            else "no characters to trace"
+        )
         return (
             f"{coverage.emitted} emitted, {coverage.skipped} skipped, "
-            f"{len(self.removals)} removals, "
-            f"{coverage.traceable_coverage:.1%} traceable"
+            f"{len(self.removals)} removals, {traceable}"
         )
 
 

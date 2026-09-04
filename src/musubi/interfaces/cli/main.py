@@ -34,6 +34,7 @@ from ...domain.manifest import Manifest, render
 from ...domain.span import Span
 from ...domain.trace import CHARACTERS
 from ...errors import MusubiError, TraceError
+from ...infrastructure.converters import claimed_converters
 from ...infrastructure.converters.external import available, unavailable
 from ...infrastructure.corpus import Corpus
 from ...infrastructure.emitters import DOCUMENTS, MANIFEST, TRACES, DocumentEmitter
@@ -578,13 +579,47 @@ def _coverage(manifest: Manifest, verb: str) -> None:
     coverage = manifest.coverage
     print("\nCoverage")
     print(f"  {coverage.emitted} documents {verb}, {coverage.skipped} skipped")
-    print(
-        f"  {coverage.traceable_characters} of {coverage.characters} characters traceable "
-        f"({coverage.traceable_coverage:.1%})"
-    )
+    if coverage.characters:
+        print(
+            f"  {coverage.traceable_characters} of {coverage.characters} characters traceable "
+            f"({coverage.traceable_coverage:.1%})"
+        )
+    else:
+        # Rather than `0 of 0 characters traceable (100.0%)`, which is what a
+        # ratio of nothing came out as.
+        print("  no characters were emitted, so there is no coverage to report")
     for source_record in manifest.sources:
         for cap in source_record.caps:
             print(f"  cap: {cap}")
+    _unused_converters(manifest)
+
+
+def _unused_converters(manifest: Manifest) -> None:
+    """Say when a better converter is installed and is not being used.
+
+    [ADR-0028] is deliberate: an installed extra is **offered, never claimed**,
+    so a dependency appearing in an environment cannot change what a folder
+    builds. The cost of that is a trap — somebody installs `musubi[pdf]`
+    *because* their PDFs came back as `no_pages`, runs it again, and gets
+    exactly the same `no_pages`, because nothing named the new converter.
+
+    Saying so costs a line and breaks nothing. The decision stays theirs; what
+    changes is that they know there is one to make.
+    """
+    refused = {"no_pages", "no_text_layer", "no_main_content", "undecodable", "unreadable"}
+    if not any(skip.reason in refused for skip in manifest.skipped):
+        return
+
+    claimed = {converter.name for converter in claimed_converters()}
+    offered = [extractor for extractor in available() if extractor.name not in claimed]
+    if not offered:
+        return
+
+    print("\nInstalled and not used")
+    for extractor in offered:
+        types = ", ".join(extractor.media_types)
+        print(f"  {extractor.name} reads {types}, and may read what was refused above.")
+        print(f'    musubi.toml:  [converters]  "{extractor.media_types[0]}" = "{extractor.name}"')
 
 
 def _limits(manifest: Manifest) -> None:
