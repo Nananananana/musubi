@@ -477,6 +477,14 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   run anything. A converter from elsewhere is registered by a program that
   imported musubi deliberately, and is then nameable because the table is read
   when the question is asked rather than at import.
+- **A hang is a result, and something has to turn it into one.** pytest has
+  nothing to say about a test that is still running, so a property whose failure
+  mode is non-termination goes in a **subprocess with a deadline**
+  (`tests/test_the_scan_cannot_run_away.py`), and `tools/mutate.py` reports a
+  timed-out mutant as `[did not terminate]` rather than as one it could not
+  kill. Where the bound can be counted, count it in the docstring; `mamori`'s
+  version of this on the same day: **where it cannot, saying so is more accurate
+  than a number.**
 - **A mutation score is a statement about the test selection.**
   `tools/mutate.py` changes one operator, runs the tests, and asks whether
   anything noticed. `domain/screening.py` scored **74% against its own test file
