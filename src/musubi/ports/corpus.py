@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+from ..domain.journal import Entry
 from ..domain.trace import TraceMap
 
 __all__ = ["CorpusReader", "Held", "SourceReference"]
@@ -73,6 +74,16 @@ class CorpusReader(Protocol):
         the domain renders manifests and does not read them, and because a
         checker that reconstructs the producer's object can only find faults the
         producer's object can represent. ``verify`` reads what is written.
+        """
+        ...
+
+    def journal(self) -> tuple[Entry, ...]:
+        """The corpus's history, oldest first. Empty for a corpus without one.
+
+        Empty is not a fault: a corpus written before [ADR-0034] keeps no
+        history and is otherwise sound. What `verify` checks is the pair -- if
+        there *is* a history, its last entry has to name the corpus the
+        manifest names.
         """
         ...
 

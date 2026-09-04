@@ -49,6 +49,7 @@ from musubi.domain.text import decode
 from musubi.domain.trace import CHARACTERS, Kind, Segment, TraceMap
 from musubi.infrastructure.converters import converter_for
 from musubi.infrastructure.emitters import MANIFEST, TRACES, DocumentEmitter
+from musubi.infrastructure.emitters.documents import JOURNAL
 from musubi.infrastructure.rules import CORE
 from musubi.infrastructure.screeners import default_screener
 from musubi.infrastructure.sources import ObsidianSource
@@ -453,18 +454,39 @@ def test_two_syncs_over_the_same_folder_are_byte_identical(files: dict[str, byte
         )
 
         def contents(where: Path) -> dict[str, bytes]:
+            # The manifest and the journal both carry `created_at`, and the two
+            # runs are deliberately given different clocks. Excluding them is
+            # not a loophole -- what they must agree on is asserted below, and
+            # it is the part ADR-0003 is about.
             return {
                 path.relative_to(where).as_posix(): path.read_bytes()
                 for path in sorted(where.rglob("*"))
-                if path.is_file() and path.name != MANIFEST
+                if path.is_file() and path.name not in {MANIFEST, JOURNAL}
             }
 
         assert contents(first) == contents(second)
         assert manifest_of(first)["run_id"] == manifest_of(second)["run_id"], (
             "the clock differs and the id must not"
         )
+
+        def history(where: Path) -> list[dict[str, Any]]:
+            lines = (where / JOURNAL).read_text(encoding="utf-8").splitlines()
+            return [
+                {key: value for key, value in json.loads(line).items() if key not in TIMED}
+                for line in lines
+            ]
+
+        assert history(first) == history(second), (
+            "two runs over the same folder recorded different histories of it"
+        )
     finally:
         shutil.rmtree(first.parent, ignore_errors=True)
+
+
+#: The fields a journal line carries that are *about the run* rather than about
+#: the corpus: when it happened, and the entry id that covers it. Two runs over
+#: the same folder differ here by design ([ADR-0034]) and nowhere else.
+TIMED = {"created_at", "entry_id"}
 
 
 @CORPUS

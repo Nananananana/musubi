@@ -18,11 +18,12 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
+from ..domain.journal import Entry, entry_from
 from ..domain.span import Span
 from ..domain.trace import CHARACTERS, OPAQUE, Kind, Segment, TraceMap
 from ..errors import ContractError, TraceError
 from ..ports.corpus import Held, SourceReference
-from .emitters.documents import DOCUMENTS, MANIFEST, TRACES
+from .emitters.documents import DOCUMENTS, JOURNAL, MANIFEST, TRACES
 
 __all__ = ["Corpus"]
 
@@ -132,6 +133,32 @@ class Corpus:
                 f"not a corpus musubi wrote, and there is nothing to check it against."
             )
         return _document(path)
+
+    def journal(self) -> tuple[Entry, ...]:
+        """The corpus's history, oldest first, or empty for one without a file.
+
+        Empty rather than raising. A corpus written before [ADR-0034] has no
+        journal and is not broken; the history is a thing musubi keeps from now
+        on, not a thing a corpus is invalid without.
+
+        A **line** that will not parse does raise. The two cases are different:
+        no history is honest, and a history with a hole in it read as if it
+        were whole is not.
+        """
+        path = self.destination / JOURNAL
+        if not path.is_file():
+            return ()
+        entries = []
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            if not line.strip():
+                continue
+            try:
+                entries.append(entry_from(json.loads(line)))
+            except (json.JSONDecodeError, ValueError) as error:
+                raise ContractError(f"{path} line {number} is not a journal entry: {error}") from (
+                    error
+                )
+        return tuple(entries)
 
     def artefact_bytes(self, key: str) -> bytes:
         return (self.destination / DOCUMENTS / key).read_bytes()

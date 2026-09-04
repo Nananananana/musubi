@@ -30,10 +30,12 @@ from ...application.trace import Resolution, resolve
 from ...application.verify import Verified, verify
 from ...config import SOURCES, Configuration, describe, destination, settings_from, source_from
 from ...config import load as load_configuration
+from ...domain.journal import CONTRACT as JOURNAL_CONTRACT
+from ...domain.journal import folded, run_named
 from ...domain.manifest import Manifest, render
 from ...domain.span import Span
 from ...domain.trace import CHARACTERS
-from ...errors import MusubiError, TraceError
+from ...errors import ContractError, MusubiError, TraceError
 from ...infrastructure.converters import claimed_converters
 from ...infrastructure.converters.external import available, unavailable
 from ...infrastructure.corpus import Corpus
@@ -204,6 +206,59 @@ def _parser() -> argparse.ArgumentParser:
         default=None,
         help="a file to write (default: standard output, so it can be piped)",
     )
+
+    history = commands.add_parser(
+        "log",
+        help="what each run did to this corpus, newest first",
+        description=(
+            "The corpus's own history. Every sync appends one line saying which "
+            "artefacts it added, changed and removed, and which run it followed -- so a "
+            "document that is being questioned can be asked when it entered the corpus "
+            "and which run put it there. It is history and not storage: musubi keeps "
+            "one version of each document, and cannot give back what a run replaced."
+        ),
+    )
+    history.add_argument(
+        "destination",
+        type=Path,
+        nargs="?",
+        default=Path("synced"),
+        help="the corpus to read (default: ./synced)",
+    )
+    history.add_argument(
+        "--limit", type=int, default=10, help="how many runs to show (default: 10, 0 for all)"
+    )
+    history.add_argument(
+        "--paths",
+        type=int,
+        default=5,
+        help="how many paths to name per run before summarising (default: 5)",
+    )
+    history.add_argument("--json", action="store_true", help="print the history as a document")
+
+    difference = commands.add_parser(
+        "diff",
+        help="what changed across a range of runs, folded into one answer",
+        description=(
+            "Not what one run did -- what the corpus did across several. Added then "
+            "removed cancels; a document that left and came back is reported as "
+            "changed, because the journal knows it was removed and knows it was added "
+            "and does not keep the bytes to say whether they came back the same."
+        ),
+    )
+    difference.add_argument(
+        "destination",
+        type=Path,
+        nargs="?",
+        default=Path("synced"),
+        help="the corpus to read (default: ./synced)",
+    )
+    difference.add_argument(
+        "--since",
+        default=None,
+        help="a run id, or enough of one to be unique (default: the run before the last)",
+    )
+    difference.add_argument("--json", action="store_true", help="print the answer as a document")
 
     serving = commands.add_parser(
         "mcp",
@@ -632,6 +687,123 @@ if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
 
 
+def _log(arguments: argparse.Namespace) -> int:
+    """The corpus's history, newest first.
+
+    Reads and writes nothing, like `verify`: a history is a thing to consult
+    when a document in the corpus is being questioned, which is exactly when
+    nobody wants the tool touching the folder.
+    """
+    corpus = Corpus(arguments.destination)
+    entries = corpus.journal()
+
+    if arguments.json:
+        _document(
+            json.dumps(
+                [entry.document() for entry in reversed(entries)], ensure_ascii=False, indent=2
+            )
+            + "\n"
+        )
+        return 0
+
+    if not entries:
+        print(f"musubi log — no history in {arguments.destination}")
+        print("  a corpus written before this feature keeps none. The next sync starts one.")
+        return 0
+
+    shown = (
+        list(reversed(entries))[: arguments.limit] if arguments.limit else list(reversed(entries))
+    )
+    print(f"musubi log — {len(entries)} runs, {arguments.destination}")
+    for entry in shown:
+        print(f"  {entry.short}  {entry.created_at or '(no time)'}  {entry.kind}")
+        print(f"    corpus {entry.short_run}")
+        print(f"    {entry.change.summary()}")
+        for label, names in (
+            ("+", entry.change.added),
+            ("~", entry.change.changed),
+            ("-", entry.change.removed),
+        ):
+            for path in names[: arguments.paths]:
+                print(f"    {label} {path}")
+            if len(names) > arguments.paths:
+                print(f"    {label} ... and {len(names) - arguments.paths} more")
+    if arguments.limit and len(entries) > len(shown):
+        print(f"  ... and {len(entries) - len(shown)} older runs")
+
+    print("\n  This is history, not storage. musubi holds one version of each document;")
+    print("  the journal says what changed and cannot give you back what was replaced.")
+    return 0
+
+
+def _diff(arguments: argparse.Namespace) -> int:
+    """What changed across a range of runs, folded into one answer."""
+    corpus = Corpus(arguments.destination)
+    entries = corpus.journal()
+    if not entries:
+        print(f"musubi diff — no history in {arguments.destination}")
+        return 0
+
+    if arguments.since is None:
+        # The run before the last one, so the default answers "what did the
+        # last sync do" -- the question somebody types `diff` for.
+        start = entries[-2] if len(entries) > 1 else None
+        chosen = entries[-1:]
+    else:
+        try:
+            index = run_named(entries, arguments.since)
+        except LookupError as error:
+            raise ContractError(f"{error}. `musubi log` lists them.") from error
+        start = entries[index]
+        chosen = entries[index + 1 :]
+
+    since = start.short if start is not None else "the empty corpus"
+    heading = f"{since}..{entries[-1].short}"
+
+    change = folded(chosen)
+    if not chosen and start is not None:
+        # Nothing between the named run and the end of the history. The corpus
+        # is whatever that run left, and saying "0 artefacts" would read as an
+        # empty corpus rather than an empty range.
+        change = replace(change, unchanged=start.change.total)
+
+    if arguments.json:
+        _document(
+            json.dumps(
+                {
+                    "contract": JOURNAL_CONTRACT,
+                    "from_entry": start.entry_id if start is not None else None,
+                    "from_run": start.run_id if start is not None else None,
+                    "to_entry": entries[-1].entry_id,
+                    "to_run": entries[-1].run_id,
+                    "runs": len(chosen),
+                    "added": list(change.added),
+                    "changed": list(change.changed),
+                    "removed": list(change.removed),
+                    "unchanged": change.unchanged,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n"
+        )
+        return 0
+
+    print(f"musubi diff — {heading}, {len(chosen)} runs")
+    print(f"  {change.summary()}")
+    for label, names in (
+        ("+", change.added),
+        ("~", change.changed),
+        ("-", change.removed),
+    ):
+        for path in names:
+            print(f"  {label} {path}")
+    if change.removed:
+        print("\n  A removed document is gone. The journal records that it left,")
+        print("  and does not keep a copy to restore.")
+    return 0
+
+
 def _export(arguments: argparse.Namespace) -> int:
     """The corpus as one file, and a line saying what a reader now has.
 
@@ -748,6 +920,8 @@ COMMANDS.update(
         "trace": _trace,
         "verify": _verify,
         "export": _export,
+        "log": _log,
+        "diff": _diff,
         "mcp": _mcp,
         "config": _config,
     }

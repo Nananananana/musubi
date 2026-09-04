@@ -257,6 +257,60 @@ def test_the_mcp_server_speaks_utf8_whatever_the_console_is(
     assert NOTE.strip() in body["text"], "the document did not survive the round trip"
 
 
+def test_a_log_names_files_a_narrow_console_cannot_show(
+    tmp_path: Path, vault: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`log` prints filenames, which is a harder case than a heading.
+
+    An em dash is musubi's own character and could in principle be avoided. A
+    path is the owner's, and this one is `𩸽.md` -- so the guarantee being
+    tested is the one ADR-0020 actually makes, that a console cannot fail a run
+    over *other people's* text.
+    """
+    (vault / "𩸽.md").write_text(NOTE, encoding="utf-8")
+    into = tmp_path / "corpus"
+    assert main(["sync", str(vault), "--into", str(into)]) == 0
+
+    stream = narrow_console(monkeypatch)
+    assert main(["log", str(into)]) == 0
+
+    shown = stream.written().decode("cp932")
+    assert "runs" in shown
+    assert ".md" in shown, "the report named no file at all"
+
+
+def test_a_diff_reports_on_a_console_that_cannot_show_it(
+    tmp_path: Path, vault: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (vault / "𩸽.md").write_text(NOTE, encoding="utf-8")
+    into = tmp_path / "corpus"
+    assert main(["sync", str(vault), "--into", str(into)]) == 0
+    (vault / "𩸽.md").unlink()
+    assert main(["sync", str(vault), "--into", str(into)]) == 0
+
+    stream = narrow_console(monkeypatch)
+    assert main(["diff", str(into)]) == 0
+    assert "removed" in stream.written().decode("cp932")
+
+
+def test_a_log_as_a_document_is_utf8_whatever_the_console_is(
+    tmp_path: Path, vault: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The worse half of ADR-0020: `--json` did not crash, it wrote a document
+    that was not valid UTF-8, with exit 0 and nothing in the report."""
+    (vault / "𩸽.md").write_text(NOTE, encoding="utf-8")
+    into = tmp_path / "corpus"
+    assert main(["sync", str(vault), "--into", str(into)]) == 0
+
+    stream = narrow_console(monkeypatch)
+    assert main(["log", str(into), "--json"]) == 0
+
+    body = json.loads(stream.written().decode("utf-8"))
+    assert any("𩸽" in path for path in body[0]["added"]), (
+        "the document lost the character that a cp932 console cannot hold"
+    )
+
+
 def test_every_command_the_parser_knows_is_exercised_here() -> None:
     """The drift guard, and the reason this file needs one.
 

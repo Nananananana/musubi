@@ -66,20 +66,33 @@ import os
 import shutil
 from collections.abc import Iterable
 from pathlib import Path
+from typing import Any
 
 from ...domain.frontmatter import FrontMatter, replacements
 from ...domain.hashing import content_hash
+from ...domain.journal import Entry
 from ...domain.manifest import Artefact
 from ...domain.text import rewrite
 from ...domain.trace import TraceMap
 from ...errors import ContractError, ConversionError
-from ...ports.emitter import Document, Rendered
+from ...ports.emitter import Document, Previous, Rendered
 
-__all__ = ["DOCUMENTS", "MANIFEST", "STAGING", "TRACES", "TRACE_CONTRACT", "DocumentEmitter"]
+__all__ = [
+    "DOCUMENTS",
+    "JOURNAL",
+    "MANIFEST",
+    "STAGING",
+    "TRACES",
+    "TRACE_CONTRACT",
+    "DocumentEmitter",
+]
 
 DOCUMENTS = "documents"
 TRACES = "traces"
 MANIFEST = "manifest.json"
+
+#: The corpus's history: one JSON object per run, appended ([ADR-0034]).
+JOURNAL = "runs.jsonl"
 STAGING = ".musubi-staging"
 
 #: Not frozen. v0.2 writes the schema and freezes the name once a second program
@@ -248,9 +261,62 @@ class DocumentEmitter:
         rather than being parsed hopefully: guessing at it would produce a list
         of files to delete.
         """
+        return self.previous().written
+
+    def previous(self) -> Previous:
+        """The corpus as the last run left it: its id, its hashes, its paths.
+
+        One read of one file. Withdrawal wants the paths and the journal wants
+        the run id and the hashes ([ADR-0034]), and two readers of the same
+        document are two things to keep in step.
+        """
+        body = self._previous_manifest()
+        if body is None:
+            return Previous(run_id=None, artefacts={}, written=frozenset())
+
+        hashes: dict[str, str] = {}
+        written: set[str] = set()
+        for artefact in body.get("artefacts") or []:
+            path = artefact.get("path")
+            if isinstance(path, str) and path:
+                written.add(path)
+                digest = artefact.get("content_hash")
+                if isinstance(digest, str) and digest:
+                    hashes[path] = digest
+            trace = artefact.get("trace_map")
+            if isinstance(trace, str) and trace:
+                written.add(trace)
+
+        run_id = body.get("run_id")
+        return Previous(
+            run_id=run_id if isinstance(run_id, str) and run_id else None,
+            artefacts=hashes,
+            written=frozenset(written),
+        )
+
+    def append_journal(self, entry: Entry) -> None:
+        """Add one line to the corpus's history.
+
+        **Appended, and outside the staging area.** Everything else musubi
+        writes is staged and promoted together because [ADR-0008] is
+        fail-closed; the journal is the opposite kind of thing -- a record that
+        a run happened, written once the run *has* happened. Staging it would
+        mean discarding it on a refusal, which is right, and promoting it with
+        the rest would mean replacing the file rather than adding to it.
+
+        One `json.dumps` and a newline, opened in append mode, which is the
+        write a reader can `tail` and a crash can only truncate at a line
+        boundary.
+        """
+        self.destination.mkdir(parents=True, exist_ok=True)
+        line = json.dumps(entry.document(), ensure_ascii=False, sort_keys=True)
+        with (self.destination / JOURNAL).open("a", encoding="utf-8", newline="\n") as handle:
+            handle.write(line + "\n")
+
+    def _previous_manifest(self) -> dict[str, Any] | None:
         manifest = self.destination / MANIFEST
         if not manifest.is_file():
-            return frozenset()
+            return None
         try:
             body = json.loads(manifest.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as error:
@@ -262,13 +328,7 @@ class DocumentEmitter:
                 f"{manifest} declares contract {body.get('contract')!r}, which this does "
                 f"not recognise. Refusing rather than guessing at a list of files to delete."
             )
-        written: set[str] = set()
-        for artefact in body.get("artefacts") or []:
-            for key in ("path", "trace_map"):
-                value = artefact.get(key)
-                if isinstance(value, str) and value:
-                    written.add(value)
-        return frozenset(written)
+        return body
 
     def withdraw(self, paths: Iterable[str]) -> tuple[str, ...]:
         """Take these out of the corpus. Returns what was actually removed.

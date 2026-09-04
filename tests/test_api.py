@@ -202,13 +202,49 @@ def test_a_range_outside_the_text_is_refused(note: Path) -> None:
 # -- the surface itself -----------------------------------------------------
 
 
+def test_history_hands_back_the_entries_and_not_a_rendering(tmp_path: Path) -> None:
+    """The question a caller asks is usually not the one the report answers --
+    *which run first held this path* -- so this returns the entries. A caller
+    parsing a report back is a caller sent the long way round."""
+    # The corpus lives outside the folder being read: a destination inside the
+    # source is a folder the next sync reads back in.
+    vault = tmp_path / "notes"
+    vault.mkdir()
+    (vault / "gear.md").write_text(NOTE, encoding="utf-8")
+    corpus = tmp_path / "corpus"
+    musubi.sync(vault, into=corpus)
+    (vault / "stove.md").write_text("# stove\n", encoding="utf-8")
+    musubi.sync(vault, into=corpus)
+
+    entries = musubi.history(corpus)
+    assert [entry.change.added for entry in entries] == [
+        ("documents/gear.md",),
+        ("documents/stove.md",),
+    ]
+    assert entries[1].parent == entries[0].run_id
+
+
+def test_history_of_a_corpus_with_none_is_empty_rather_than_an_error(tmp_path: Path) -> None:
+    """A corpus written before [ADR-0034] keeps no history and is not thereby
+    broken. Raising would make every corpus that predates the feature look
+    damaged to a caller."""
+    vault = tmp_path / "notes"
+    vault.mkdir()
+    (vault / "gear.md").write_text(NOTE, encoding="utf-8")
+    corpus = tmp_path / "corpus"
+    musubi.sync(vault, into=corpus)
+    (corpus / "runs.jsonl").unlink()
+
+    assert musubi.history(corpus) == ()
+
+
 def test_the_package_exports_what_the_readme_shows() -> None:
     """A README example that does not run is worse than no README.
 
     Checked as a set relation so that a name removed from `__all__` and left in
     the documentation turns this red.
     """
-    for name in ("convert", "sync", "media_type_of", "Document", "Where"):
+    for name in ("convert", "sync", "history", "media_type_of", "Document", "Where"):
         assert name in musubi.__all__, f"README uses musubi.{name} and it is not exported"
         assert hasattr(musubi, name)
 

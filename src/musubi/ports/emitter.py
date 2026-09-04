@@ -11,15 +11,32 @@ that is a property of the *decision* rather than of any one write.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
+from ..domain.journal import Entry
 from ..domain.manifest import Artefact
 from ..domain.record import Unit
 from ..domain.trace import TraceMap
 
-__all__ = ["Artefact", "Document", "Emitter", "Rendered"]
+__all__ = ["Artefact", "Document", "Emitter", "Previous", "Rendered"]
+
+
+@dataclass(frozen=True, slots=True)
+class Previous:
+    """The corpus as the last run left it.
+
+    `run_id` is ``None`` for a destination nothing has written yet, which is the
+    first entry in a journal and the one with no parent.
+    """
+
+    run_id: str | None
+    #: Artefact path to content hash. What `changes()` compares.
+    artefacts: Mapping[str, str]
+    #: Every path the last run recorded writing, documents and trace maps both.
+    #: This is what withdrawal is allowed to delete.
+    written: frozenset[str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +99,24 @@ class Emitter(Protocol):
 
     def discard(self) -> None:
         """Throw the staging area away. Nothing reaches the destination."""
+        ...
+
+    def previous(self) -> Previous:
+        """What the corpus was before this run, read from its own manifest.
+
+        One read rather than two: withdrawal needs the paths, and the journal
+        needs the run id and the hashes ([ADR-0034]). A second reader of the
+        same file is a second thing to keep in step.
+        """
+        ...
+
+    def append_journal(self, entry: Entry) -> None:
+        """Record what this run did, after it has landed.
+
+        After, never before. An entry written first and a promotion that then
+        failed would claim a run that did not happen -- and the journal is the
+        thing a reader trusts about what happened.
+        """
         ...
 
     def previously_written(self) -> frozenset[str]:

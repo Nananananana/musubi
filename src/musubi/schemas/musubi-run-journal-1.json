@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Nananananana/musubi/schemas/musubi-run-journal-1.json",
+  "title": "RunJournalEntry",
+  "description": "One line of a corpus's history: what one run changed, and which run it followed. The file is JSON Lines -- one of these objects per line, appended, oldest first -- so this schema describes a LINE and not the file. THIS SCHEMA DESCRIBES SHAPE ONLY: it cannot check that entry_id re-derives, that each entry's parent is the previous entry's run_id, or that the last entry names the run the manifest names. See docs/contracts.md, section 'What these schemas cannot say'.",
+  "type": "object",
+  "required": [
+    "contract",
+    "entry_id",
+    "run_id",
+    "parent",
+    "created_at",
+    "musubi_version",
+    "kind",
+    "added",
+    "changed",
+    "removed",
+    "unchanged"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "contract": {
+      "description": "A consumer that does not recognise this value refuses the line rather than guessing at it (ADR-0002). The -draft suffix is a state of the contract register and not a property of this document.",
+      "type": "string",
+      "pattern": "^musubi\\.run-journal/1(-draft)?$"
+    },
+    "entry_id": {
+      "description": "This entry's own id: a hash over run_id, parent and created_at. NOT the same thing as run_id, and the difference is the point. A run_id names the corpus a run produced, so a corpus that returns to a state it held before returns to the same run_id -- add a file, edit it, delete it, and the third run has the first run's id. An entry id is what a commit id has always been: the tree, plus where it came from, plus when. This is what `musubi diff --since` resolves.",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "run_id": {
+      "description": "The corpus this run produced, identical to the run_id in the manifest.json that this run wrote. A reader holding both can tie a line of history to the full account of the run that made it.",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "parent": {
+      "description": "The run_id the corpus held before this run, or null for the first entry. The field that makes a sequence of runs a history. Note that it is a run_id and not an entry_id: what a run followed is a state of the corpus, and the state is what a later reader is trying to establish.",
+      "type": ["string", "null"],
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "created_at": {
+      "description": "When the run happened, ISO 8601. Deliberately NOT part of run_id (ADR-0003), which is why it has to be part of entry_id: without it two runs producing the same corpus are the same entry.",
+      "type": "string"
+    },
+    "musubi_version": {
+      "description": "The musubi that wrote this line. A change in converters between two runs is a change in what the corpus means, and this is where a reader finds it.",
+      "type": "string"
+    },
+    "kind": {
+      "description": "Which command ran. Only 'sync' appends: a plan writes nothing and therefore has no history to record.",
+      "type": "string"
+    },
+    "added": {
+      "description": "Artefact paths this run put in the corpus that the previous run did not have. Sorted, so that two runs over the same inputs write the same bytes.",
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
+    "changed": {
+      "description": "Artefact paths present in both runs whose content_hash differs. Decided by the hash and never by a timestamp: a corpus is derived data whose modification times say when musubi last ran, not when anything moved.",
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
+    "removed": {
+      "description": "Artefact paths the previous run had and this one does not. A removed document is GONE -- this records that it left, and musubi keeps no copy to restore it from. See the note in docs/contracts.md about what this file is not.",
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
+    "unchanged": {
+      "description": "How many artefacts this run left exactly as it found them. A count and not a list, and that is what keeps a journal growing with the work rather than with the corpus: naming every untouched artefact would make a hundred runs of ten thousand documents a history larger than the thing it describes.",
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

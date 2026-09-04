@@ -152,7 +152,17 @@ def main() -> int:
     step(6, "The tracking parameters are gone, and recorded.", "musubi plan notes --show-removals")
     run(["plan", "notes", "--show-removals"], root, show=12)
 
-    step(7, "One file, three lines of Python.")
+    step(7, "Edit a note, sync again, and ask what changed.", "musubi log corpus")
+    gear = vault / "design" / "gear.md"
+    gear.write_text(gear.read_text(encoding="utf-8") + "\n2026-09-05 追記。\n", encoding="utf-8")
+    run(["sync", "notes"], root, quiet=True)
+    run(["log", "corpus"], root)
+    print("\n   Three runs, each naming the one before it. The refusal in step 4 is")
+    print("   not among them: a run that stopped wrote nothing, including here.")
+    print("   The middle two share a corpus id and differ in their own -- the same")
+    print("   folder synced twice is the same corpus and two different runs.")
+
+    step(8, "One file, three lines of Python.")
     print(
         textwrap.indent(
             "import musubi\ndoc = musubi.convert('notes/design/gear.md')\ndoc.where(13, 18)",
@@ -170,13 +180,13 @@ def main() -> int:
     print(f"   where       {converted.where(inside, inside + 5)}")
     print(f"   removed     {[record.rule for record in converted.removals]}")
 
-    step(8, "The corpus as one file every framework reads.", "musubi export corpus")
+    step(9, "The corpus as one file every framework reads.", "musubi export corpus")
     exported = run(["export", "corpus"], root, quiet=True)
     first = json.loads(exported.splitlines()[0])
     print(f"\n   id          {first['id']}   <- survives a re-sync, so an upsert updates")
     print(f"   trace_map   {first['metadata']['trace_map']}   <- the citation can come back")
 
-    step(9, "And the same thing over MCP, for an agent.", "musubi mcp .")
+    step(10, "And the same thing over MCP, for an agent.", "musubi mcp .")
     request = {
         "jsonrpc": "2.0",
         "id": 1,

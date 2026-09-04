@@ -57,6 +57,7 @@ from .application.pipeline import Settings
 from .config import Configuration, destination, load, settings_from, source_from
 from .domain.cleansing import cleanse
 from .domain.hashing import content_hash
+from .domain.journal import Entry
 from .domain.removal import RemovalRecord
 from .domain.span import Span
 from .domain.trace import CHARACTERS, Kind, TraceMap
@@ -64,7 +65,7 @@ from .errors import ConversionError, CredentialFoundError
 from .infrastructure.sources.filesystem import MEDIA_TYPES
 from .ports.converter import Converted
 
-__all__ = ["Converted", "Where", "convert", "media_type_of", "settings"]
+__all__ = ["Converted", "Where", "convert", "history", "media_type_of", "settings"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -265,6 +266,26 @@ def sync(root: Path | str, into: Path | str | None = None) -> object:
     where = Path(into) if into is not None else destination(configuration)
     source = source_from(configuration, Path(root))
     return run_sync(source, settings(Path(root)), DocumentEmitter(where))
+
+
+def history(corpus: Path | str) -> tuple[Entry, ...]:
+    """A corpus's history, oldest first, exactly as `musubi log` reads it.
+
+    Returns the entries themselves rather than a rendering of them, because the
+    thing a caller wants is usually a question the report does not answer --
+    *which run first held this path*, *what was the corpus on the day of the
+    incident* -- and a caller that has to parse a report back is a caller
+    musubi has sent the long way round.
+
+    Empty for a corpus that keeps no history ([ADR-0034]). That is not an
+    error: a corpus written before the journal existed is otherwise sound.
+
+    **History, not storage.** An entry says a document changed; nothing here
+    can give back what it was.
+    """
+    from .infrastructure.corpus import Corpus
+
+    return Corpus(Path(corpus)).journal()
 
 
 def _version() -> str:

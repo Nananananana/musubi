@@ -3,8 +3,8 @@
 > This describes the contracts as they stand today. Decisions are recorded in
 > `docs/adr/`; proposed changes in `docs/proposals/`.
 
-musubi writes two documents beside the corpus it builds, and both are contracts
-rather than implementation details. Anything can produce them; anything can read
+musubi writes three documents beside the corpus it builds, and all three are
+contracts rather than implementation details. Anything can produce them; anything can read
 them. The schemas ship inside the wheel, because a consumer validating a
 document should not have to fetch a schema from the internet, and an offline
 tool whose schema lives on somebody else's server is not offline.
@@ -13,13 +13,14 @@ tool whose schema lives on somebody else's server is not offline.
 |---|---|---|
 | `musubi.sync-manifest/1-draft` | [`src/musubi/schemas/musubi-sync-manifest-1.json`](../src/musubi/schemas/musubi-sync-manifest-1.json) | `<destination>/manifest.json` |
 | `musubi.trace-map/1-draft` | [`src/musubi/schemas/musubi-trace-map-1.json`](../src/musubi/schemas/musubi-trace-map-1.json) | `<destination>/traces/<unit_key>.json` |
+| `musubi.run-journal/1-draft` | [`src/musubi/schemas/musubi-run-journal-1.json`](../src/musubi/schemas/musubi-run-journal-1.json) | `<destination>/runs.jsonl`, one object per line |
 
 Worked examples, produced by the real emitter and validated on every push, are
 in [`tests/contracts/`](../tests/contracts/README.md).
 
-## Neither is frozen yet
+## None of them is frozen yet
 
-Both carry `-draft`, and the suffix is the statement: the freeze has not
+All three carry `-draft`, and the suffix is the statement: the freeze has not
 happened. It happens when **a second program has produced and consumed one** —
 not on a date ([ADR-0002](adr/0002-the-sync-manifest-is-a-document.md)). Until
 then a field may change meaning, and a consumer written today may need adjusting.
@@ -154,6 +155,63 @@ turn them from *checked on these examples* into *checked at all*.
    run** — as an artefact, or as a skip.
 4. **An artefact's `trace_map` names a file that exists**, and that file's
    `artefact.content_hash` equals the artefact's.
+
+### The run journal
+
+The file is JSON Lines and the schema describes **a line**. Nothing in JSON
+Schema can say anything about the relationship between two lines, which is
+where all of this contract's content is.
+
+1. **Each entry's `parent` is the previous entry's `run_id`.** A break says a
+   line was edited or lost. This matters more than it looks: `musubi diff`
+   folds a range of entries, so a missing line silently removes the changes it
+   recorded and the answer is quietly short rather than obviously broken.
+2. **The last entry's `run_id` is the `run_id` in `manifest.json`.** A corpus
+   and a history that disagree have come apart — a manifest restored from a
+   backup, documents copied in over the top, or a musubi old enough not to
+   append. `musubi verify` checks 1 and 2, and this is what makes the file
+   worth trusting: a history nothing ever compares against the corpus is a log,
+   and a log can be wrong for a year before anybody finds out.
+3. **`entry_id` re-derives** from `run_id`, `parent` and `created_at`. It is
+   checked on read rather than trusted, because a line that can name a
+   different run than its own fields describe is a history that can lie about
+   which corpus it is the history of.
+4. **Only a `sync` appends.** A run that refused writes nothing, including
+   here — [ADR-0008](adr/0008-a-credential-stops-the-run.md) is fail-closed and
+   the journal is inside that promise. An entry for a run that then refused
+   would claim a corpus that was never built.
+5. **A corpus with no `runs.jsonl` is not invalid.** One written before
+   [ADR-0034](adr/0034-a-corpus-that-remembers-what-it-was.md) keeps no history
+   and is otherwise sound. Absent is a different thing from broken.
+
+### What the journal is not
+
+**It is history, not storage. musubi cannot restore a document it did not
+keep.**
+
+`musubi log` says a document changed on Tuesday and `musubi diff` says which
+ones. Neither can give you Monday's text, because the corpus holds one version
+of each document and the journal holds only what the change *was*. Rolling back
+needs content storage, which is a different and much larger decision.
+
+This is stated here rather than left implied because *git-like* implies the
+opposite, and a consumer who assumes a corpus can be rewound will build
+something on an assumption musubi never made. Two consequences follow directly
+from it and are part of the contract:
+
+- **A `removed` path is gone.** The entry records that it left. Nothing keeps a
+  copy.
+- **A path that was removed and later added back is reported by `musubi diff`
+  as `changed`,** even when the bytes came back identical. The journal knows it
+  left and knows it returned; it does not keep the bytes, so *changed* is the
+  claim that is never false about the corpus's history where *unchanged* could
+  be. A consumer folding entries itself should make the same choice.
+
+And one thing the journal deliberately does **not** contain: the corpus. An
+entry names what moved and *counts* what did not. Listing every untouched
+artefact would make a hundred runs over ten thousand documents a history larger
+than the thing it describes, which is the difference between a feature that
+works on a real corpus and one that only works in a demonstration.
 
 ### And what a schema cannot check at all
 

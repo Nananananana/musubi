@@ -38,7 +38,7 @@ uv run python tools/demo.py
 ```
 
 Builds a small vault — Japanese, English, a Shift-JIS note, a PDF, one file with
-a leaked key — and walks musubi across it in nine steps, ending with a citation
+a leaked key — and walks musubi across it in ten steps, ending with a citation
 resolved back to a byte offset in the original file and read out of it to check.
 Nothing outside a temporary folder is touched; `--keep` leaves it so you can
 repeat the commands by hand.
@@ -72,6 +72,36 @@ musubi export ./corpus > corpus.jsonl   # one JSON object per document
 `datasets` or any vector store — and carries an **id that survives a re-sync**,
 so an upsert updates rather than duplicates.
 [`docs/using-a-corpus.md`](docs/using-a-corpus.md) is the whole of it.
+
+## And a corpus that remembers what it was
+
+```bash
+musubi log  ./corpus            # what each run did, newest first
+musubi diff ./corpus --since 3f34b18e31b8
+```
+
+Every `sync` appends one line to `corpus/runs.jsonl` saying what it added,
+changed and removed, and which run it followed. So a document that is being
+questioned can be asked **when it entered the corpus and which run put it
+there** — the audit question, which is not answerable from a corpus that only
+knows what it currently holds.
+
+```text
+musubi log — 4 runs, ./corpus
+  6117fd8ad8b6  2026-09-05T09:14:22+00:00  sync
+    corpus 1bc3be6e2a7a
+    1 removed, 3 unchanged
+    - documents/design/gear.md
+```
+
+It stores **changes, not snapshots** — a no-change re-sync writes about 250
+bytes, so a history does not grow with the corpus. `musubi verify` checks that
+the history and the corpus still agree.
+
+**It is history, not storage.** musubi keeps one version of each document, so
+`log` can tell you a file changed on Tuesday and nothing can give you back
+Monday's text. That is a real limit, and it is written here rather than
+discovered later: rolling back needs content storage, which musubi does not do.
 
 ## Or give it to an agent
 
@@ -321,9 +351,9 @@ already had, and **no component in that chain imports another**.
 |---|---|
 | [`docs/README.md`](docs/README.md) | **What exists and what does not**, and why the separation is structural |
 | [`docs/proposals/0001-the-design.md`](docs/proposals/0001-the-design.md) | The design, the roadmap, and what would falsify it |
-| [`docs/contracts.md`](docs/contracts.md) | The two contracts, for producers and consumers — including what the schemas cannot say |
+| [`docs/contracts.md`](docs/contracts.md) | The three contracts, for producers and consumers — including what the schemas cannot say |
 | [`docs/concept.md`](docs/concept.md) | The conceptual model, and the picture across five projects |
-| [`docs/adr/`](docs/adr/README.md) | Thirty-three decisions, with their reasons and their costs |
+| [`docs/adr/`](docs/adr/README.md) | Thirty-four decisions, with their reasons and their costs |
 | [`AGENTS.md`](AGENTS.md) | The rules for anyone — human or model — changing this repository |
 
 ## License
