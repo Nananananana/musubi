@@ -241,6 +241,7 @@ def test_the_over_broad_catalogue_rule_was_not_adopted() -> None:
 
 
 def test_every_core_rule_states_its_evidence_and_when_it_was_reviewed() -> None:
+    assert CORE.rules, "the pack is empty; this test would pass without reading a rule"
     for rule in CORE.rules:
         assert rule.evidence, f"{rule.id} has no evidence"
         assert rule.since, f"{rule.id} has no review date"

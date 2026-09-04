@@ -118,10 +118,26 @@ def build(files: dict[str, bytes]) -> tuple[Path, Path, Synced]:
 
 
 def maps(into: Path) -> list[dict[str, Any]]:
+    """Every trace map in a corpus, and never none of them.
+
+    Ten of the tests below are a `for` loop over this list whose only assertions
+    are inside it, so an empty corpus turns all ten green while checking
+    nothing. The generator cannot currently produce one -- `a_vault` draws at
+    least one file -- and that is a fact about a strategy somebody could edit,
+    not a property of these tests.
+
+    So the population is checked where the population is decided rather than in
+    each of the ten, which is the difference between a guard that holds and ten
+    that have to be remembered.
+    """
     found = [
         json.loads(path.read_text(encoding="utf-8"))
         for path in sorted((into / TRACES).rglob("*.json"))
     ]
+    assert found, (
+        f"no trace maps under {into / TRACES}. Every invariant in this file is a loop "
+        f"over this list, so all of them would pass without checking anything."
+    )
     return found
 
 

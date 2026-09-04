@@ -100,6 +100,12 @@ packages = ["src/musubi"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+# pytest's default marks an empty parameter set as `skip`, which spells "there
+# were no cases" exactly the way it spells "this does not apply here" -- so a
+# `parametrize` over a collection that has quietly become empty reports neither
+# a failure nor a gap. Making it a collection error is the one spelling that
+# cannot be read as everything being fine. From `iriguchi` through `manager`.
+empty_parameter_set_mark = "fail_at_collect"
 
 [tool.ruff]
 line-length = 100
