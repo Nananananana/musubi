@@ -192,6 +192,45 @@ rather than asserting behaviour.
 **Linear**, and the per-page cost is flat. At 400 pages that is 82× faster, and
 the gap grows with the export.
 
+## How sensitive each threshold is
+
+```text
+uv run python tools/sensitivity.py
+
+alignment MINIMUM_RUN   identical output from 1 to 80        **a plateau**
+alignment WINDOW        bites below about 1 kB               a bound
+pdf_text@1 kerning      -179 'thetent' / -180 'the tent'     **a cliff**
+```
+
+A number on a plateau was not load-bearing and will survive other people's
+files. One on a cliff was fitted, whether or not anybody meant to fit it. The
+cliff became a setting (`pdf-word-gap`), and `pdfium@1` removes the question by
+reading the font.
+
+`tests/test_thresholds.py` registers all ten behaviour-gating constants as a
+bound, a measurement or a threshold, and **fails the build when a new one
+appears unclassified**. [ADR-0033](adr/0033-a-threshold-that-nobody-swept-is-a-number-fitted-to-one-corpus.md).
+
+## The metric that can move the wrong way
+
+```text
+uv run python tools/sensitivity.py --only window
+
+window     coverage   matched   answer_width
+    64      100.0%          0          166.0     nothing aligned
+ 65536       98.1%          1            1.0     aligned correctly
+```
+
+When alignment matches nothing the whole output becomes one `transformed`
+segment against the whole source, every offset resolves — to the entire
+document — and **traceable coverage reads 100%**. The failure reports the
+higher number.
+
+`TraceMap.answer_width` is the companion: *ask about one character, how much
+source comes back*. It is not in the manifest yet
+([#81](https://github.com/Nananananana/musubi/issues/81)), which is where people
+read numbers.
+
 ---
 
 ## Still owed

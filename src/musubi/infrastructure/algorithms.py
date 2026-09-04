@@ -39,7 +39,7 @@ from ..domain.removal import Ruleset
 from ..errors import ContractError
 from ..ports.converter import Converter
 from ..ports.screener import Screener
-from .converters import converter_for, known_converters
+from .converters import PdfConverter, converter_for, known_converters
 from .decoding import Decoding
 from .rules import CORE
 from .screeners import default_screener
@@ -78,7 +78,7 @@ def screener_named(name: str) -> Screener:
 
 
 def chooser(
-    overrides: Mapping[str, str], *, detect: bool = False
+    overrides: Mapping[str, str], *, detect: bool = False, word_gap: float | None = None
 ) -> Callable[[str], Converter | None]:
     """A `converter_for` that consults the overrides first.
 
@@ -104,6 +104,12 @@ def chooser(
 
     def pick(media_type: str) -> Converter | None:
         found = chosen.get(media_type) or converter_for(media_type)
+        # A threshold that is a setting has to actually arrive. `pdf_text@1`
+        # takes its word gap at construction, so the one the registry holds is
+        # replaced rather than reconfigured -- the registry's instance belongs
+        # to the process and a run's setting belongs to the run.
+        if word_gap is not None and isinstance(found, PdfConverter):
+            found = PdfConverter(word_gap=word_gap)
         # Wrapped whichever converter it is, so the encoding policy is one
         # decision in one place rather than a parameter every converter has to
         # remember to honour (ADR-0031).

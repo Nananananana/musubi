@@ -64,6 +64,7 @@ allow     = ["stripe.secret-key:archive/2019-invoice.md"]
 | `rules` | `core`, `none` | `core` | which cleansing pack runs ([ADR-0016](adr/0016-a-rule-is-a-matcher-not-a-regular-expression.md)) |
 | `converters` | a table of media type → converter | *(empty)* | overrides the built-in claim for a format |
 | `allow` | a list of `rule:unit_key` | *(empty)* | credential hits already looked at and decided against |
+| `pdf-word-gap` | a number | `-180.0` | how negative a PDF kerning value must be to read as a space ([ADR-0033](adr/0033-a-threshold-that-nobody-swept-is-a-number-fitted-to-one-corpus.md)) |
 | `encoding` | `strict`, `detect` | `strict` | whether a file that is not UTF-8 is refused or read by detection ([ADR-0031](adr/0031-a-guess-with-its-uncertainty-attached-is-not-the-guess-that-was-forbidden.md)) |
 
 Environment variables are the key uppercased with `MUSUBI_` in front:
@@ -102,6 +103,39 @@ import.
 The wiring — which class implements `notion`, which pack `core` names — lives in
 `musubi/config.py`, the composition root the architecture map reserves for it.
 An interface prints a configuration or runs one; neither needs to know.
+
+## When words run together in a PDF
+
+`pdf_text@1` reads a `TJ` array's kerning values and inserts a space when one is
+negative enough. **That number is a cliff, not a convention.** Measured with
+`uv run python tools/sensitivity.py --only kerning`:
+
+```text
+   kerning  reads as          
+      -179  'thetent'          one word
+      -180  'the tent'         two words
+```
+
+Real fonts put a word space anywhere from under 200 thousandths of an em to
+about 330, so documents land on both sides of any single value. If a PDF comes
+out with words joined, lower it:
+
+```toml
+# musubi.toml
+pdf-word-gap = -120
+```
+
+Or stop choosing: **`pdfium@1` reads the font metrics and needs no threshold at
+all.**
+
+```bash
+pip install "musubi[pdf] @ git+https://github.com/Nananananana/musubi"
+```
+
+```toml
+[converters]
+"application/pdf" = "pdfium@1"
+```
 
 ## Reading notes that are not UTF-8
 

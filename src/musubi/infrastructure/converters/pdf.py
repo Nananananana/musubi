@@ -59,6 +59,15 @@ __all__ = ["MAXIMUM_STREAM_BYTES", "PdfConverter"]
 #: `zlib.decompress`: it allocates what the stream asks for.
 MAXIMUM_STREAM_BYTES = 64 * 1024 * 1024
 
+#: How negative a `TJ` kerning value has to be before it is read as a space,
+#: in thousandths of the font size.
+#:
+#: **A threshold on a cliff, and it is a setting for that reason.** See
+#: `_array` for the measurement. This default is the middle of the range real
+#: producers use; `pdf-word-gap` in `musubi.toml` moves it, and `pdfium@1`
+#: removes the question by reading the font.
+WORD_GAP = -180.0
+
 #: `N G obj … endobj`. Scanned for rather than reached through the cross-reference
 #: table: a real shelf of PDFs contains files whose xref offsets are wrong, and a
 #: scan reads those anyway. The table is an index, and this needs the contents.
@@ -104,6 +113,9 @@ class PdfConverter:
     name = "pdf_text@1"
     media_types: tuple[str, ...] = ("application/pdf",)
 
+    def __init__(self, word_gap: float = WORD_GAP) -> None:
+        self.word_gap = word_gap
+
     def convert(self, content: bytes, media_type: str) -> Converted | Unconvertible:
         if not content.startswith(b"%PDF-"):
             return Unconvertible(
@@ -121,7 +133,7 @@ class PdfConverter:
         segments: list[Segment] = []
         at = 0
         for index, page in enumerate(pages):
-            text = _text_of(page)
+            text = _text_of(page, self.word_gap)
             if not text:
                 # A scanned page. It contributes nothing and is not an error;
                 # what makes that honest is that the coverage says so.
@@ -243,7 +255,7 @@ def _inflate(payload: bytes, header: bytes) -> bytes:
     return b""
 
 
-def _text_of(stream: bytes) -> str:
+def _text_of(stream: bytes, kerning: float) -> str:
     """The text a page's content stream shows, with its line breaks kept."""
     if not stream:
         return ""
@@ -253,7 +265,7 @@ def _text_of(stream: bytes) -> str:
         if out and _BREAK.search(before[-40:]):
             out.append("\n")
         if (array := match.group("array")) is not None:
-            out.append(_array(array))
+            out.append(_array(array, kerning))
         elif (literal := match.group("literal")) is not None:
             out.append(_literal(literal))
         else:
@@ -261,13 +273,20 @@ def _text_of(stream: bytes) -> str:
     return "".join(out).strip()
 
 
-def _array(body: bytes) -> str:
+def _array(body: bytes, kerning: float) -> str:
     """A `TJ` array: its strings joined, its kerning numbers dropped.
 
     A large negative adjustment is a word space in many producers' output, so a
-    threshold turns one into a space. The number is PDF's own convention rather
-    than a guess: text-space units are thousandths of the font size, and the
-    space PDF writers emit is comfortably past this.
+    threshold turns one into a space -- and it is a **cliff**, not a convention.
+    Measured with `tools/sensitivity.py --only kerning`: at the old hard-coded
+    -180, a kern of -179 reads `thetent` and -180 reads `the tent`. Real fonts
+    put a word space anywhere from under 200 thousandths to about 330, so
+    documents land on both sides and no single value is right for all of them.
+
+    Word spacing is a property of the **font**, which this converter does not
+    read. So the number is a setting with a default rather than a fact, and
+    `pdfium@1` is the answer for anybody who would rather not choose one: it
+    reads the font metrics and needs no threshold at all.
     """
     out: list[str] = []
     for piece in re.finditer(rb"\((?:\\.|[^()\\])*\)|<[0-9A-Fa-f\s]*>|-?\d+(?:\.\d+)?", body):
@@ -278,7 +297,7 @@ def _array(body: bytes) -> str:
             out.append(_hex(token))
         else:
             try:
-                if float(token) <= -180 and out and not out[-1].endswith(" "):
+                if float(token) <= kerning and out and not out[-1].endswith(" "):
                     out.append(" ")
             except ValueError:  # pragma: no cover - the regex admits only numbers
                 pass

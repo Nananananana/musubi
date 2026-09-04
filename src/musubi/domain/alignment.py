@@ -127,7 +127,7 @@ def align(
                 unmatched += 1
             continue
 
-        segments.extend(_between(Span(at_out, start), Span(at_src, found)))
+        segments.extend(_between(Span(at_out, start), Span(at_src, found), output))
         # No rule on a verbatim segment: `Segment` refuses one, because nothing
         # happened to it. That is the point of recovering the correspondence
         # rather than describing it -- these characters *are* the source's.
@@ -142,7 +142,7 @@ def align(
         at_out = end
         at_src = found + len(line)
 
-    segments.extend(_between(Span(at_out, len(output)), Span(at_src, len(source))))
+    segments.extend(_between(Span(at_out, len(output)), Span(at_src, len(source)), output))
 
     return Alignment(
         trace=TraceMap(
@@ -155,7 +155,7 @@ def align(
     )
 
 
-def _between(out: Span, src: Span) -> list[Segment]:
+def _between(out: Span, src: Span, output: str) -> list[Segment]:
     """The segments for a stretch neither side matched.
 
     Four cases, and telling them apart is the whole value of doing this rather
@@ -179,7 +179,7 @@ def _between(out: Span, src: Span) -> list[Segment]:
         return [Segment(out=out, src=src, kind=Kind.REMOVAL, rule="align.dropped")]
     if src.is_empty:
         return [Segment(out=out, src=src, kind=Kind.SYNTHETIC, rule="align.inserted")]
-    if _is_blank(out, src):
+    if not out.slice(output).strip():
         return [
             Segment(
                 out=Span(out.start, out.start), src=src, kind=Kind.REMOVAL, rule="align.dropped"
@@ -192,18 +192,6 @@ def _between(out: Span, src: Span) -> list[Segment]:
             ),
         ]
     return [Segment(out=out, src=src, kind=Kind.TRANSFORMED, rule="align.gap")]
-
-
-def _is_blank(out: Span, src: Span) -> bool:
-    """Is the output side of this gap only spacing, against a real source run?
-
-    Then the source run was *removed* and the spacing was *written*, and saying
-    so costs one extra segment and buys a removal record that names what went.
-    Judged by length rather than content because the caller holds the strings
-    and this does not: a gap whose output is a handful of characters against a
-    source run many times longer is a subtraction, whatever the characters are.
-    """
-    return out.length * 8 <= src.length and out.length <= 8
 
 
 def _lines(text: str) -> list[tuple[int, int]]:

@@ -518,6 +518,18 @@ Taken from `kiseki`, `mamori`, `tsumugi` and `akashi`, which paid for them.
   run anything. A converter from elsewhere is registered by a program that
   imported musubi deliberately, and is then nameable because the table is read
   when the question is asked rather than at import.
+- **Every numeric constant in `src/` is registered in
+  `tests/test_thresholds.py` as a bound, a measurement or a threshold, and the
+  build fails when a new one is not** (ADR-0033). A threshold must cite a sweep
+  (`tools/sensitivity.py`), a published measurement of its tier, or a filed
+  issue. Two were resolved rather than classified: the PDF kerning cut is a
+  cliff and became a setting, and `alignment._is_blank`'s two numbers were
+  deleted by passing the caller's string in and calling `strip()`.
+- **`traceable_coverage` can move the wrong way, and `answer_width` is the
+  companion that catches it.** An alignment that matches nothing produces one
+  transformed segment over the whole source: every offset resolves, to the
+  entire document, and coverage reads **100%**. Publish both, and never quote
+  coverage on an aligned converter without it.
 - **`musubi.convert(path)` is a doorway, never a second pipeline** (ADR-0032).
   It calls the same converters, ruleset and screener the CLI calls, chosen by
   the same configuration, and `tests/test_api.py` asserts its text equals what a

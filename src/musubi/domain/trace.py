@@ -202,6 +202,45 @@ class TraceMap:
             return 1.0
         return self.traceable_characters / self.artefact_length
 
+    @property
+    def answer_width(self) -> float:
+        """Ask about one character: how much source comes back?
+
+        **The number that stops `traceable_coverage` being read as a quality
+        score, because it can move the wrong way.** A map with a single
+        `transformed` segment covering the whole document is 100% traceable and
+        says nothing: every offset resolves, to the entire file. Measured on a
+        real alignment, `tools/sensitivity.py`:
+
+        ```text
+        window     coverage   matched   answer_width
+            64      100.0%          0          166.0     nothing aligned
+         65536       98.1%          1            1.3     aligned correctly
+        ```
+
+        **The failure reports the higher coverage.** So this is published beside
+        it: 1.0 is a map that answers a character with a character, and a large
+        number is a map that answers a character with a paragraph. Verbatim runs
+        answer exactly, so they count 1; a transformed run answers with the whole
+        of what it replaced, so it counts its source length.
+
+        Threshold-free on purpose. There is no *good* value written down here --
+        the number is smaller or larger, and a reader compares it against the
+        same corpus yesterday. A cut-off would be one more constant nobody
+        measured.
+
+        Counted in whatever `source_unit` says, so on a PDF this is **pages per
+        character**, and the reports label it.
+        """
+        if not self.traceable_characters:
+            return 1.0
+        total = sum(
+            (1 if segment.kind is Kind.VERBATIM else segment.src.length) * segment.out.length
+            for segment in self.segments
+            if segment.is_traceable
+        )
+        return total / self.traceable_characters
+
     def segment_at(self, offset: int) -> Segment:
         """The segment covering this artefact offset.
 
