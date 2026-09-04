@@ -29,6 +29,20 @@ Every other converter in this space — `markitdown`, `docling`, `unstructured`,
 `trafilatura` — has the signature `bytes -> str`. **That last line is the one
 they cannot write**, because the correspondence is discarded inside the library.
 
+## See it work
+
+```bash
+git clone https://github.com/Nananananana/musubi && cd musubi
+uv sync --all-extras
+uv run python tools/demo.py
+```
+
+Builds a small vault — Japanese, English, a Shift-JIS note, a PDF, one file with
+a leaked key — and walks musubi across it in nine steps, ending with a citation
+resolved back to a byte offset in the original file and read out of it to check.
+Nothing outside a temporary folder is touched; `--keep` leaves it so you can
+repeat the commands by hand.
+
 ## Install
 
 Not on PyPI yet. Until it is:

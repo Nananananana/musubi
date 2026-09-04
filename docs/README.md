@@ -26,6 +26,7 @@ This convention is taken from the sibling projects `kiseki`, `tsumugi` and
 | `docs/contracts.md` | The SyncManifest and TraceMap contracts, for producers and consumers — including what the schemas cannot say |
 | `docs/sources.md` | Per source: its key derivation, its rule pack, and `kiseki`'s ten questions answered |
 | `docs/configuration.md` | Every setting, where they are read from, and which algorithms a setting can name |
+| `tools/demo.py` | A nine-step walk over a generated vault, ending in a citation resolved back to the original file. `uv run python tools/demo.py` |
 | `docs/measurements.md` | Every number, the script that produced it, and what it does not cover — including **two of the design's own falsification conditions being met** |
 | `docs/using-a-corpus.md` | For a consumer: the three commands, and how to load the export into LangChain, LlamaIndex, `datasets` or a vector store |
 | `docs/threat-model.md` | What a synced folder and a trace map contain, and what they become if they leak |
