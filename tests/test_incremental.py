@@ -377,3 +377,30 @@ def test_every_artefact_records_the_hash_of_its_source(tmp_path: Path) -> None:
     for artefact in manifest_of(into)["artefacts"]:
         sidecar = json.loads((into / artefact["trace_map"]).read_text(encoding="utf-8"))
         assert artefact["source"]["content_hash"] == sidecar["source"]["content_hash"]
+
+
+# -- and the command says so --------------------------------------------------
+
+
+def test_the_commands_report_what_they_kept(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Through `main()`, not the service: the pipeline kept every document and
+    the report printed nothing about it, because the count was wired into the
+    printer and not into the two calls to it. A number that only the tests can
+    see is a number the report is not making."""
+    from musubi.interfaces.cli import main
+
+    root = vault(tmp_path)
+    into = tmp_path / "corpus"
+    monkeypatch.chdir(tmp_path)
+    assert main(["sync", str(root), "--into", str(into)]) == 0
+    capsys.readouterr()
+
+    assert main(["plan", str(root), "--into", str(into)]) == 0
+    planned = capsys.readouterr().out
+    assert "2 of them unchanged since the last run and carried forward unconverted" in planned
+
+    assert main(["sync", str(root), "--into", str(into)]) == 0
+    synced_out = capsys.readouterr().out
+    assert "2 of them unchanged since the last run and carried forward unconverted" in synced_out
