@@ -68,6 +68,12 @@ musubi sync   ~/notes --into ./corpus   # builds it, or refuses and builds nothi
 musubi export ./corpus > corpus.jsonl   # one JSON object per document
 ```
 
+Run `sync` again tomorrow and only what changed is converted: a unit whose
+bytes still hash to what the manifest recorded, under the same rules, is
+carried forward and checked on the disk rather than rebuilt. Measured, a
+no-change re-sync costs a third of a cold one, and the report says how many
+documents it kept.
+
 `corpus.jsonl` loads straight into LangChain, LlamaIndex, Hugging Face
 `datasets` or any vector store — and carries an **id that survives a re-sync**,
 so an upsert updates rather than duplicates.
@@ -366,7 +372,7 @@ already had, and **no component in that chain imports another**.
 | [`docs/proposals/0001-the-design.md`](docs/proposals/0001-the-design.md) | The design, the roadmap, and what would falsify it |
 | [`docs/contracts.md`](docs/contracts.md) | The three contracts, for producers and consumers — including what the schemas cannot say |
 | [`docs/concept.md`](docs/concept.md) | The conceptual model, and the picture across five projects |
-| [`docs/adr/`](docs/adr/README.md) | Thirty-five decisions, with their reasons and their costs |
+| [`docs/adr/`](docs/adr/README.md) | Thirty-six decisions, with their reasons and their costs |
 | [`AGENTS.md`](AGENTS.md) | The rules for anyone — human or model — changing this repository |
 
 ## License

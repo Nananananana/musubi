@@ -37,6 +37,8 @@ class Synced:
     manifest: Manifest
     promoted: tuple[str, ...]
     withdrawn: tuple[str, ...]
+    #: Carried forward unconverted ([ADR-0036]). See `Outcome.kept`.
+    kept: tuple[str, ...] = ()
 
 
 def withdrawals(held: frozenset[str] | set[str], manifest: Manifest) -> tuple[str, ...]:
@@ -79,7 +81,7 @@ def sync(
     held = before.written
 
     emitter.begin()
-    outcome = run(source, settings, emitter, write=True)
+    outcome = run(source, settings, emitter, write=True, previous=before)
 
     if outcome.refused:
         emitter.discard()
@@ -127,4 +129,4 @@ def sync(
         )
     )
 
-    return Synced(manifest=manifest, promoted=promoted, withdrawn=removed)
+    return Synced(manifest=manifest, promoted=promoted, withdrawn=removed, kept=outcome.kept)

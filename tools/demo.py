@@ -165,7 +165,10 @@ def main() -> int:
     step(7, "Edit a note, sync again, and ask what changed.", "musubi log corpus")
     gear = vault / "design" / "gear.md"
     gear.write_text(gear.read_text(encoding="utf-8") + "\n2026-09-05 追記。\n", encoding="utf-8")
-    run(["sync", "notes"], root, quiet=True)
+    said = run(["sync", "notes"], root, quiet=True)
+    for line in said.splitlines():
+        if "carried forward" in line:
+            print(f"   (the sync said: {line.strip()})\n")
     run(["log", "corpus"], root)
     print("\n   Three runs, each naming the one before it. The refusal in step 4 is")
     print("   not among them: a run that stopped wrote nothing, including here.")

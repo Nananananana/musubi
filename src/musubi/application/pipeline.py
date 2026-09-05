@@ -29,7 +29,7 @@ from ..domain.screening import Finding
 from ..domain.trace import TraceMap
 from ..errors import SourceError
 from ..ports.converter import Converted, Converter
-from ..ports.emitter import Document, Emitter
+from ..ports.emitter import Document, Emitter, Previous, Retained
 from ..ports.screener import Screener
 from ..ports.source import Source
 
@@ -59,29 +59,55 @@ class Outcome:
     #: What would stop a sync. A list rather than an exception, so that a plan
     #: reports every hit instead of sending its reader back for another run.
     refusals: list[tuple[str, Finding]] = field(default_factory=list)
+    #: Unit keys carried forward from the previous run without being read past
+    #: their hash ([ADR-0036]). On the outcome and not in the manifest: the
+    #: manifest is an account of the corpus, and whether a document was
+    #: converted this morning or last month is an account of the run's effort.
+    kept: tuple[str, ...] = ()
 
     @property
     def refused(self) -> bool:
         return bool(self.refusals)
 
 
-def run(source: Source, settings: Settings, emitter: Emitter, *, write: bool) -> Outcome:
+def run(
+    source: Source,
+    settings: Settings,
+    emitter: Emitter,
+    *,
+    write: bool,
+    previous: Previous | None = None,
+) -> Outcome:
     """Walk a source through the six stages.
 
     ``write`` is the only difference between a plan and a sync in here: the same
     decisions, the same numbers, the same manifest, and one of them puts bytes
     into a staging area.
+
+    **A unit whose bytes did not change is not converted again** ([ADR-0036]),
+    on three conditions checked in the order they are cheap: the previous run
+    was decided by the same things this one is (`decided_by`), the bytes hash
+    to what that run recorded for the unit, and the artefact and its map are
+    still on the disk exactly as recorded. A plan and a sync make the same
+    decision from the same evidence, so the dry run predicts the real one.
     """
     discovery = source.discover()
     artefacts: list[Artefact] = []
     removals: list[tuple[str, RemovalRecord]] = []
     findings: list[tuple[str, Finding]] = []
     refusals: list[tuple[str, Finding]] = []
+    kept: list[str] = []
     converters: set[str] = set()
 
     skipped = [
         Skip(source.source_id, item.origin, item.reason, item.detail) for item in discovery.skipped
     ]
+
+    # `sync` has already read it for withdrawal and the journal; a plan has
+    # not. One parse of the manifest either way.
+    if previous is None:
+        previous = emitter.previous()
+    retainable = previous.retained if previous.decided_by == _decided_by(settings, emitter) else {}
 
     # A key is the artefact's path, so two units sharing one is one document
     # overwriting another with the manifest listing both -- a corpus quietly
@@ -102,6 +128,21 @@ def run(source: Source, settings: Settings, emitter: Emitter, *, write: bool) ->
             )
         claimed[key] = found.origin
         content = source.read(found)
+        digest = content_hash(content)
+
+        retained = retainable.get(key)
+        if (
+            retained is not None
+            and _still_holds(retained, digest, found.media_type, settings)
+            # Last, because it reads the artefact back off the disk.
+            and emitter.retain(retained.artefact, found.modified_at)
+        ):
+            artefacts.append(retained.artefact)
+            removals.extend((key, record) for record in retained.removals)
+            findings.extend((key, hit) for hit in retained.findings)
+            converters.add(retained.artefact.converter)
+            kept.append(key)
+            continue
 
         hits = list(settings.screener.screen(_peek(content)))
         findings.extend((key, hit) for hit in hits)
@@ -125,7 +166,7 @@ def run(source: Source, settings: Settings, emitter: Emitter, *, write: bool) ->
         unit = Unit(
             source_id=source.source_id,
             unit_key=key,
-            content_hash=content_hash(content),
+            content_hash=digest,
             media_type=found.media_type,
         )
         document, struck = _cleanse(unit, converted, settings.ruleset, found.modified_at)
@@ -157,7 +198,39 @@ def run(source: Source, settings: Settings, emitter: Emitter, *, write: bool) ->
         allowed=tuple(sorted(settings.allowed)),
         created_at=settings.created_at,
     )
-    return Outcome(manifest=manifest, refusals=refusals)
+    return Outcome(manifest=manifest, refusals=refusals, kept=tuple(kept))
+
+
+def _decided_by(settings: Settings, emitter: Emitter) -> dict[str, object]:
+    """Everything other than the bytes that decided what a run wrote.
+
+    The same shape `Previous.decided_by` is read back in, so the comparison is
+    one equality. Any difference is a cold run: a new ruleset fires on the old
+    corpus, a new signature list looks at bytes it has never seen, and a musubi
+    upgrade converts everything again on purpose -- a converter that changed
+    without changing its name is the one case nothing else here would catch.
+    """
+    return {
+        "musubi": settings.musubi_version,
+        "rulesets": [(settings.ruleset.id, settings.ruleset.version)],
+        "screener": settings.screener.name,
+        "emitter": emitter.name,
+        "allowed": sorted(settings.allowed),
+    }
+
+
+def _still_holds(retained: Retained, digest: str, media_type: str, settings: Settings) -> bool:
+    """The bytes are the bytes, and the converter is the converter.
+
+    The per-unit half of the decision. The converter is compared by name for
+    this unit's media type rather than by the set the previous run used: a
+    setting that switched `text/html` to a different extractor changes what
+    this unit would become and may leave the set of names looking the same.
+    """
+    if digest != retained.artefact.source_hash:
+        return False
+    converter = settings.converter_for(media_type)
+    return converter is not None and converter.name == retained.artefact.converter
 
 
 def _cleanse(

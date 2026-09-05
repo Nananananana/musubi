@@ -143,10 +143,6 @@ request as the code it describes.
   written.
 - **Office formats.** No `.docx`, `.pptx` or `.xlsx`. The README's comparison
   table says so and names the libraries that do read them.
-- **The incremental path.** A sync withdraws an artefact whose unit is gone, by
-  reading the previous manifest as its ledger — but it still re-reads, converts
-  and rewrites every unit that *is* there. `Change` exists and nothing calls it,
-  so every run is a cold one.
 - **Notion, Slack, HTML, PDF.** v0.3, and the milestone where traceable coverage
   stops being 1.0 by construction and starts being a measurement.
 - **Cleansing precision and screener recall.** `docs/measurements.md` now exists

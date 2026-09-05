@@ -428,6 +428,24 @@ def test_manifest_4_every_artefact_has_a_map_that_is_about_it(
         shutil.rmtree(into.parent, ignore_errors=True)
 
 
+@CORPUS
+@given(a_vault())
+def test_manifest_5_the_source_hash_is_the_one_the_map_carries(
+    files: dict[str, bytes],
+) -> None:
+    """The same value written twice ([ADR-0036]), so that a re-sync can decide
+    whether a unit's bytes changed without opening its sidecar -- and two
+    copies of one fact are two copies to keep in step, which is what this
+    checks."""
+    _, into, _ = build(files)
+    try:
+        for artefact in manifest_of(into)["artefacts"]:
+            body = json.loads((into / artefact["trace_map"]).read_text(encoding="utf-8"))
+            assert artefact["source"]["content_hash"] == body["source"]["content_hash"]
+    finally:
+        shutil.rmtree(into.parent, ignore_errors=True)
+
+
 # -- and the one the issue named that is not in the list ---------------------
 
 
