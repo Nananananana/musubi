@@ -51,6 +51,15 @@ class Constant:
 #: for a bound, what happens when it is passed.
 REGISTER: tuple[Constant, ...] = (
     Constant(
+        "application/export.py",
+        "ROW_GROUP",
+        "bound",
+        "documents held before a Parquet row group is flushed. Past it the writer "
+        "writes and drops; the rows a reader gets back are the same at any value, "
+        "and only the peak memory (7.4 MB at 1,000 on 2,000 generated notes, "
+        "docs/measurements.md) moves with it.",
+    ),
+    Constant(
         "domain/alignment.py",
         "MINIMUM_RUN",
         "threshold",

@@ -23,7 +23,7 @@ from __future__ import annotations
 
 __version__ = "0.1.0.dev0"
 
-from .api import Document, Where, convert, history, media_type_of, sync
+from .api import Document, Where, convert, documents, history, media_type_of, sync
 from .errors import (
     ContractError,
     ConversionError,
@@ -44,6 +44,7 @@ __all__ = [
     "Where",
     "__version__",
     "convert",
+    "documents",
     "history",
     "media_type_of",
     "sync",
