@@ -31,7 +31,7 @@ from ...application.verify import Verified, verify
 from ...config import SOURCES, Configuration, describe, destination, settings_from, source_from
 from ...config import load as load_configuration
 from ...domain.journal import CONTRACT as JOURNAL_CONTRACT
-from ...domain.journal import Entry, attribution, folded, run_named, touching
+from ...domain.journal import Change, Entry, attribution, folded, run_named, touching
 from ...domain.manifest import Manifest, render
 from ...domain.span import Span
 from ...domain.trace import CHARACTERS
@@ -241,6 +241,11 @@ def _parser() -> argparse.ArgumentParser:
             "one document's part of the history, like `git log -- <path>`. Takes a "
             "corpus-relative key or the path your shell completed"
         ),
+    )
+    history.add_argument(
+        "--no-follow",
+        action="store_true",
+        help="with --path, stop at the name given rather than following it through moves",
     )
     history.add_argument("--json", action="store_true", help="print the history as a document")
 
@@ -729,7 +734,7 @@ def _log(arguments: argparse.Namespace) -> int:
 
     subject = _artefact_path(arguments.path) if arguments.path else None
     if subject is not None:
-        entries = touching(entries, subject)
+        entries = touching(entries, subject, follow=not arguments.no_follow)
 
     if arguments.json:
         _document(
@@ -753,9 +758,8 @@ def _log(arguments: argparse.Namespace) -> int:
         print("  a corpus written before this feature keeps none. The next sync starts one.")
         return 0
 
-    shown = (
-        list(reversed(entries))[: arguments.limit] if arguments.limit else list(reversed(entries))
-    )
+    newest_first = list(reversed(entries))
+    shown = newest_first[: arguments.limit] if arguments.limit else newest_first
     heading = f"{len(entries)} runs, {arguments.destination}"
     if subject is not None:
         heading = f"{len(entries)} runs touched {subject}"
@@ -765,19 +769,7 @@ def _log(arguments: argparse.Namespace) -> int:
         print(f"  {entry.short}  {entry.created_at or '(no time)'}  {entry.kind}")
         print(f"    corpus {entry.short_run}")
         print(f"    {entry.change.summary()}")
-        moved = dict(entry.change.moves)
-        for label, names in (
-            ("+", entry.change.added),
-            ("~", entry.change.changed),
-            ("-", entry.change.removed),
-        ):
-            listed = [path for path in names if path not in moved and path not in moved.values()]
-            for path in listed[: arguments.paths]:
-                print(f"    {label} {path}")
-            if len(listed) > arguments.paths:
-                print(f"    {label} ... and {len(listed) - arguments.paths} more")
-        for old, new in entry.change.moves:
-            print(f"    > {old} -> {new}")
+        _print_paths(entry.change, indent="    ", at_most=arguments.paths)
 
     if arguments.limit and len(entries) > len(shown):
         print(f"  ... and {len(entries) - len(shown)} older runs")
@@ -785,6 +777,28 @@ def _log(arguments: argparse.Namespace) -> int:
     print("\n  This is history, not storage. musubi holds one version of each document;")
     print("  the journal says what changed and cannot give you back what was replaced.")
     return 0
+
+
+def _print_paths(change: Change, *, indent: str, at_most: int | None = None) -> None:
+    """The three lists and the moves, in the one shape both reports use.
+
+    A moved path is printed once as a move and not again as the removal and
+    the addition it is made of -- the lists say what the corpus did, and the
+    report says what it meant.
+    """
+    paired = change.moved
+    for label, names in (
+        ("+", change.added),
+        ("~", change.changed),
+        ("-", change.removed),
+    ):
+        listed = [path for path in names if path not in paired]
+        for path in listed[:at_most]:
+            print(f"{indent}{label} {path}")
+        if at_most is not None and len(listed) > at_most:
+            print(f"{indent}{label} ... and {len(listed) - at_most} more")
+    for old, new in change.moves:
+        print(f"{indent}> {old} -> {new}   (same bytes)")
 
 
 def _blame(arguments: argparse.Namespace) -> int:
@@ -814,6 +828,7 @@ def _blame(arguments: argparse.Namespace) -> int:
                         "first_seen": _run_reference(one.first_seen),
                         "last_touched": _run_reference(one.last_touched),
                         "revisions": one.revisions,
+                        "formerly": list(one.formerly),
                         "answered": one.is_answered,
                     }
                     for one in found
@@ -828,18 +843,23 @@ def _blame(arguments: argparse.Namespace) -> int:
     unanswered = [one for one in found if not one.is_answered]
     print(f"musubi blame — {len(found)} artefacts, {arguments.destination}")
     for one in found:
+        print(f"  {one.path}")
         if not one.is_answered:
-            print(f"  {one.path}")
             print("    not in this history")
             continue
-        entered = one.first_seen
         latest = one.last_touched
-        assert entered is not None and latest is not None
-        print(f"  {one.path}")
-        print(f"    entered   {entered.short}  {entered.created_at or '(no time)'}")
-        if latest.entry_id != entered.entry_id:
+        assert latest is not None
+        if one.first_seen is None:
+            # Seen changing, never seen arriving. Half an answer, said as half.
+            print("    entered   before this history begins")
+        else:
+            entered = one.first_seen
+            print(f"    entered   {entered.short}  {entered.created_at or '(no time)'}")
+        if one.first_seen is None or latest.entry_id != one.first_seen.entry_id:
             revisions = "1 revision" if one.revisions == 1 else f"{one.revisions} revisions"
             print(f"    changed   {latest.short}  {latest.created_at or '(no time)'}  {revisions}")
+        if one.formerly:
+            print(f"    formerly  {' <- '.join(one.formerly)}   (same bytes)")
 
     if unanswered:
         print(f"\n  {len(unanswered)} of {len(found)} are not in this history. That is an answer,")
@@ -861,8 +881,11 @@ def _artefact_path(given: str) -> str:
     asking about a file types what they see -- a bare key, or the path their
     shell completed. Both are accepted, because refusing one of them would be
     the tool knowing what was meant and declining to act on it.
+
+    `removeprefix` and not `lstrip`: the first draft stripped every leading
+    dot and slash, and a key beginning with a dot lost it.
     """
-    path = Path(given).as_posix().lstrip("./")
+    path = Path(given).as_posix().removeprefix("./")
     if path.startswith(f"{DOCUMENTS}/"):
         return path
     marker = f"/{DOCUMENTS}/"
@@ -928,18 +951,7 @@ def _diff(arguments: argparse.Namespace) -> int:
 
     print(f"musubi diff — {heading}, {len(chosen)} runs")
     print(f"  {change.summary()}")
-    moved = dict(change.moves)
-    for label, names in (
-        ("+", change.added),
-        ("~", change.changed),
-        ("-", change.removed),
-    ):
-        for path in names:
-            if path in moved or path in moved.values():
-                continue
-            print(f"  {label} {path}")
-    for old_path, new_path in change.moves:
-        print(f"  > {old_path} -> {new_path}   (same bytes)")
+    _print_paths(change, indent="  ")
 
     if not change.exact:
         print("\n  Part of this range predates the recorded hashes, so a document that")
@@ -948,7 +960,7 @@ def _diff(arguments: argparse.Namespace) -> int:
     # Only for a removal that is not the leaving half of a rename. Warning
     # that a document is gone when it is sitting in the corpus under another
     # name is the report contradicting the line above it.
-    if [path for path in change.removed if path not in moved]:
+    if any(path not in change.moved for path in change.removed):
         print("\n  A removed document is gone. The journal records that it left,")
         print("  and does not keep a copy to restore.")
     return 0

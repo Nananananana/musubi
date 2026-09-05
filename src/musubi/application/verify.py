@@ -191,11 +191,25 @@ def _journal_agrees(corpus: CorpusReader, document: dict[str, Any]) -> list[Faul
     # from different moments.
     latest: dict[str, str] = {}
     for entry in entries:
-        for path, digest in entry.change.hashes:
-            if path in entry.change.removed:
-                latest.pop(path, None)
-            else:
-                latest[path] = digest
+        change = entry.change
+        # journal 4: a line's account of what a path held before must be
+        # what the line before it said the path came to hold. The history
+        # contradicting itself is the one fault a reader of it alone can find,
+        # and a line edited by hand is what it looks like.
+        for path in (*change.changed, *change.removed):
+            was, known = change.previous.get(path), latest.get(path)
+            if was is not None and known is not None and was != known:
+                faults.append(
+                    Fault(
+                        "journal 4",
+                        f"entry {entry.short}",
+                        f"says {path} held {was} before it, and the history up to then "
+                        f"says {known}. A line was edited.",
+                    )
+                )
+        for path in change.removed:
+            latest.pop(path, None)
+        latest.update(change.hashes)
 
     for artefact in document.get("artefacts") or []:
         path, stated_hash = artefact.get("path"), artefact.get("content_hash")

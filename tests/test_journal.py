@@ -188,8 +188,8 @@ def test_removed_then_added_with_the_same_bytes_is_no_change_at_all() -> None:
     """
     fold = folded(
         [
-            entry("a", None, Change((), (), ("x",), 0, previous=(("x", "h1"),))),
-            entry("b", "a", Change(("x",), (), (), 0, hashes=(("x", "h1"),))),
+            entry("a", None, Change((), (), ("x",), 0, previous={"x": "h1"})),
+            entry("b", "a", Change(("x",), (), (), 0, hashes={"x": "h1"})),
         ]
     )
     assert fold.is_empty
@@ -199,8 +199,8 @@ def test_removed_then_added_with_the_same_bytes_is_no_change_at_all() -> None:
 def test_removed_then_added_with_different_bytes_is_changed() -> None:
     fold = folded(
         [
-            entry("a", None, Change((), (), ("x",), 0, previous=(("x", "h1"),))),
-            entry("b", "a", Change(("x",), (), (), 0, hashes=(("x", "h2"),))),
+            entry("a", None, Change((), (), ("x",), 0, previous={"x": "h1"})),
+            entry("b", "a", Change(("x",), (), (), 0, hashes={"x": "h2"})),
         ]
     )
     assert fold.changed == ("x",)
@@ -420,6 +420,201 @@ def test_a_history_without_hashes_does_not_fail_the_join(tmp_path: Path) -> None
     (destination / JOURNAL).write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 
     assert verify(Corpus(destination)).holds
+
+
+# -- following a document through its names ---------------------------------
+
+
+def test_touching_follows_a_document_through_a_move() -> None:
+    """`git log --follow`. A document renamed last month still has the history
+    it had before, and a reader who typed the name they can see should not
+    need to know the names it used to have."""
+    born = entry("a", None, Change(("old.md",), (), (), 0, hashes={"old.md": "h1"}), at="1")
+    edited = entry(
+        "b",
+        "a",
+        Change((), ("old.md",), (), 0, hashes={"old.md": "h2"}, previous={"old.md": "h1"}),
+        at="2",
+    )
+    moved = entry(
+        "c",
+        "b",
+        Change(("new.md",), (), ("old.md",), 0, hashes={"new.md": "h2"}, previous={"old.md": "h2"}),
+        at="3",
+    )
+    unrelated = entry("d", "c", Change(("other.md",), (), (), 1, hashes={"other.md": "h9"}), at="4")
+
+    assert touching([born, edited, moved, unrelated], "new.md") == (born, edited, moved)
+    assert touching([born, edited, moved, unrelated], "new.md", follow=False) == (moved,)
+
+
+def test_attribution_carries_the_arrival_through_a_move() -> None:
+    born = entry("a", None, Change(("old.md",), (), (), 0, hashes={"old.md": "h1"}), at="1")
+    moved = entry(
+        "b",
+        "a",
+        Change(("new.md",), (), ("old.md",), 0, hashes={"new.md": "h1"}, previous={"old.md": "h1"}),
+        at="2",
+    )
+    (one,) = attribution([born, moved], ["new.md"])
+    assert one.first_seen is born
+    assert one.last_touched is moved
+    assert one.revisions == 1
+    assert one.formerly == ("old.md",)
+
+
+def test_a_move_whose_source_predates_the_history_is_half_an_answer() -> None:
+    """Seen arriving under this name by a move, never seen arriving at all.
+    The last run is known and the first is not, and the answer says so
+    rather than calling the move the arrival."""
+    moved = entry(
+        "b",
+        "a",
+        Change(("new.md",), (), ("old.md",), 0, hashes={"new.md": "h1"}, previous={"old.md": "h1"}),
+    )
+    (one,) = attribution([moved], ["new.md"])
+    assert one.is_answered
+    assert one.first_seen is None
+    assert one.last_touched is moved
+    assert one.formerly == ("old.md",)
+
+
+def test_a_document_changed_before_the_history_saw_it_arrive_is_half_an_answer() -> None:
+    changed = entry("b", "a", Change((), ("x",), (), 0, hashes={"x": "h2"}, previous={"x": "h1"}))
+    (one,) = attribution([changed], ["x"])
+    assert one.is_answered
+    assert one.first_seen is None
+    assert one.last_touched is changed
+
+
+# -- what a line may not say -------------------------------------------------
+
+
+def test_a_line_naming_one_path_in_two_lists_is_refused() -> None:
+    """A path both added and removed by one run is not a thing a run can do,
+    and folding it would mean deciding which half to believe."""
+    document = entry("r", None, Change(("x",), (), ("x",), 0)).document()
+    with pytest.raises(ValueError, match="two of added, changed and removed"):
+        entry_from(document)
+
+
+def test_a_line_whose_unchanged_is_a_boolean_counts_nothing() -> None:
+    """`bool` is an `int`, and `true` is not a count of anything."""
+    document = entry("r", None, Change((), (), (), 0)).document()
+    document["unchanged"] = True
+    assert entry_from(document).change.unchanged == 0
+
+
+def test_an_empty_prefix_names_no_run() -> None:
+    """It would otherwise match every run, and resolve to the only one in a
+    short history -- which is `--since ''` doing something."""
+    with pytest.raises(LookupError, match="no run id"):
+        run_named([entry("r", None, Change((), (), (), 0))], "  ")
+
+
+# -- the history contradicting itself --------------------------------------
+
+
+def test_verify_finds_a_line_whose_before_disagrees_with_the_line_before_it(
+    tmp_path: Path,
+) -> None:
+    """`journal 4`. The one fault a reader of the history alone can find, and
+    what a line edited by hand looks like."""
+    vault = tmp_path / "notes"
+    vault.mkdir()
+    (vault / "gear.md").write_text("# gear\n", encoding="utf-8")
+    destination = tmp_path / "synced"
+    synced(vault, destination, at="2026-09-05T00:00:00+00:00")
+    (vault / "gear.md").write_text("# gear\n\nedited\n", encoding="utf-8")
+    synced(vault, destination, at="2026-09-05T00:00:01+00:00")
+    assert verify(Corpus(destination)).holds
+
+    lines = (destination / JOURNAL).read_text(encoding="utf-8").splitlines()
+    second = json.loads(lines[1])
+    second["previous"]["documents/gear.md"] = "sha256:" + "f" * 64
+    lines[1] = json.dumps(second, ensure_ascii=False)
+    (destination / JOURNAL).write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+
+    checked = verify(Corpus(destination))
+    assert any(fault.invariant == "journal 4" for fault in checked.faults)
+
+
+def test_verify_forgets_a_removed_path_rather_than_holding_it_against_the_corpus(
+    tmp_path: Path,
+) -> None:
+    """The join forgets a path when the history says it left.
+
+    The first version popped it while iterating `hashes`, which a removed path
+    is never in, so it was never popped. On a consistent corpus that changed
+    nothing -- a re-added path overwrites, and a path the manifest lacks is
+    never asked about -- so this is a guard on the shape of the walk rather
+    than a defect reproduced. Said here so the test is not read as more."""
+    vault = tmp_path / "notes"
+    vault.mkdir()
+    (vault / "gear.md").write_text("# gear\n", encoding="utf-8")
+    # A second file, so that removing the first is a removal and not an empty
+    # source -- which ADR-0021 refuses to treat as a deletion.
+    (vault / "stove.md").write_text("# stove\n", encoding="utf-8")
+    destination = tmp_path / "synced"
+    synced(vault, destination, at="2026-09-05T00:00:00+00:00")
+    (vault / "gear.md").unlink()
+    synced(vault, destination, at="2026-09-05T00:00:01+00:00")
+    (vault / "gear.md").write_text("# gear, again\n", encoding="utf-8")
+    synced(vault, destination, at="2026-09-05T00:00:02+00:00")
+
+    assert verify(Corpus(destination)).holds
+
+
+# -- and none of it is quadratic ---------------------------------------------
+
+
+def test_the_history_is_read_in_time_linear_in_what_it_names() -> None:
+    """A first sync of ten thousand documents writes one entry naming ten
+    thousand paths, and the summary of it scanned the hash pairs once per
+    path. Measured against the version that did: 0.029 s at 2,000 paths and
+    0.110 s at 4,000, which is x3.8 per doubling and a hundred thousand
+    artefacts away from a minute. The new shape took under 0.005 s at both.
+
+    The bound here is loose on purpose -- it is not a benchmark, it is the
+    difference between linear and quadratic on a machine that is busy."""
+    import time
+
+    paths = [f"documents/note-{n:05}.md" for n in range(10_000)]
+    first = entry(
+        "a",
+        None,
+        Change(tuple(paths), (), (), 0, hashes={path: f"h{n}" for n, path in enumerate(paths)}),
+        at="1",
+    )
+    edits = [
+        entry(
+            f"r{k}",
+            f"r{k - 1}" if k else "a",
+            Change(
+                (),
+                tuple(paths[k::50]),
+                (),
+                len(paths) - len(paths[k::50]),
+                hashes={p: f"h{k}-{p}" for p in paths[k::50]},
+                previous=dict.fromkeys(paths[k::50], "x"),
+            ),
+            at=str(k + 2),
+        )
+        for k in range(20)
+    ]
+    history = [first, *edits]
+
+    started = time.perf_counter()
+    found = attribution(history, paths)
+    fold = folded(history)
+    for one in history:
+        one.change.summary()
+    touching(history, paths[-1])
+    elapsed = time.perf_counter() - started
+
+    assert len(found) == len(paths)
+    assert fold.added == tuple(paths)
+    assert elapsed < 5.0, f"{elapsed:.1f}s over 10,000 paths and 21 runs: something is quadratic"
 
 
 # -- the id that had to exist -----------------------------------------------

@@ -78,6 +78,19 @@ by exactly one notch, and saying which notch is the useful part.**
   it happens to sit beside would be a confident wrong answer in the one place
   this library exists to prevent one — and it would be invisible, because the
   answer would look exactly like a real one.
+- **`log --path` and `blame` follow a document through its names**, the way
+  `git log --follow` does, and `blame` lists the names as `formerly`. Both
+  follow an inference, and `--no-follow` asks about one name alone.
+- **`verify` also checks the history against itself** (`journal 4`): a line's
+  account of what a path held before it must be what the line before said it
+  came to hold. The one fault a reader of the journal alone can find.
+- **Everything here is linear in what the history names.** The first draft
+  kept the hashes as sorted pairs and looked them up by scanning, so the
+  summary of a first sync scanned once per path: 0.029 s at 2,000 artefacts
+  and 0.110 s at 4,000, ×3.8 per doubling. The maps are dicts, membership is a
+  set built once per entry, and `attribution` walks the history once for every
+  path rather than once per path. Same shape as `TraceMap.followed_by` and the
+  Notion archive, found one layer later.
 - An entry grows by about 80 bytes per touched path. It grows with **the work**
   and not with the corpus, which was ADR-0034's constraint: a no-change re-sync
   still writes almost nothing.

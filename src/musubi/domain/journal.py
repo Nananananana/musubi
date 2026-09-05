@@ -35,6 +35,16 @@ artefacts is megabytes; a hundred runs of those is a history larger than the
 thing it describes. **A no-change re-sync writes an almost empty entry**, which
 is the common case and should cost nothing.
 
+## Everything here is linear in what the history names
+
+A first sync of ten thousand documents writes one entry naming ten thousand
+paths, and `musubi log` prints its summary. The first version of this module
+kept the hashes as a tuple of pairs and looked them up by scanning, so that
+summary cost ten thousand scans of ten thousand pairs -- the quadratic this
+repository keeps finding one layer at a time (`TraceMap.followed_by`, the
+Notion archive). The maps are dicts, the per-entry membership is a set built
+once, and `attribution` walks the history once rather than once per path.
+
 ## What this is not, and the sentence that matters most
 
 **This is history, not storage. musubi cannot restore a document it did not
@@ -54,7 +64,8 @@ did, and which run put it there.**
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from types import MappingProxyType
 
 from .hashing import hash_of
 
@@ -76,6 +87,8 @@ __all__ = [
 #: date ([ADR-0002]), and nothing outside musubi reads this yet.
 CONTRACT = "musubi.run-journal/1-draft"
 
+_NOTHING: Mapping[str, str] = MappingProxyType({})
+
 
 @dataclass(frozen=True, slots=True)
 class Change:
@@ -90,22 +103,30 @@ class Change:
     #: What each path holds **after** this run: every `added` and `changed`
     #: path, and nothing else. A removed path holds nothing.
     #:
-    #: A pair sequence rather than a mapping, like `Manifest.rulesets`, because
-    #: a journal line is bytes and [ADR-0003] wants two runs over the same
-    #: inputs to write the same ones ([ADR-0035]).
-    hashes: tuple[tuple[str, str], ...] = ()
+    #: A mapping, looked up rather than scanned. The line it becomes is sorted
+    #: when it is written, which is where [ADR-0003]'s same-bytes promise is
+    #: kept; keeping the pairs sorted *here* bought nothing and cost a scan per
+    #: lookup ([ADR-0035]).
+    hashes: Mapping[str, str] = _NOTHING
     #: What each path held **before** this run: every `changed` and `removed`
     #: path. Two maps rather than one with two meanings -- the first draft put
     #: the after-hash for added and changed and the before-hash for removed
     #: into a single map, and a fold could then not tell what a changed path
     #: had been, so a document edited and edited back inside a range read as
     #: changed. Hypothesis found it in three runs.
-    previous: tuple[tuple[str, str], ...] = ()
+    previous: Mapping[str, str] = _NOTHING
     #: Whether everything this describes was decided by comparing hashes. True
     #: for a run, which measures its own corpus. False for a `folded()` answer
     #: over a range containing a line written before [ADR-0035], where some
     #: path fell back to the conservative verb.
     exact: bool = True
+    #: The pairs `moves` found, kept so that `summary()` and a report that
+    #: prints the lists do not each search again. Derived in `__post_init__`
+    #: from fields that are frozen, so it cannot go stale.
+    _moves: tuple[tuple[str, str], ...] = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "_moves", self._pair_moves())
 
     def hash_for(self, path: str) -> str | None:
         """What this path holds after the run, or ``None``.
@@ -115,11 +136,11 @@ class Change:
         rather than assuming. A history that spans the change has entries of
         both kinds.
         """
-        return _lookup(self.hashes, path)
+        return self.hashes.get(path)
 
     def hash_before(self, path: str) -> str | None:
         """What this path held before the run, or ``None``."""
-        return _lookup(self.previous, path)
+        return self.previous.get(path)
 
     @property
     def moves(self) -> tuple[tuple[str, str], ...]:
@@ -136,12 +157,27 @@ class Change:
         confident wrong answer where an honest silence belongs. Those stay in
         `added` and `removed`, which is what they are.
         """
-        gone = _by_hash([(p, h) for p in self.removed if (h := self.hash_before(p))])
-        arrived = _by_hash([(p, h) for p in self.added if (h := self.hash_for(p))])
+        return self._moves
+
+    @property
+    def moved(self) -> frozenset[str]:
+        """Every path that is one half of a move, for a report to skip over."""
+        return frozenset(path for pair in self._moves for path in pair)
+
+    @property
+    def touches(self) -> frozenset[str]:
+        """Every path this change names, for membership rather than scanning."""
+        return frozenset(self.added) | frozenset(self.changed) | frozenset(self.removed)
+
+    def _pair_moves(self) -> tuple[tuple[str, str], ...]:
+        gone = _by_hash(
+            (path, self.previous[path]) for path in self.removed if path in self.previous
+        )
+        arrived = _by_hash((path, self.hashes[path]) for path in self.added if path in self.hashes)
         return tuple(
             sorted(
                 (gone[digest][0], arrived[digest][0])
-                for digest in set(gone) & set(arrived)
+                for digest in gone.keys() & arrived.keys()
                 if len(gone[digest]) == 1 and len(arrived[digest]) == 1
             )
         )
@@ -177,23 +213,18 @@ class Change:
         if self.is_empty:
             return f"no change, {self.unchanged} artefacts"
 
-        moved = self.moves
-        paired = {path for pair in moved for path in pair}
+        paired = self.moved
         parts = []
         for label, names in (
             ("added", self.added),
             ("changed", self.changed),
             ("removed", self.removed),
         ):
-            rest = [path for path in names if path not in paired]
+            rest = sum(1 for path in names if path not in paired)
             if rest:
-                parts.append(f"{len(rest)} {label}")
-        if moved:
-            parts.append(f"{len(moved)} moved")
-        if not parts:
-            # Every path this touched was one half of a rename. The corpus
-            # holds exactly what it held; only the names changed.
-            return f"{len(moved)} moved, {self.unchanged} unchanged"
+                parts.append(f"{rest} {label}")
+        if self._moves:
+            parts.append(f"{len(self._moves)} moved")
         return f"{', '.join(parts)}, {self.unchanged} unchanged"
 
 
@@ -267,7 +298,12 @@ class Entry:
         return self.run_id == self.parent
 
     def document(self) -> dict[str, object]:
-        """The entry as the line it is written as."""
+        """The entry as the line it is written as.
+
+        The maps come out sorted, which is where the same-inputs-same-bytes
+        promise ([ADR-0003]) is kept for a journal line -- not in the
+        in-memory shape, which is looked up and never compared byte for byte.
+        """
         return {
             "contract": CONTRACT,
             #: Derived, and written anyway so that a reader with `jq` does not
@@ -285,12 +321,12 @@ class Entry:
             "changed": list(self.change.changed),
             "removed": list(self.change.removed),
             "unchanged": self.change.unchanged,
-            #: Path to content hash, for every path the three lists name. What
-            #: turns a removed-and-added pair into a move, and what lets a fold
-            #: over a range say *unchanged* where it used to have to say
-            #: *changed* ([ADR-0035]).
-            "hashes": dict(self.change.hashes),
-            "previous": dict(self.change.previous),
+            #: Both sides of every path the three lists name. What turns a
+            #: removed-and-added pair into a move, and what lets a fold over a
+            #: range say *unchanged* where it used to have to say *changed*
+            #: ([ADR-0035]).
+            "hashes": dict(sorted(self.change.hashes.items())),
+            "previous": dict(sorted(self.change.previous.items())),
         }
 
 
@@ -302,15 +338,15 @@ def changes(before: Mapping[str, str], after: Mapping[str, str]) -> Change:
     modification times say when musubi last ran rather than when anything moved
     ([ADR-0022] makes the same distinction for a document's own mtime).
 
-    Sorted, because [ADR-0003] wants two runs over the same inputs to produce
-    the same bytes, and a journal line is bytes.
+    The lists are sorted, because [ADR-0003] wants two runs over the same
+    inputs to produce the same bytes, and a journal line is bytes.
     """
-    gone = sorted(set(before) - set(after))
-    fresh = sorted(set(after) - set(before))
+    gone = sorted(before.keys() - after.keys())
+    fresh = sorted(after.keys() - before.keys())
 
     altered = []
     same = 0
-    for path in sorted(set(before) & set(after)):
+    for path in sorted(before.keys() & after.keys()):
         if before[path] != after[path]:
             altered.append(path)
         else:
@@ -325,8 +361,8 @@ def changes(before: Mapping[str, str], after: Mapping[str, str]) -> Change:
         changed=tuple(altered),
         removed=tuple(gone),
         unchanged=same,
-        hashes=tuple(sorted((path, after[path]) for path in fresh + altered)),
-        previous=tuple(sorted((path, before[path]) for path in altered + gone)),
+        hashes={path: after[path] for path in fresh + altered},
+        previous={path: before[path] for path in altered + gone},
     )
 
 
@@ -335,7 +371,10 @@ def entry_from(document: Mapping[str, object]) -> Entry:
 
     Refuses a contract it does not recognise rather than reading hopefully,
     for the reason the manifest reader gives: a document parsed by guesswork is
-    a history that says something the corpus never did.
+    a history that says something the corpus never did. And refuses a line
+    whose lists overlap, for the same reason: a path both added and removed by
+    one run is not a thing a run can do, and folding it would decide which
+    half to believe.
     """
     contract = document.get("contract")
     if not isinstance(contract, str) or not contract.startswith("musubi.run-journal/1"):
@@ -347,6 +386,12 @@ def entry_from(document: Mapping[str, object]) -> Entry:
     if not isinstance(run_id, str) or not run_id:
         raise ValueError("a journal line has no run_id")
 
+    added = _names(document.get("added"))
+    changed = _names(document.get("changed"))
+    removed = _names(document.get("removed"))
+    if len(set(added) | set(changed) | set(removed)) != len(added) + len(changed) + len(removed):
+        raise ValueError("a journal line names one path in two of added, changed and removed")
+
     parent = document.get("parent")
     unchanged = document.get("unchanged")
     entry = Entry(
@@ -356,10 +401,13 @@ def entry_from(document: Mapping[str, object]) -> Entry:
         musubi_version=_text(document.get("musubi_version")),
         kind=_text(document.get("kind")),
         change=Change(
-            added=_names(document.get("added")),
-            changed=_names(document.get("changed")),
-            removed=_names(document.get("removed")),
-            unchanged=unchanged if isinstance(unchanged, int) else 0,
+            added=added,
+            changed=changed,
+            removed=removed,
+            # `bool` is an `int`, and `true` is not a count of anything.
+            unchanged=unchanged
+            if isinstance(unchanged, int) and not isinstance(unchanged, bool)
+            else 0,
             hashes=_hashes(document.get("hashes")),
             previous=_hashes(document.get("previous")),
         ),
@@ -425,18 +473,21 @@ def folded(entries: Sequence[Entry]) -> Change:
             # Only if this range has not already decided: a path removed and
             # then added back began the range with what the removal recorded.
             origin.setdefault(path, ABSENT)
-            current[path] = change.hash_for(path) or PRESENT
-            exact = exact and change.hash_for(path) is not None
+            now = change.hashes.get(path)
+            current[path] = now or PRESENT
+            exact = exact and now is not None
         for path in change.changed:
             # Changed without having been added here means it was there before
             # the range, holding whatever this entry says it held.
-            origin.setdefault(path, change.hash_before(path) or PRESENT)
-            current[path] = change.hash_for(path) or PRESENT
-            exact = exact and None not in (change.hash_before(path), change.hash_for(path))
+            was, now = change.previous.get(path), change.hashes.get(path)
+            origin.setdefault(path, was or PRESENT)
+            current[path] = now or PRESENT
+            exact = exact and was is not None and now is not None
         for path in change.removed:
-            origin.setdefault(path, change.hash_before(path) or PRESENT)
+            was = change.previous.get(path)
+            origin.setdefault(path, was or PRESENT)
             current[path] = ABSENT
-            exact = exact and change.hash_before(path) is not None
+            exact = exact and was is not None
 
     added, altered, gone = [], [], []
     hashes: dict[str, str] = {}
@@ -469,8 +520,8 @@ def folded(entries: Sequence[Entry]) -> Change:
         changed=tuple(altered),
         removed=tuple(gone),
         unchanged=max(total - len(added) - len(altered), 0),
-        hashes=tuple(sorted(hashes.items())),
-        previous=tuple(sorted(earlier.items())),
+        hashes=hashes,
+        previous=earlier,
         exact=exact,
     )
 
@@ -481,12 +532,18 @@ class Attribution:
 
     path: str
     #: The run that added it, or ``None`` where the history does not reach back
-    #: far enough to have seen it arrive.
+    #: far enough to have seen it arrive. Followed through moves: a document
+    #: renamed on Tuesday entered the corpus on the day it was first added,
+    #: under whatever name it had then.
     first_seen: Entry | None
-    #: The run that last added or changed it. ``None`` for the same reason.
+    #: The run that last added, changed or moved it. ``None`` for the same reason.
     last_touched: Entry | None
-    #: How many runs in the history changed it after it arrived.
+    #: How many runs in the history changed or moved it after it arrived.
     revisions: int
+    #: The names it held before this one, most recent first. Empty when it has
+    #: only ever had the one -- and an *inference*, because a move is bytes
+    #: matching and not a `mv` observed ([ADR-0035]).
+    formerly: tuple[str, ...] = ()
 
     @property
     def is_answered(self) -> bool:
@@ -502,22 +559,34 @@ class Attribution:
         return self.first_seen is not None or self.last_touched is not None
 
 
-def touching(entries: Sequence[Entry], path: str) -> tuple[Entry, ...]:
-    """The runs that added, changed or removed one artefact, oldest first.
+def touching(entries: Sequence[Entry], path: str, *, follow: bool = True) -> tuple[Entry, ...]:
+    """The runs that added, changed, removed or moved one artefact, oldest first.
 
-    `git log -- <path>`, and the query the audit question is actually made of:
-    a document is being questioned, and what is wanted is not the corpus's
-    whole history but this document's part of it.
+    `git log --follow -- <path>`, and the query the audit question is actually
+    made of: a document is being questioned, and what is wanted is not the
+    corpus's whole history but this document's part of it.
+
+    **Followed through moves by default**, newest to oldest: when a run's
+    moves say this name arrived from another, the search continues under that
+    name. A document renamed last month still has the history it had before,
+    and a reader who typed the name they can see should not need to know the
+    names it used to have. ``follow=False`` asks about the name alone.
     """
-    return tuple(
-        entry
-        for entry in entries
-        if path in entry.change.added
-        or path in entry.change.changed
-        # A removal belongs in a document's history. It is the one event that
-        # explains why the corpus does not have something a reader expected.
-        or path in entry.change.removed
-    )
+    names = {path}
+    chosen = []
+    name = path
+    for entry in reversed(entries):
+        change = entry.change
+        if follow:
+            for old, new in change.moves:
+                if new == name:
+                    name = old
+                    names.add(old)
+                    break
+        if change.touches & names:
+            chosen.append(entry)
+    chosen.reverse()
+    return tuple(chosen)
 
 
 def attribution(entries: Sequence[Entry], paths: Iterable[str]) -> tuple[Attribution, ...]:
@@ -530,25 +599,56 @@ def attribution(entries: Sequence[Entry], paths: Iterable[str]) -> tuple[Attribu
     Every path asked about comes back, including one the history has never
     heard of. Dropping those would make the answer look complete when it is
     the corpus that is complete and the history that is short.
+
+    One walk of the history for every path at once, rather than one per path:
+    the state of every artefact is carried forward entry by entry, and a move
+    carries a state from the old name to the new one -- which is how a
+    renamed document keeps the run that first added it.
     """
-    found = []
-    for path in sorted(paths):
-        first: Entry | None = None
-        last: Entry | None = None
-        revisions = 0
-        for entry in entries:
-            if path in entry.change.added:
+    #: path -> (first_seen, last_touched, revisions, former names). A first
+    #: of ``None`` is an artefact the history saw change or move without ever
+    #: having seen it arrive: it was there before the journal was.
+    state: dict[str, tuple[Entry | None, Entry, int, tuple[str, ...]]] = {}
+    for entry in entries:
+        change = entry.change
+        moved_to = dict(change.moves)
+        arrived_by_move = frozenset(moved_to.values())
+        for path in change.removed:
+            carried = state.pop(path, None)
+            if path in moved_to:
+                first, revisions, formerly = (
+                    (carried[0], carried[2], carried[3]) if carried is not None else (None, 0, ())
+                )
+                state[moved_to[path]] = (first, entry, revisions + 1, (path, *formerly))
+        for path in change.added:
+            if path not in arrived_by_move:
                 # Added again after a removal: the artefact in the corpus now
                 # is the one this run put there, so the clock restarts. The
-                # earlier life is still in `musubi log <path>`.
-                first, last, revisions = entry, entry, 0
-            elif path in entry.change.changed:
-                last = entry
-                revisions += 1
-            elif path in entry.change.removed:
-                first, last, revisions = None, None, 0
+                # earlier life is still in `musubi log --path`.
+                state[path] = (entry, entry, 0, ())
+        for path in change.changed:
+            carried = state.get(path)
+            if carried is None:
+                state[path] = (None, entry, 1, ())
+            else:
+                first, _, revisions, formerly = carried
+                state[path] = (first, entry, revisions + 1, formerly)
+
+    found = []
+    for path in sorted(paths):
+        carried = state.get(path)
+        if carried is None:
+            found.append(Attribution(path=path, first_seen=None, last_touched=None, revisions=0))
+            continue
+        first, last, revisions, formerly = carried
         found.append(
-            Attribution(path=path, first_seen=first, last_touched=last, revisions=revisions)
+            Attribution(
+                path=path,
+                first_seen=first,
+                last_touched=last,
+                revisions=revisions,
+                formerly=formerly,
+            )
         )
     return tuple(found)
 
@@ -568,9 +668,12 @@ def run_named(entries: Sequence[Entry], prefix: str) -> int:
 
     Ambiguity is an error rather than the first match. Two runs sharing a
     prefix is a thing to be told about, not a coin flip about which history is
-    being read.
+    being read. And nothing names nothing: an empty prefix matches every run
+    and would otherwise resolve to the only one in a short history.
     """
     wanted = prefix.strip()
+    if not wanted:
+        raise LookupError("no run id was given")
     found = [
         index
         for index, entry in enumerate(entries)
@@ -584,7 +687,7 @@ def run_named(entries: Sequence[Entry], prefix: str) -> int:
     return found[0]
 
 
-def _hashes(value: object) -> tuple[tuple[str, str], ...]:
+def _hashes(value: object) -> dict[str, str]:
     """The recorded hashes, or empty for a line written before [ADR-0035].
 
     Empty rather than a refusal. A journal that spans the change has lines of
@@ -592,24 +695,15 @@ def _hashes(value: object) -> tuple[tuple[str, str], ...]:
     with less detail in its early part into no history at all.
     """
     if not isinstance(value, Mapping):
-        return ()
-    return tuple(
-        sorted(
-            (path, digest)
-            for path, digest in value.items()
-            if isinstance(path, str) and isinstance(digest, str) and digest
-        )
-    )
+        return {}
+    return {
+        path: digest
+        for path, digest in value.items()
+        if isinstance(path, str) and isinstance(digest, str) and digest
+    }
 
 
-def _lookup(pairs: tuple[tuple[str, str], ...], path: str) -> str | None:
-    for name, digest in pairs:
-        if name == path:
-            return digest
-    return None
-
-
-def _by_hash(pairs: list[tuple[str, str]]) -> dict[str, list[str]]:
+def _by_hash(pairs: Iterable[tuple[str, str]]) -> dict[str, list[str]]:
     """Hash to every path holding it. A list because two files can be equal."""
     grouped: dict[str, list[str]] = {}
     for path, digest in pairs:
