@@ -609,7 +609,7 @@ def _report_plan(outcome: Outcome, *, show_removals: bool) -> None:
         for key, removal in manifest.removals:
             print(f"    {key} {removal.span}  {removal.rule}")
 
-    _coverage(manifest, "would be written")
+    _coverage(manifest, "would be written", kept=len(outcome.kept))
     _limits(manifest)
 
 
@@ -642,7 +642,7 @@ def _report_sync(result: Synced, destination: Path) -> None:
         for path in result.withdrawn:
             print(f"  {path}")
 
-    _coverage(manifest, "written")
+    _coverage(manifest, "written", kept=len(result.kept))
     # The run that created the ambiguity is the one that can resolve it.
     # Separating the trees makes the correct invocation available; it does not
     # make `ingest <destination>` safe, and that one is silent when it is wrong.
@@ -665,10 +665,15 @@ def _account(manifest: Manifest, skipped_heading: str, removed_heading: str) -> 
             print(f"  {rule}  {count}x")
 
 
-def _coverage(manifest: Manifest, verb: str) -> None:
+def _coverage(manifest: Manifest, verb: str, *, kept: int = 0) -> None:
     coverage = manifest.coverage
     print("\nCoverage")
     print(f"  {coverage.emitted} documents {verb}, {coverage.skipped} skipped")
+    if kept:
+        # Said, because a run that converted three documents and reported
+        # four hundred would otherwise be claiming somebody else's work as its
+        # own -- and because the number is the whole point of ADR-0036.
+        print(f"  {kept} of them unchanged since the last run and carried forward unconverted")
     if coverage.characters:
         print(
             f"  {coverage.traceable_characters} of {coverage.characters} characters traceable "

@@ -16,7 +16,7 @@ wrong fix for. That is the falsification section working.
 | Traceable coverage, HTML | 93.5% built-in, **99.7%** via `trafilatura@1` | holds |
 | Trace map size | 10.7× → **4.9× the corpus** | half fixed ([#76](https://github.com/Nananananana/musubi/issues/76)) |
 | Composition | **quadratic** → linear, 33× faster | fixed |
-| Re-read ratio | **0.91** | **falsified** |
+| Re-read ratio | **0.32**, from 1.01 | falsified, then fixed (ADR-0036) |
 | Archive reads per unit | **O(1)** archives opened | fixed in [#78](https://github.com/Nananananana/musubi/issues/78) |
 | Screener precision, synthetic | **0.00%** false stops after ADR-0026 | holds |
 | Cleansing precision | not measured | owed |
@@ -101,27 +101,34 @@ HTML map goes from 36,241 bytes to 16,588, and `traces/` from 10.7× the
 documents to **4.9×**. The reason for indenting was that a reviewer opens these;
 a reviewer can pipe one through `jq`, and nobody gets the disk back.
 
-## Re-read ratio — 0.91
+## Re-read ratio — 0.32, from 1.01
 
 ```text
 uv run python tools/scaling.py --only resync
 400 unchanged Markdown notes
 
-  cold sync              2.08s  400 artefacts
-  no-change re-sync      1.89s  400 artefacts
-  re-read ratio           0.91
+                          before ADR-0036     after
+  cold sync                     2.11s         1.69s
+  no-change re-sync             2.13s         0.54s
+  re-read ratio                  1.01          0.32
 ```
 
 [ADR-0006]'s claim is that *a re-export that changed nothing produces an empty
-diff*. A no-change re-sync costs **91% of a cold one** and rewrites every
-artefact. `docs/README.md` has always said `Change` exists and nothing calls it;
-this is what that costs rather than what it sounds like it costs.
+diff*. Before [ADR-0036](adr/0036-a-unit-whose-bytes-did-not-change-is-not-converted-again.md)
+a no-change re-sync cost the whole of a cold one and rewrote every artefact:
+`Change` existed and nothing called it. Now a unit whose bytes hash to what the
+previous manifest recorded, under the same ruleset, screener, allowances and
+musubi, with its artefact still on the disk as recorded, is carried forward
+unconverted, and the re-sync promotes one file.
 
-The identity machinery is real and correct — `content_hash` is computed, keys
-are stable, the previous manifest is read as a ledger for withdrawal. What is
-missing is the one comparison that would use it.
+**0.32 is not near zero, and the remainder is the honest floor.** Every source
+is still read and hashed, and every artefact is read back and checked against
+the manifest rather than trusted. The `mtime`-and-size shortcut that would take
+the ratio lower was declined — [ADR-0022] already found modification times
+saying things that were not so.
 
-Filed as [#77](https://github.com/Nananananana/musubi/issues/77).
+Two runs on a laptop, generated notes; the ratio is the number and the seconds
+are not. Filed and closed as [#77](https://github.com/Nananananana/musubi/issues/77).
 
 ## Traceable coverage — the number ADR-0004 lives on
 

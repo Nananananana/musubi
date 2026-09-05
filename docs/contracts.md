@@ -155,6 +155,12 @@ turn them from *checked on these examples* into *checked at all*.
    run** — as an artefact, or as a skip.
 4. **An artefact's `trace_map` names a file that exists**, and that file's
    `artefact.content_hash` equals the artefact's.
+5. **An artefact's `source.content_hash`, when present, is the trace map's
+   `source.content_hash`.** The same value written twice, so that a re-sync can
+   decide whether a unit's bytes changed without opening its sidecar
+   ([ADR-0036](adr/0036-a-unit-whose-bytes-did-not-change-is-not-converted-again.md)).
+   Optional, because a manifest written before it omits it — and a reader
+   infers nothing from its absence except that the run was older.
 
 ### The run journal
 

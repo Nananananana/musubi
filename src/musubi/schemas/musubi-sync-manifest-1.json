@@ -194,7 +194,11 @@
           "additionalProperties": false,
           "properties": {
             "source_id": { "type": "string", "minLength": 1 },
-            "unit_key": { "type": "string", "minLength": 1 }
+            "unit_key": { "type": "string", "minLength": 1 },
+            "content_hash": {
+              "description": "The hash of the SOURCE bytes this artefact was converted from -- the same value the trace map's `source.content_hash` carries. Here so that a re-sync can decide whether a unit's bytes changed without opening its sidecar. Optional because a manifest written before it existed omits it; a reader must not infer anything from its absence except that the run was older.",
+              "$ref": "#/$defs/hash"
+            }
           }
         },
         "converter": { "type": "string", "minLength": 1 },

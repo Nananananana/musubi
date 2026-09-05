@@ -78,6 +78,13 @@ class Artefact:
     traceable_characters: int
     characters: int
     layer: str
+    #: The hash of the **source** bytes this was converted from -- the trace
+    #: map already carries it; the manifest carries it so that a re-sync can
+    #: ask *did the bytes change* without opening ten thousand sidecars
+    #: ([ADR-0036]). Empty on a manifest written before it existed, and not part
+    #: of ``run_id``: the id is over the outputs, and an input hash added to it
+    #: would change the id of every existing corpus on upgrade.
+    source_hash: str = ""
 
     @property
     def traceable_coverage(self) -> float:
@@ -274,7 +281,11 @@ def render(manifest: Manifest) -> str:
                 "path": artefact.path,
                 "content_hash": artefact.content_hash,
                 "trace_map": artefact.trace_path,
-                "source": {"source_id": artefact.source_id, "unit_key": artefact.unit_key},
+                "source": {
+                    "source_id": artefact.source_id,
+                    "unit_key": artefact.unit_key,
+                    **({"content_hash": artefact.source_hash} if artefact.source_hash else {}),
+                },
                 "converter": artefact.converter,
                 "layer": artefact.layer,
                 "characters": artefact.characters,

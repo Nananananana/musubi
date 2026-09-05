@@ -64,7 +64,7 @@ import contextlib
 import json
 import os
 import shutil
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -72,10 +72,13 @@ from ...domain.frontmatter import FrontMatter, replacements
 from ...domain.hashing import content_hash
 from ...domain.journal import Entry
 from ...domain.manifest import Artefact
+from ...domain.removal import RemovalRecord
+from ...domain.screening import Finding
+from ...domain.span import Span
 from ...domain.text import rewrite
 from ...domain.trace import TraceMap
 from ...errors import ContractError, ConversionError
-from ...ports.emitter import Document, Previous, Rendered
+from ...ports.emitter import Document, Previous, Rendered, Retained
 
 __all__ = [
     "DOCUMENTS",
@@ -119,6 +122,9 @@ class DocumentEmitter:
         self._resolved_destination = self.destination.resolve()
         self._resolved_staging = self.staging.resolve()
         self._staged: list[str] = []
+        #: Retained documents whose source timestamp moved, applied at
+        #: promotion and dropped on a discard.
+        self._retimed: list[tuple[Path, float]] = []
 
     # -- staging -----------------------------------------------------------
 
@@ -133,6 +139,7 @@ class DocumentEmitter:
             shutil.rmtree(self.staging)
         self.staging.mkdir(parents=True)
         self._staged = []
+        self._retimed = []
 
     def render(self, document: Document) -> Rendered:
         """What this document would become. Touches nothing.
@@ -156,6 +163,7 @@ class DocumentEmitter:
                 traceable_characters=trace.traceable_characters,
                 characters=trace.artefact_length,
                 layer=document.layer,
+                source_hash=document.unit.content_hash,
             ),
         )
 
@@ -225,14 +233,27 @@ class DocumentEmitter:
     # -- promoting ---------------------------------------------------------
 
     def promote(self) -> tuple[str, ...]:
-        """Move everything staged into place, one atomic replace at a time."""
+        """Move everything staged into place, one atomic replace at a time.
+
+        **The manifest goes last.** Sorted, ``documents/`` < ``manifest.json``
+        < ``traces/``, so a crash between the second and the third left a
+        manifest describing maps that were not there yet -- a corpus whose
+        account of itself was ahead of it. Promoted last, a crash at any point
+        leaves the old manifest describing the old corpus, and the next run's
+        `retain()` finds the half-promoted documents not matching it and
+        converts them again.
+        """
         moved: list[str] = []
-        for relative in sorted(self._staged):
+        ordered = sorted(self._staged, key=lambda relative: (relative == MANIFEST, relative))
+        for relative in ordered:
             source = self.staging / relative
             target = self.destination / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             source.replace(target)
             moved.append(relative)
+        for document, modified_at in self._retimed:
+            with contextlib.suppress(OSError):  # a filesystem, not a state
+                os.utime(document, (modified_at, modified_at))
         self.discard()
         return tuple(moved)
 
@@ -241,6 +262,7 @@ class DocumentEmitter:
         if self.staging.exists():
             shutil.rmtree(self.staging)
         self._staged = []
+        self._retimed = []
 
     @property
     def staged(self) -> tuple[str, ...]:
@@ -264,11 +286,18 @@ class DocumentEmitter:
         return self.previous().written
 
     def previous(self) -> Previous:
-        """The corpus as the last run left it: its id, its hashes, its paths.
+        """The corpus as the last run left it: its id, its hashes, its paths --
+        and everything a run that converts nothing would still have to say.
 
-        One read of one file. Withdrawal wants the paths and the journal wants
-        the run id and the hashes ([ADR-0034]), and two readers of the same
-        document are two things to keep in step.
+        One read of one file. Withdrawal wants the paths, the journal wants
+        the run id and the hashes ([ADR-0034]), and the incremental path wants
+        each artefact's record and source hash ([ADR-0036]). Three readers of
+        the same document are three things to keep in step.
+
+        The records are rebuilt from the manifest's own fields, which is the
+        reverse of `render()`. A field this cannot read makes the artefact
+        unretainable rather than the run fail: an older manifest is a reason
+        to convert, not a reason to stop.
         """
         body = self._previous_manifest()
         if body is None:
@@ -276,23 +305,70 @@ class DocumentEmitter:
 
         hashes: dict[str, str] = {}
         written: set[str] = set()
-        for artefact in body.get("artefacts") or []:
-            path = artefact.get("path")
+        retained: dict[str, Retained] = {}
+        removals = _grouped(body.get("removals"), _removal_from)
+        findings = _grouped(body.get("findings"), _finding_from)
+        for entry in body.get("artefacts") or []:
+            path = entry.get("path")
             if isinstance(path, str) and path:
                 written.add(path)
-                digest = artefact.get("content_hash")
+                digest = entry.get("content_hash")
                 if isinstance(digest, str) and digest:
                     hashes[path] = digest
-            trace = artefact.get("trace_map")
+            trace = entry.get("trace_map")
             if isinstance(trace, str) and trace:
                 written.add(trace)
+            artefact = _artefact_from(entry)
+            if artefact is not None and artefact.source_hash:
+                retained[artefact.unit_key] = Retained(
+                    artefact=artefact,
+                    removals=removals.get(artefact.unit_key, ()),
+                    findings=findings.get(artefact.unit_key, ()),
+                )
 
         run_id = body.get("run_id")
         return Previous(
             run_id=run_id if isinstance(run_id, str) and run_id else None,
             artefacts=hashes,
             written=frozenset(written),
+            decided_by={
+                "musubi": body.get("musubi_version"),
+                "rulesets": [
+                    (ruleset.get("id"), ruleset.get("version"))
+                    for ruleset in body.get("rulesets") or []
+                ],
+                "screener": body.get("screener"),
+                "emitter": body.get("emitter"),
+                "allowed": sorted(body.get("allowed") or []),
+            },
+            retained=retained,
         )
+
+    def retain(self, artefact: Artefact, modified_at: float | None = None) -> bool:
+        """Is this artefact still on the disk exactly as the manifest says?
+
+        Both files, and the document by its hash. Hashing it means reading it,
+        which is a cost the incremental path pays on purpose: the alternative
+        is trusting that nothing touched the corpus since the manifest was
+        written, and `musubi verify` exists because that is not a thing to
+        trust ([ADR-0036]).
+
+        The source's timestamp is noted and **applied at promotion**, not here.
+        A note whose bytes did not change and whose mtime did still owes the
+        corpus the new date ([ADR-0022]) -- but a run that later refuses must
+        have touched nothing in the destination, and a timestamp is a touch.
+        """
+        document = self.destination / artefact.path
+        sidecar = self.destination / artefact.trace_path
+        if not _inside(document, self._resolved_destination) or not sidecar.is_file():
+            return False
+        try:
+            holds = content_hash(document.read_bytes()) == artefact.content_hash
+        except OSError:
+            return False
+        if holds and modified_at is not None:
+            self._retimed.append((document, modified_at))
+        return holds
 
     def append_journal(self, entry: Entry) -> None:
         """Add one line to the corpus's history.
@@ -423,3 +499,82 @@ def _prune(directory: Path, stop: Path) -> None:
         except OSError:
             return
         directory = directory.parent
+
+
+# -- reading a manifest back ------------------------------------------------
+#
+# The reverse of `domain.manifest.render`, kept beside the writer of the same
+# layout rather than in the domain: the domain renders manifests and does not
+# read them, and a reader that reconstructs the producer's object can only see
+# what the object can represent. `verify` reads the raw document for exactly
+# that reason. This reads it into records because a run carrying an artefact
+# forward has to hand the pipeline the same type a conversion would have.
+
+
+def _artefact_from(entry: Mapping[str, Any]) -> Artefact | None:
+    """One artefact record, or ``None`` for one this cannot read whole."""
+    source = entry.get("source")
+    if not isinstance(source, Mapping):
+        return None
+    try:
+        return Artefact(
+            path=_string(entry, "path"),
+            content_hash=_string(entry, "content_hash"),
+            trace_path=_string(entry, "trace_map"),
+            source_id=_string(source, "source_id"),
+            unit_key=_string(source, "unit_key"),
+            converter=_string(entry, "converter"),
+            traceable_characters=int(entry["traceable_characters"]),
+            characters=int(entry["characters"]),
+            layer=_string(entry, "layer"),
+            source_hash=str(source.get("content_hash") or ""),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _removal_from(entry: Mapping[str, Any]) -> RemovalRecord:
+    span = entry["span"]
+    return RemovalRecord(
+        rule=_string(entry, "rule"),
+        kind=_string(entry, "kind"),
+        span=Span(int(span[0]), int(span[1])),
+        removed_characters=int(entry["removed_characters"]),
+        removed_hash=_string(entry, "removed_sha256"),
+    )
+
+
+def _finding_from(entry: Mapping[str, Any]) -> Finding:
+    # The manifest carries no span and no length, on purpose ([ADR-0019]). A
+    # finding read back has an empty span, and the only thing a run does with
+    # one it carried forward is write it back out the same way.
+    return Finding(
+        rule=_string(entry, "rule"),
+        label=_string(entry, "label"),
+        span=Span(0, 0),
+        matched_characters=0,
+        matched_hash=_string(entry, "matched_sha256"),
+    )
+
+
+def _grouped[T](
+    entries: object, read: Callable[[Mapping[str, Any]], T]
+) -> dict[str, tuple[T, ...]]:
+    """Records by the unit key they name, in the order the manifest has them."""
+    grouped: dict[str, list[T]] = {}
+    if isinstance(entries, list):
+        for entry in entries:
+            if not isinstance(entry, Mapping):
+                continue
+            try:
+                grouped.setdefault(_string(entry, "unit_key"), []).append(read(entry))
+            except (KeyError, TypeError, ValueError):
+                continue
+    return {key: tuple(records) for key, records in grouped.items()}
+
+
+def _string(entry: Mapping[str, Any], key: str) -> str:
+    value = entry[key]
+    if not isinstance(value, str):
+        raise TypeError(f"{key} is not a string")
+    return value
