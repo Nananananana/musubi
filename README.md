@@ -58,6 +58,7 @@ until a setting names it:
 pip install "musubi[html] @ git+..."       # trafilatura: main-content extraction
 pip install "musubi[pdf] @ git+..."        # pdfium: reads PDF 1.5 object streams
 pip install "musubi[encoding] @ git+..."   # reads Shift-JIS, EUC-JP, Latin-1
+pip install "musubi[arrow] @ git+..."      # pyarrow: `export --format parquet`
 ```
 
 ## Three commands
@@ -68,8 +69,10 @@ musubi sync   ~/notes --into ./corpus   # builds it, or refuses and builds nothi
 musubi export ./corpus > corpus.jsonl   # one JSON object per document
 ```
 
-`corpus.jsonl` loads straight into LangChain, LlamaIndex, Hugging Face
-`datasets` or any vector store — and carries an **id that survives a re-sync**,
+`corpus.jsonl` loads straight into LangChain, LlamaIndex, Haystack, Hugging
+Face `datasets` or any vector store -- `--format parquet` writes the same rows
+as one table for pandas, polars and DuckDB, and `musubi.documents()` hands them
+over in Python one at a time — and carries an **id that survives a re-sync**,
 so an upsert updates rather than duplicates.
 [`docs/using-a-corpus.md`](docs/using-a-corpus.md) is the whole of it.
 

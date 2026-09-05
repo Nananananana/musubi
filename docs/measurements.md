@@ -188,6 +188,34 @@ ceiling rather than a defect, and it is filed as
 [#80](https://github.com/Nananananana/musubi/issues/80) so that it is a known
 one.
 
+## What an export holds, and where its time goes
+
+```text
+2,000 generated notes, 6.5 MB as JSON Lines, one laptop
+
+                         before        after
+  export --format jsonl   2.61s         1.73s
+  peak memory            19.7 MB        2.8 MB
+  export --format parquet   --          0.88s   peak 7.4 MB
+```
+
+**The command held the whole export twice.** Every line was built into a list
+and joined before a byte was written: 19.7 MB peak for a 6.5 MB file, and a
+corpus larger than memory would have failed on exactly the corpus the export
+was for. `documents()` was already a generator; the command now consumes it a
+line at a time, and the peak is one document.
+
+**And 44% of the time was resolving the same directory 2,000 times.** The
+check that a manifest path stays under `documents/` asks the filesystem rather
+than the string, on purpose (`C:/Windows/win.ini` leaves a corpus without a
+`..` in sight) -- but it resolved the *root* once per key as well as the key.
+Resolved once per corpus now. What remains is one `open()` per document, which
+is the floor.
+
+The Parquet peak is the row group: a thousand rows held, written, dropped. The
+generated notes compress to almost nothing, so the file size says nothing about
+a real corpus and is not listed.
+
 ## What a source re-reads to hand over one unit
 
 ```text

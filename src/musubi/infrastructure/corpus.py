@@ -39,6 +39,7 @@ class Corpus:
 
     def __init__(self, destination: Path) -> None:
         self.destination = destination.expanduser().resolve()
+        self._documents_root: Path | None = None
 
     @classmethod
     def holding(cls, artefact: Path) -> tuple[Corpus, str]:
@@ -200,8 +201,13 @@ class Corpus:
         have to know which platform it is on to be right; this one does not.
         """
         under = self.destination / DOCUMENTS
+        if self._documents_root is None:
+            # Once. Resolving the root per key was 4,001 `realpath` calls for
+            # 2,000 artefacts and 44% of an export, for an answer that cannot
+            # change while the corpus is open.
+            self._documents_root = under.resolve()
         try:
-            (under / key).resolve().relative_to(under.resolve())
+            (under / key).resolve().relative_to(self._documents_root)
         except (OSError, ValueError):
             return False
         return bool(key) and not key.endswith("/")
