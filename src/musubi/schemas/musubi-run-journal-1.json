@@ -15,7 +15,9 @@
     "added",
     "changed",
     "removed",
-    "unchanged"
+    "unchanged",
+    "hashes",
+    "previous"
   ],
   "additionalProperties": false,
   "properties": {
@@ -73,6 +75,22 @@
       "description": "How many artefacts this run left exactly as it found them. A count and not a list, and that is what keeps a journal growing with the work rather than with the corpus: naming every untouched artefact would make a hundred runs of ten thousand documents a history larger than the thing it describes.",
       "type": "integer",
       "minimum": 0
+    },
+    "hashes": {
+      "description": "What each path holds AFTER this run: every added and changed path, and nothing else. A removed path holds nothing, which is why the two maps are separate -- one map carrying after-hashes for some paths and before-hashes for others cannot answer what a changed path used to hold, and a fold over a range then reports a document edited and edited back as changed. See docs/contracts.md.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "previous": {
+      "description": "What each path held BEFORE this run: every changed and removed path. The before-hash of a removed artefact is the last thing known about it and is what makes a rename legible -- a removed path and an added path holding the same hash are one document that moved, which a journal of paths alone cannot tell from a deletion that happened to coincide with an unrelated new file. A line written before these fields existed omits them, and a reader that meets one should fall back to the verbs rather than reject the line: a history spanning the change has both kinds.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
     }
   }
 }

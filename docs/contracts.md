@@ -176,11 +176,28 @@ where all of this contract's content is.
    checked on read rather than trusted, because a line that can name a
    different run than its own fields describe is a history that can lie about
    which corpus it is the history of.
-4. **Only a `sync` appends.** A run that refused writes nothing, including
+4. **`hashes` and `previous` are the two sides of every path the line names.**
+   `hashes` holds what an `added` or `changed` path is now; `previous` holds
+   what a `changed` or `removed` path was. A removed path has no `hashes`
+   entry, because it holds nothing. **The last hash the history recorded for a
+   path is what `manifest.json` says that artefact hashes to** — `musubi
+   verify` checks it (`journal 3`), and a disagreement means the corpus and its
+   history were assembled from different moments.
+5. **A line's `previous` agrees with the history before it.** What a line says
+   a path held before it is what the last line to name that path said it came
+   to hold. `musubi verify` checks it (`journal 4`); it is the one fault a
+   reader of the history alone can find, and what a line edited by hand looks
+   like.
+6. **A line written before `hashes` and `previous` existed omits them.** A
+   reader that meets one falls back to the verbs rather than rejecting the
+   line: a history spanning [ADR-0035](adr/0035-what-content-addressing-buys-and-where-it-stops.md)
+   has entries of both kinds, and refusing the older ones turns a history with
+   less detail in its early part into no history at all.
+7. **Only a `sync` appends.** A run that refused writes nothing, including
    here — [ADR-0008](adr/0008-a-credential-stops-the-run.md) is fail-closed and
    the journal is inside that promise. An entry for a run that then refused
    would claim a corpus that was never built.
-5. **A corpus with no `runs.jsonl` is not invalid.** One written before
+8. **A corpus with no `runs.jsonl` is not invalid.** One written before
    [ADR-0034](adr/0034-a-corpus-that-remembers-what-it-was.md) keeps no history
    and is otherwise sound. Absent is a different thing from broken.
 
@@ -199,13 +216,27 @@ opposite, and a consumer who assumes a corpus can be rewound will build
 something on an assumption musubi never made. Two consequences follow directly
 from it and are part of the contract:
 
-- **A `removed` path is gone.** The entry records that it left. Nothing keeps a
-  copy.
-- **A path that was removed and later added back is reported by `musubi diff`
-  as `changed`,** even when the bytes came back identical. The journal knows it
-  left and knows it returned; it does not keep the bytes, so *changed* is the
-  claim that is never false about the corpus's history where *unchanged* could
-  be. A consumer folding entries itself should make the same choice.
+- **A `removed` path is gone.** The entry records that it left, and what it
+  hashed to when it did. Nothing keeps a copy.
+- **A move is inferred from the bytes, not observed.** A `removed` path and an
+  `added` path holding the same hash are reported as one document that moved,
+  and the report says `(same bytes)` rather than *renamed* — because that is
+  the claim that is true. musubi does not watch the filesystem and cannot see
+  a `mv`. A pair is only made where the hash matches exactly one path on each
+  side; two files with identical content are not evidence about which became
+  which, and they stay in `added` and `removed`.
+
+A move is also what `musubi log --path` and `musubi blame` follow: a
+document's history continues under the name it had before, and `blame` lists
+those names as `formerly`. Both are following an inference, and `--no-follow`
+asks about the one name alone.
+
+Folding a range of entries is **exact** where every line in it carries the
+hashes: a document removed and restored unchanged, or edited and edited back,
+comes out as no change at all, which is what comparing the two end states
+gives. Where a line does not carry them, those paths fall back to `changed` —
+the claim that is never false — and the answer is marked inexact. A consumer
+folding entries itself should make the same two choices.
 
 And one thing the journal deliberately does **not** contain: the corpus. An
 entry names what moved and *counts* what did not. Listing every untouched
