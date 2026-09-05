@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from ... import __version__
-from ...application.export import SHAPES, as_line, documents
+from ...application.export import SHAPES, documents, write, write_parquet
 from ...application.pipeline import Outcome, Settings, run
 from ...application.sync import Synced, empties_the_corpus, sync, withdrawals
 from ...application.trace import Resolution, resolve
@@ -196,9 +196,13 @@ def _parser() -> argparse.ArgumentParser:
     exporting.add_argument(
         "--format",
         dest="shape",
-        choices=sorted(SHAPES),
+        choices=[*sorted(SHAPES), "parquet"],
         default="jsonl",
-        help="which field names to use (default: jsonl). The shapes differ by one key",
+        help=(
+            "which field names to use (default: jsonl). The JSON Lines shapes differ "
+            "by the names of keys; parquet is one table with the same columns and "
+            "needs --out and musubi[arrow]"
+        ),
     )
     exporting.add_argument(
         "--out",
@@ -974,29 +978,35 @@ def _export(arguments: argparse.Namespace) -> int:
     through a `cp932` terminal produced a file that was not valid UTF-8 with
     exit 0 and no error. The count goes to standard error, so that a pipe gets
     the document and a person still gets the report.
+
+    One document at a time, in every format. The corpus is not held.
     """
     corpus = Corpus(arguments.destination)
-    lines = [
-        as_line(record, arguments.shape)
-        for record in documents(corpus, str(arguments.destination.resolve()))
-    ]
-    body = "".join(lines).encode("utf-8")
+    records = documents(corpus, str(arguments.destination.resolve()))
 
-    if arguments.out is None:
+    if arguments.shape == "parquet":
+        if arguments.out is None:
+            raise ContractError(
+                "parquet is a seekable format and cannot be written to a pipe; give it "
+                "a file with --out"
+            )
+        count = write_parquet(records, arguments.out)
+    elif arguments.out is None:
         sys.stdout.flush()
-        sys.stdout.buffer.write(body)
+        count = write(records, sys.stdout.buffer, arguments.shape)
         sys.stdout.buffer.flush()
     else:
         arguments.out.parent.mkdir(parents=True, exist_ok=True)
-        arguments.out.write_bytes(body)
+        with arguments.out.open("wb") as sink:
+            count = write(records, sink, arguments.shape)
 
     where = arguments.out if arguments.out is not None else "standard output"
     print(
-        f"musubi export — {len(lines)} documents, {arguments.shape} shape, to {where}",
+        f"musubi export — {count} documents, {arguments.shape} shape, to {where}",
         file=sys.stderr,
     )
     print(
-        "  every line carries trace_map and corpus, so a citation can be traced back",
+        "  every row carries trace_map and corpus, so a citation can be traced back",
         file=sys.stderr,
     )
     return 0
