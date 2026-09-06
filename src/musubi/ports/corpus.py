@@ -93,6 +93,15 @@ class CorpusReader(Protocol):
         """
         ...
 
+    def files(self) -> frozenset[str]:
+        """Every file this corpus holds under `documents/` and `traces/`.
+
+        Corpus-relative, `/`-separated. For the one question a manifest cannot
+        answer about itself: is there anything here it does not name
+        ([ADR-0040])?
+        """
+        ...
+
     def artefact_bytes(self, key: str) -> bytes:
         """The document as bytes, for hashing it as it sits on the disk."""
         ...

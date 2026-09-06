@@ -37,6 +37,7 @@ author is laundering.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from .span import Span
@@ -50,6 +51,7 @@ __all__ = [
     "block_of",
     "replacements",
     "stated_keys",
+    "title_of",
 ]
 
 #: The kind carried by everything this module inserts. It becomes a
@@ -110,6 +112,48 @@ def _bare(name: str, value: str) -> None:
         raise ValueError(f"{name} must be a bare single-line value, not {value!r}")
     if "\n" in value or "\r" in value:
         raise ValueError(f"{name} contains a line break, and the reader takes one line per key")
+
+
+#: A Markdown heading, at any level, with something after the hashes.
+_HEADING = re.compile(r"^#{1,6}[ \t]+(\S.*?)[ \t]*$", re.M)
+
+#: `key: value` on one line, which is the whole of what the reader parses.
+_STATED = re.compile(r"^([^:\n]+):[ \t]*(.*?)[ \t]*$", re.M)
+
+
+def title_of(text: str) -> str | None:
+    """What this document calls itself, or ``None``.
+
+    Asked for by an orchestrator putting a citation on a screen (R7): the
+    artefact's path is `feed/2026-09-05/a1b2.html`, which is not a name a
+    person reads. Without this it would open every document and take the first
+    line -- **the manifest guessing done by somebody who cannot see the front
+    matter**, which is the thing a manifest exists to prevent.
+
+    In order: the document's own front-matter `title`, then its first heading,
+    then nothing.
+
+    ``None`` and never ``""``. A document that states `title:` with nothing
+    after it has said something -- that it has no title -- and a document that
+    says nothing has not. A caller that cannot tell them apart falls back for
+    the wrong one.
+
+    The heading rule is the reader's rule. `tsumugi` takes a title from the
+    first heading when front matter does not give one, so a musubi corpus and
+    its consumer name the same document the same way by agreement rather than
+    by luck.
+    """
+    block = block_of(text)
+    if block is not None:
+        for key, value in _STATED.findall(block.slice(text)):
+            if key.strip() == "title":
+                return value or None
+        body = text[block.end :]
+    else:
+        body = text
+
+    found = _HEADING.search(body)
+    return found.group(1) if found else None
 
 
 def block_of(text: str) -> Span | None:

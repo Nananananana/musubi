@@ -55,6 +55,11 @@ class Previous:
     #: Every path the last run recorded writing, documents and trace maps both.
     #: This is what withdrawal is allowed to delete.
     written: frozenset[str]
+    #: Every path the last run recorded **taking back out**. Read because a run
+    #: that promoted its manifest and died before deleting them would otherwise
+    #: leave them in the corpus for ever: the new manifest does not list them,
+    #: so no later run would ever consider them again ([ADR-0040]).
+    withdrawn: frozenset[str] = frozenset()
     #: Everything that decided the last run's outputs other than the bytes:
     #: `musubi`, `rulesets`, `screener`, `emitter`, `allowed`, as the manifest
     #: recorded them. A run whose own values differ in any of these converts

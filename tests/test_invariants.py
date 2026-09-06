@@ -48,7 +48,7 @@ from musubi.domain.span import Span
 from musubi.domain.text import decode
 from musubi.domain.trace import CHARACTERS, Kind, Segment, TraceMap
 from musubi.infrastructure.converters import converter_for
-from musubi.infrastructure.emitters import MANIFEST, TRACES, DocumentEmitter
+from musubi.infrastructure.emitters import DOCUMENTS, MANIFEST, TRACES, DocumentEmitter
 from musubi.infrastructure.emitters.documents import JOURNAL
 from musubi.infrastructure.rules import CORE
 from musubi.infrastructure.screeners import default_screener
@@ -442,6 +442,52 @@ def test_manifest_5_the_source_hash_is_the_one_the_map_carries(
         for artefact in manifest_of(into)["artefacts"]:
             body = json.loads((into / artefact["trace_map"]).read_text(encoding="utf-8"))
             assert artefact["source"]["content_hash"] == body["source"]["content_hash"]
+    finally:
+        shutil.rmtree(into.parent, ignore_errors=True)
+
+
+@CORPUS
+@given(a_vault())
+def test_manifest_6_the_corpus_holds_nothing_the_manifest_does_not_name(
+    files: dict[str, bytes],
+) -> None:
+    """Asked of the disk rather than of the manifest, which is the only way to
+    see a corpus *larger* than its own account ([ADR-0040]). A file nothing
+    exports and everything walking the folder indexes."""
+    _, into, _ = build(files)
+    try:
+        named = set()
+        for artefact in manifest_of(into)["artefacts"]:
+            named.add(artefact["path"])
+            named.add(artefact["trace_map"])
+        on_disk = {
+            path.relative_to(into).as_posix()
+            for folder in (DOCUMENTS, TRACES)
+            for path in (into / folder).rglob("*")
+            if path.is_file()
+        }
+        assert on_disk == named
+    finally:
+        shutil.rmtree(into.parent, ignore_errors=True)
+
+
+@CORPUS
+@given(a_vault())
+def test_manifest_7_withdrawn_is_written_before_the_files_are_deleted(
+    files: dict[str, bytes],
+) -> None:
+    """The intent, so that a run interrupted between recording and deleting
+    leaves something for the next one to finish ([ADR-0040]).
+
+    Checked here as the property a consumer may rely on: what `withdrawn`
+    names is gone by the time the run returns. `tests/test_crash_and_title.py`
+    is where the interruption itself is exercised.
+    """
+    _, into, result = build(files)
+    try:
+        assert list(manifest_of(into)["withdrawn"]) == list(result.withdrawn)
+        for path in result.withdrawn:
+            assert not (into / path).exists()
     finally:
         shutil.rmtree(into.parent, ignore_errors=True)
 

@@ -121,6 +121,9 @@ def verify(corpus: CorpusReader) -> Verified:
     faults.extend(_source_units_are_the_ones_the_artefacts_state(document, entries))
 
     checks += 1
+    faults.extend(_nothing_here_the_manifest_does_not_name(corpus, entries))
+
+    checks += 1
     faults.extend(_journal_agrees(corpus, document))
 
     for entry in entries:
@@ -167,6 +170,35 @@ def _source_units_are_the_ones_the_artefacts_state(
             )
         ]
     return []
+
+
+def _nothing_here_the_manifest_does_not_name(
+    corpus: CorpusReader, entries: list[dict[str, Any]]
+) -> list[Fault]:
+    """The corpus holds nothing its own account leaves out.
+
+    Every other check asks whether what the manifest names is here. This asks
+    the other way, and it is the only one that can see a corpus **larger** than
+    its account of itself ([ADR-0040]).
+
+    A run that promoted its manifest and died before finishing its withdrawal
+    left exactly this: a document the manifest does not list, invisible to
+    `musubi export`, and indexed by any consumer that walks the folder -- so a
+    note the owner deleted goes on answering questions. `sync` now finishes an
+    interrupted withdrawal; this is what says so when something else did it.
+    """
+    named = {str(entry.get("path", "")) for entry in entries}
+    named |= {str(entry.get("trace_map", "")) for entry in entries}
+    orphans = sorted(corpus.files() - named)
+    return [
+        Fault(
+            "manifest 6",
+            path,
+            "is in the corpus and not in the manifest: nothing exports it and "
+            "anything walking the folder indexes it",
+        )
+        for path in orphans
+    ]
 
 
 # -- journal ---------------------------------------------------------------

@@ -83,6 +83,11 @@ class Artefact:
     #: `opaque` for a converter whose source has no decoded text ([ADR-0025]).
     #: In the manifest as well as in the map, because a reader deciding whether
     #: two coverage numbers may be added had to open every sidecar to find out.
+    #: What the document calls itself, or ``None`` where it says nothing.
+    #: Never ``""``: a document that states an empty title has said something
+    #: and one that says nothing has not, and a caller that cannot tell them
+    #: apart falls back for the wrong one ([ADR-0040]).
+    title: str | None = None
     source_unit: str = CHARACTERS
     #: `answer_width`'s numerator: how much source the map hands back, summed
     #: over every traceable character, in `source_unit`. Published so that a
@@ -365,6 +370,7 @@ def render(manifest: Manifest) -> str:
                 },
                 "converter": artefact.converter,
                 "layer": artefact.layer,
+                "title": artefact.title,
                 "characters": artefact.characters,
                 "traceable_characters": artefact.traceable_characters,
                 "source_unit": artefact.source_unit,

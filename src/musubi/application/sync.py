@@ -78,7 +78,12 @@ def sync(
     of it. ``withdraw_all`` is the operator saying they have looked.
     """
     before = emitter.previous()
-    held = before.written
+    # Plus what the last run said it was taking out. A run that promoted its
+    # manifest and died before deleting them left them on the disk and out of
+    # the manifest, so nothing would ever have looked at them again -- and a
+    # corpus that keeps a document its owner deleted is the thing withdrawal
+    # exists to prevent ([ADR-0040]).
+    held = before.written | before.withdrawn
 
     emitter.begin()
     outcome = run(source, settings, emitter, write=True, previous=before)

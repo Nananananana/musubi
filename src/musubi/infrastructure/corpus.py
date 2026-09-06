@@ -182,6 +182,24 @@ class Corpus:
                 )
         return tuple(entries)
 
+    def files(self) -> frozenset[str]:
+        """Every file under `documents/` and `traces/`, corpus-relative.
+
+        The staging area is not among them: it is musubi's own, and a run that
+        died while staging leaves one behind for the next `begin()` to clear.
+        """
+        found: set[str] = set()
+        for folder in (DOCUMENTS, TRACES):
+            root = self.destination / folder
+            if not root.is_dir():
+                continue
+            found |= {
+                path.relative_to(self.destination).as_posix()
+                for path in root.rglob("*")
+                if path.is_file()
+            }
+        return frozenset(found)
+
     def artefact_bytes(self, key: str) -> bytes:
         return (self.destination / DOCUMENTS / key).read_bytes()
 

@@ -165,6 +165,17 @@ turn them from *checked on these examples* into *checked at all*.
    ([ADR-0036](adr/0036-a-unit-whose-bytes-did-not-change-is-not-converted-again.md)).
    Optional, because a manifest written before it omits it — and a reader
    infers nothing from its absence except that the run was older.
+6. **The corpus holds nothing the manifest does not name.** Every file under
+   `documents/` and `traces/` appears as an artefact's `path` or `trace_map`.
+   `musubi verify` checks it, and it is the only check that can see a corpus
+   **larger** than its own account: a document nothing exports and everything
+   walking the folder indexes
+   ([ADR-0040](adr/0040-a-corpus-says-what-it-holds-and-what-it-is-called.md)).
+7. **`withdrawn` is an intent as well as a record.** It is written into the
+   manifest before the files are deleted, so a run interrupted between the two
+   leaves the intent behind — and the next run reads it and finishes the job.
+   A consumer reading `withdrawn` is reading what the run meant to remove,
+   which is what it removed unless it was killed in that window.
 
 ### The run journal
 
@@ -253,6 +264,23 @@ entry names what moved and *counts* what did not. Listing every untouched
 artefact would make a hundred runs over ten thousand documents a history larger
 than the thing it describes, which is the difference between a feature that
 works on a real corpus and one that only works in a demonstration.
+
+### `title`, and why `null` is not `""`
+
+An artefact's `title` is the document's own front-matter `title`, or its first
+heading, or `null`. It is what the document **says it is called**, repeated —
+not a fact musubi established about it. A note whose first heading is `# TODO`
+is titled `TODO` here.
+
+`null` and the empty string are different answers and a consumer must not
+collapse them. A document that states `title:` with nothing after it has said
+something; a document that says nothing has not. A reader falling back to
+another name — a host name, a filename — should fall back for the second and
+not the first.
+
+The heading rule is the consumer's own: `tsumugi` takes a title from the first
+heading when front matter does not give one, so a corpus and its reader name
+the same document the same way by agreement rather than by coincidence.
 
 ### Answer width, and when there is no such number
 
