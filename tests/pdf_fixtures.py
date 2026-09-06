@@ -27,7 +27,23 @@ import io
 import struct
 import zlib
 
-__all__ = ["FIRST_LINE", "SECOND_LINE", "classic", "modern", "scanned"]
+__all__ = [
+    "COLUMNS",
+    "COLUMNS_READ",
+    "FIRST_LINE",
+    "SECOND_LINE",
+    "TABLE",
+    "TABLE_READ",
+    "VERTICAL",
+    "VERTICAL_READ",
+    "a_table",
+    "classic",
+    "composite",
+    "modern",
+    "scanned",
+    "two_columns",
+    "vertical",
+]
 
 FIRST_LINE = "The gear list"
 SECOND_LINE = "A tent that weighs 2.4kg"
@@ -154,3 +170,164 @@ def modern() -> bytes:
     )
     out.write(b"startxref\n%d\n%%%%EOF\n" % table)
     return out.getvalue()
+
+
+# -- fixtures whose right answer is written down ----------------------------
+#
+# Everything above answers *did it read at all*. These answer *did it read the
+# document*, which is a different question and the one nothing in this
+# repository could ask ([ADR-0039], #85).
+#
+# Each one states its correct reading as a constant, so a test compares output
+# against an answer rather than against whatever the converter did last time.
+# A fixture whose right answer nobody can state measures nothing.
+
+#: A two-column page, and the order a person reads it in.
+COLUMNS: tuple[tuple[str, ...], tuple[str, ...]] = (
+    ("Tents and poles", "weigh two point four", "kilograms in total"),
+    ("Stoves and fuel", "weigh one point one", "kilograms in total"),
+)
+
+#: What a reader of `two_columns()` gets: the left column, then the right.
+COLUMNS_READ = "\n".join((*COLUMNS[0], *COLUMNS[1]))
+
+#: A three-by-two table, as rows.
+TABLE: tuple[tuple[str, str], ...] = (
+    ("Item", "Mass"),
+    ("Tent", "2.4kg"),
+    ("Stove", "1.1kg"),
+)
+
+#: What a reader of `a_table()` gets: each row, left cell then right.
+TABLE_READ = "\n".join(f"{left} {right}" for left, right in TABLE)
+
+#: Columns that run **right to left**, as 縦書き does.
+#:
+#: The text is ASCII on purpose, and that is the honest half of this fixture.
+#: Setting real Japanese needs a composite font, whose bytes are glyph indices
+#: rather than characters -- so a fixture with 縦書き *text* would be measuring
+#: `composite()` below and not reading order at all. The first draft of this
+#: did exactly that: it wrote UTF-8 into a Helvetica string, stated an answer
+#: no correct reader could produce from those bytes, and would have recorded
+#: its own mistake as musubi's.
+#:
+#: What is left is the geometry, which is what reading order is about.
+VERTICAL: tuple[str, ...] = ("first column", "second column", "third column")
+
+#: What a reader of `vertical()` gets: the rightmost column first.
+VERTICAL_READ = "\n".join(VERTICAL)
+
+
+def _shown(text: str) -> bytes:
+    """One string, as a PDF literal, in the encoding a simple font uses."""
+    escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    return b"(" + escaped.encode("utf-8") + b") Tj"
+
+
+def two_columns() -> bytes:
+    """Two columns, written **across the page** the way a typesetter lays them.
+
+    The content stream places the left cell of a line, then the right cell of
+    the same line, then moves down. That is what a producer emitting by
+    baseline writes, and it is why reading order is not stream order: a scanner
+    that takes the strings in the order it meets them interleaves the columns
+    and produces prose that is not in the document.
+
+    The coordinates say which column each run is in, and that is the whole of
+    the information a correct reader needs. `COLUMNS_READ` is the answer.
+    """
+    lines = [b"BT /F1 12 Tf 72 720 Td"]
+    for row, (left, right) in enumerate(zip(*COLUMNS, strict=True)):
+        if row:
+            lines.append(b"-260 -16 Td")
+        lines.append(_shown(left))
+        lines.append(b"260 0 Td")
+        lines.append(_shown(right))
+    lines.append(b"ET")
+    return _paged(b" ".join(lines))
+
+
+def a_table() -> bytes:
+    """A table written **column by column**, which is the other way round.
+
+    A producer that emits a table cell by cell down each column writes every
+    `Item`, then every `Mass`. Reading order is by row, so a scanner that takes
+    stream order pairs the wrong cells: `TABLE_READ` is the answer, and stream
+    order gives the headers of one column followed by the headers of the next.
+    """
+    lines = [b"BT /F1 12 Tf 72 720 Td"]
+    for column, cells in enumerate(zip(*TABLE, strict=True)):
+        if column:
+            lines.append(b"200 %d Td" % (16 * len(TABLE)))
+        for row, cell in enumerate(cells):
+            if row:
+                lines.append(b"0 -16 Td")
+            lines.append(_shown(cell))
+    lines.append(b"ET")
+    return _paged(b" ".join(lines))
+
+
+def vertical() -> bytes:
+    """Columns that run right to left, as 縦書き does.
+
+    Written **left to right** in the stream, because nothing stops a producer
+    doing that and the coordinates are what say otherwise. `VERTICAL_READ` is
+    the answer: the rightmost column first, which is the reverse of the order
+    the strings appear in the file.
+    """
+    lines = [b"BT /F1 12 Tf 200 720 Td"]
+    for column, text in enumerate(reversed(VERTICAL)):
+        if column:
+            lines.append(b"100 0 Td")
+        lines.append(_shown(text))
+    lines.append(b"ET")
+    return _paged(b" ".join(lines))
+
+
+def composite() -> bytes:
+    """A page whose font is `Type0` / `Identity-H`: the CJK and subset-font case.
+
+    **There is no right answer to state, and that is the point.** Under a
+    composite font a shown string holds *glyph indices*, and the map from those
+    to characters is in the font's `ToUnicode` CMap. A reader without the CMap
+    has no way to know what the page says -- so the only correct behaviour is
+    to say so.
+
+    `pdf_text@1` did not. It read the indices as characters and produced
+    `NUL $ NUL % NUL & NUL '` -- the font's internal numbering, with NUL bytes,
+    written into a corpus document at full coverage ([ADR-0039]). This fixture
+    is what found that.
+    """
+    return _assembled(
+        {
+            1: b"<< /Type /Catalog /Pages 2 0 R >>",
+            2: b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            3: (
+                b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R "
+                b"/Resources << /Font << /F1 5 0 R >> >> >>"
+            ),
+            4: _stream(b"BT /F1 12 Tf 72 720 Td <0024002500260027> Tj ET"),
+            5: (
+                b"<< /Type /Font /Subtype /Type0 /BaseFont /KozMinPr6N-Regular "
+                b"/Encoding /Identity-H /DescendantFonts [6 0 R] /ToUnicode 7 0 R >>"
+            ),
+            6: b"<< /Type /Font /Subtype /CIDFontType0 /BaseFont /KozMinPr6N-Regular >>",
+            7: _stream(b"(a ToUnicode CMap no scanner reads)"),
+        }
+    )
+
+
+def _paged(content: bytes) -> bytes:
+    """One PDF 1.4 page holding this content stream."""
+    return _assembled(
+        {
+            1: b"<< /Type /Catalog /Pages 2 0 R >>",
+            2: b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            3: (
+                b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R "
+                b"/Resources << /Font << /F1 5 0 R >> >> >>"
+            ),
+            4: _stream(content),
+            5: b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        }
+    )

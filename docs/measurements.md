@@ -312,6 +312,54 @@ read numbers.
 
 ---
 
+## Reading order — every word, wrong order
+
+```text
+uv run python tools/reading_order.py
+fixtures whose correct reading is written down
+
+  fixture                  pdf_text@1   pdfium@1
+  two columns                  0.70       0.70
+  a table                      0.67       0.67
+  right-to-left columns        0.67       0.67
+```
+
+The ratio is how much of the known answer the reading is, by word. **Neither
+converter reads any of the three layouts correctly**, and the failure is the
+comfortable kind: every word of the document present, in an order that is not
+the document's, with every offset resolving and coverage unchanged.
+
+A producer laying out by baseline writes the left cell of a line and then the
+right cell of the same line; reading order is column by column. A table emitted
+cell by cell down each column pairs `Item` with `Tent` rather than with `Mass`.
+
+These are the first fixtures here whose **correct answer is written down**
+([ADR-0039](adr/0039-a-fixture-whose-answer-is-known-and-the-two-things-it-found.md)),
+which is what makes the number a measurement rather than an impression. They
+are built byte by byte, because a PDF whose right answer nobody can state
+measures nothing.
+
+Recorded rather than fixed: reading order needs geometry — clustering runs into
+columns and ordering the clusters — which is a converter and not a patch.
+`tests/test_reading_order.py` asserts the wrongness with the answer beside it,
+so the day it is fixed the tests go red.
+
+## A composite font was read as glyph numbers
+
+```text
+<0024002500260027> Tj   ->   "\x00$\x00%\x00&\x00'"
+```
+
+Under a `Type0` / `Identity-H` font the bytes a `Tj` shows are **glyph
+indices**, and the map to characters lives in the font's `ToUnicode` CMap.
+`pdf_text@1` does not read one, and read the indices as characters: the font's
+internal numbering, NUL bytes included, into a corpus document at 100%
+traceable coverage with nothing saying so.
+
+This is how every PDF holding Japanese encodes its text, and how most current
+producers encode a subsetted Latin font. It was found by the fixtures above and
+is now a refusal — `composite_font`, naming `musubi[pdf]`, which reads the CMap.
+
 ## Still owed
 
 - **Cleansing precision** — firings that removed something a corpus labels as

@@ -53,6 +53,7 @@ later ADR supersedes it and says so.
 | [0036](0036-a-unit-whose-bytes-did-not-change-is-not-converted-again.md) | A unit whose bytes did not change is not converted again |
 | [0037](0037-a-fetch-record-beside-the-page-is-a-fact-musubi-may-state.md) | A fetch record beside the page is a fact musubi may state |
 | [0038](0038-the-number-that-goes-up-when-the-guarantee-stops-holding.md) | The number that goes up when the guarantee stops holding |
+| [0039](0039-a-fixture-whose-answer-is-known-and-the-two-things-it-found.md) | A fixture whose answer is known, and the two things it found |
 
 [0004](0004-a-conversion-carries-a-map-back-to-its-source.md) is the one to read
 first. The rest of the design is arranged around it, and
