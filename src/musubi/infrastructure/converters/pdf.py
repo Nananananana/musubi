@@ -79,6 +79,17 @@ _STREAM = re.compile(rb"stream\r?\n(.*?)\r?\nendstream", re.S)
 #: `/Type /Page` but not `/Type /Pages`, which is the tree node above it.
 _PAGE = re.compile(rb"/Type\s*/Page(?![a-zA-Z])")
 
+#: A composite font. The bytes a `Tj` shows under one are **glyph indices**, not
+#: characters, and the map from those to Unicode lives in the font's `ToUnicode`
+#: CMap -- which this converter does not read.
+#:
+#: This is how every PDF holding Japanese, Chinese or Korean encodes its text,
+#: and how most current producers encode a subsetted Latin font too. Without the
+#: CMap, a four-glyph string came out as four control-and-punctuation characters
+#: -- **including NUL bytes** -- written into a corpus document at full
+#: coverage, with nothing anywhere saying so ([ADR-0039]).
+_COMPOSITE = re.compile(rb"/Subtype\s*/Type0(?![a-zA-Z])")
+
 #: `/Contents 4 0 R`, or `/Contents [4 0 R 5 0 R]`.
 _CONTENTS = re.compile(rb"/Contents\s*(\[[^\]]*\]|\d+\s+\d+\s+R)")
 _REFERENCE = re.compile(rb"(\d+)\s+\d+\s+R")
@@ -128,6 +139,19 @@ class PdfConverter:
             return Unconvertible("stream_too_large", str(refusal), self.name)
         if not pages:
             return Unconvertible("no_pages", "no page objects were found in the file", self.name)
+
+        if _COMPOSITE.search(content):
+            # Refused rather than read. Under a composite font the string bytes
+            # are glyph indices, so what this would produce is not the
+            # document's text in the wrong encoding -- it is the font's own
+            # numbering, printed as characters. A refusal naming the extra that
+            # does read it is an answer; mojibake at 100% coverage is not.
+            return Unconvertible(
+                "composite_font",
+                "the text is set in a composite (Type0) font, whose bytes are glyph "
+                "indices rather than characters; install musubi[pdf] to read it",
+                self.name,
+            )
 
         body: list[str] = []
         segments: list[Segment] = []

@@ -39,6 +39,20 @@ history the vault had.
 
 ---
 
+## PDFs with a composite font
+
+`pdf_text@1` **refuses** a PDF that declares a `Type0` font, with reason
+`composite_font`. Under one, the bytes a text operator shows are glyph indices
+rather than characters, and the map to characters is in the font's `ToUnicode`
+CMap, which this converter does not read.
+
+That covers every PDF holding Japanese, Chinese or Korean, and most current
+producers' subsetted Latin fonts. `pip install 'musubi[pdf]'` reads them, and
+the refusal names it
+([ADR-0039](adr/0039-a-fixture-whose-answer-is-known-and-the-two-things-it-found.md)).
+
+---
+
 ## `FetchedSource`
 
 `--as fetched`, or `source = "fetched"`. A folder of pages somebody fetched --
