@@ -136,7 +136,11 @@ Three read-only tools, and the one that matters is `musubi_trace`: an agent can
 convert a document and then **cite a range of it back to a place in your file**,
 in the same session. A string cannot be checked; a citation can.
 
-Rooted at the folder you name, and every path outside it is refused.
+Rooted at the folder you name, and every path outside it is refused. Hand
+`musubi_trace` a document from a corpus and it answers from the trace map, with
+one word first -- `resolved`, `synthetic`, `source_changed`, `source_missing` --
+so a program can draw *musubi wrote this* and *not found* as two different
+things. `docs/using-a-corpus.md` has the table, and the exit codes.
 
 ## How it compares
 

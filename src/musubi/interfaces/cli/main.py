@@ -26,7 +26,7 @@ from ... import __version__
 from ...application.export import SHAPES, documents, write, write_parquet
 from ...application.pipeline import Outcome, Settings, run
 from ...application.sync import Synced, empties_the_corpus, sync, withdrawals
-from ...application.trace import Resolution, resolve
+from ...application.trace import Resolution, as_document, resolve
 from ...application.verify import Verified, verify
 from ...config import SOURCES, Configuration, describe, destination, settings_from, source_from
 from ...config import load as load_configuration
@@ -35,7 +35,13 @@ from ...domain.journal import Change, Entry, attribution, folded, run_named, tou
 from ...domain.manifest import Manifest, render
 from ...domain.span import Span
 from ...domain.trace import CHARACTERS
-from ...errors import ContractError, MusubiError, TraceError
+from ...errors import (
+    ContractError,
+    CredentialFoundError,
+    EmptySourceError,
+    MusubiError,
+    TraceError,
+)
 from ...infrastructure.converters import claimed_converters
 from ...infrastructure.converters.external import available, unavailable
 from ...infrastructure.corpus import Corpus
@@ -53,6 +59,20 @@ __all__ = ["main"]
 #: fourth was added and `tests/test_console_encoding.py` did not notice.
 COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {}
 
+#: What the process says when it exits, and what a caller may conclude.
+#:
+#: ``REFUSED`` is the one an orchestrator has to be able to tell apart: musubi
+#: declined on purpose -- a credential, or a source that emptied -- and
+#: nothing was written. Retrying changes nothing; a person has to look. Under
+#: ``FAILED`` something was wrong with the input or the corpus, and a retry
+#: after fixing it is the right move. ``USAGE`` is argparse's own value and
+#: is why refusal is not 2: the family precedent is 0/2/1, and 2 was taken
+#: here by the argument parser before any of this was written.
+DONE = 0
+FAILED = 1
+USAGE = 2
+REFUSED = 3
+
 
 def main(argv: Sequence[str] | None = None) -> int:
     _readable()
@@ -60,12 +80,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     arguments = parser.parse_args(argv)
     if arguments.command is None:
         parser.print_help()
-        return 2
+        return USAGE
     try:
         return COMMANDS[arguments.command](arguments)
+    except (CredentialFoundError, EmptySourceError) as refusal:
+        print(f"musubi: {refusal}", file=sys.stderr)
+        return REFUSED
     except MusubiError as error:
         print(f"musubi: {error}", file=sys.stderr)
-        return 1
+        return FAILED
 
 
 def _readable() -> None:
@@ -245,6 +268,11 @@ def _parser() -> argparse.ArgumentParser:
             "one document's part of the history, like `git log -- <path>`. Takes a "
             "corpus-relative key or the path your shell completed"
         ),
+    )
+    history.add_argument(
+        "--since",
+        default=None,
+        help="only the runs after this one, by entry id or a unique prefix of it",
     )
     history.add_argument(
         "--no-follow",
@@ -444,7 +472,7 @@ def _plan(arguments: argparse.Namespace) -> int:
     else:
         _report_plan(outcome, show_removals=arguments.show_removals)
         _report_withdrawals(taken, stops=stops)
-    return 1 if outcome.refused or stops else 0
+    return REFUSED if outcome.refused or stops else DONE
 
 
 def _sync(arguments: argparse.Namespace) -> int:
@@ -521,15 +549,15 @@ def _trace(arguments: argparse.Namespace) -> int:
         corpus, key = Corpus(arguments.into), Path(target).as_posix()
     found = resolve(corpus, key, span)
     if arguments.json:
-        _document(json.dumps(_traced(found), ensure_ascii=False, indent=2) + "\n")
+        _document(json.dumps(as_document(found), ensure_ascii=False, indent=2) + "\n")
     else:
         _report_trace(found)
-    return 0
+    return DONE
 
 
 def _report_trace(found: Resolution) -> None:
     kinds = ", ".join(kind.value for kind in found.kinds) or "nothing"
-    print(f"{found.artefact} {found.out}  {kinds}")
+    print(f"{found.artefact} {found.out}  {kinds}  [{found.status}]")
     print(f"  {found.excerpt!r}")
 
     if found.is_synthetic:
@@ -566,32 +594,6 @@ def _report_trace(found: Resolution) -> None:
             "\n  The source has changed since the sync. These offsets are about the "
             "document musubi read, which is not the one on the disk now."
         )
-
-
-def _traced(found: Resolution) -> dict[str, object]:
-    return {
-        "artefact": found.artefact,
-        "out": [found.out.start, found.out.end],
-        "excerpt": found.excerpt,
-        "kinds": [kind.value for kind in found.kinds],
-        "rules": list(found.rules),
-        "converter": found.converter,
-        "source": {
-            "source_id": found.source.source_id,
-            "unit_key": found.source.unit_key,
-            "encoding": found.source.encoding,
-            "bom_bytes": found.source.bom_bytes,
-            "characters": [found.source_span.start, found.source_span.end],
-            "bytes": (
-                None
-                if found.source_bytes is None
-                else [found.source_bytes.start, found.source_bytes.end]
-            ),
-            "path": None if found.source_path is None else str(found.source_path),
-            "excerpt": found.source_excerpt,
-            "changed": found.changed,
-        },
-    }
 
 
 def _report_plan(outcome: Outcome, *, show_removals: bool) -> None:
@@ -740,6 +742,14 @@ def _log(arguments: argparse.Namespace) -> int:
     """
     corpus = Corpus(arguments.destination)
     entries = corpus.journal()
+
+    if arguments.since is not None:
+        # The runs after the one named, exclusive. A caller keeping a card up to
+        # date remembers the last entry it drew and asks for what followed.
+        try:
+            entries = entries[run_named(entries, arguments.since) + 1 :]
+        except LookupError as error:
+            raise ContractError(f"{error}. `musubi log` lists them.") from error
 
     subject = _artefact_path(arguments.path) if arguments.path else None
     if subject is not None:

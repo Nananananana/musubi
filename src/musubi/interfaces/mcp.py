@@ -139,12 +139,48 @@ class Server:
         )
 
     def trace(self, arguments: Mapping[str, Any]) -> str:
+        """Where a range came from -- of a corpus document, or of a file.
+
+        Two cases, told apart by where the path sits. A document inside a
+        corpus musubi wrote is answered from its **trace map**, the way
+        `musubi trace` answers: offsets are offsets into the document as it
+        sits in the corpus, front matter included, which is what an anchor
+        made by a consumer that ingested the corpus points at. Any other file
+        is converted afresh and answered from that conversion, for an agent
+        that has just called `musubi_convert` on it.
+
+        The first is the one an orchestrator uses. Its answer carries a
+        `status`, and opens the source only when it lies inside this server's
+        root: a manifest names where a source was read from as an absolute
+        path, and a server confined to a folder ([ADR-0007]) is not walked out
+        of it by a manifest somebody else wrote.
+        """
+        from ..application.trace import as_document, resolve
+        from ..domain.span import Span
+        from ..errors import TraceError
+        from ..infrastructure.corpus import Corpus
+
         path = self.inside(str(arguments["path"]))
         start, end = int(arguments["start"]), int(arguments["end"])
+
+        try:
+            corpus, key = Corpus.holding(path)
+        except TraceError:
+            corpus, key = None, ""
+        if corpus is not None:
+            found = resolve(corpus, key, Span(start, end), within=self.root)
+            return json.dumps(as_document(found), ensure_ascii=False, indent=2)
+
         document = api.convert(path)
         where = document.where(start, end)
         return json.dumps(
             {
+                # The file *is* the source, so there is nothing to have gone
+                # missing or changed: it is either musubi's own text or the
+                # owner's.
+                "status": "synthetic"
+                if not where.kinds or all(kind.value == "synthetic" for kind in where.kinds)
+                else "resolved",
                 "excerpt": document.text[start:end],
                 "where": str(where),
                 "source": str(path),
@@ -205,9 +241,11 @@ TOOLS: tuple[Tool, ...] = (
     Tool(
         name="musubi_trace",
         description=(
-            "Say where a range of the converted text came from: a character range of the "
-            "original file, or a page for a PDF. Use this to cite a document rather than "
-            "quoting it."
+            "Say where a range of text came from. For a document inside a corpus musubi "
+            "wrote, the range is into that document and the answer comes from its trace "
+            "map, with a status: resolved, synthetic, source_changed, source_missing or "
+            "source_outside_root. For any other file, the range is into the text "
+            "musubi_convert returned. Use this to cite a document rather than quoting it."
         ),
         schema={
             "type": "object",

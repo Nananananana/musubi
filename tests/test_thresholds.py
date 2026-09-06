@@ -51,6 +51,35 @@ class Constant:
 #: for a bound, what happens when it is passed.
 REGISTER: tuple[Constant, ...] = (
     Constant(
+        "interfaces/cli/main.py",
+        "DONE",
+        "bound",
+        "an exit code, not a quantity: the table in docs/using-a-corpus.md is checked "
+        "against these four by tests/test_orchestrator.py.",
+    ),
+    Constant(
+        "interfaces/cli/main.py",
+        "FAILED",
+        "bound",
+        "an exit code: something was wrong with the input or the corpus, and a retry "
+        "after fixing it is the right move. Checked against the documented table "
+        "with the other three.",
+    ),
+    Constant(
+        "interfaces/cli/main.py",
+        "USAGE",
+        "bound",
+        "an exit code, and argparse's own value for a bad argument, which is why "
+        "refusal could not be 2 as the family precedent has it.",
+    ),
+    Constant(
+        "interfaces/cli/main.py",
+        "REFUSED",
+        "bound",
+        "an exit code, and the one an orchestrator must tell from FAILED: musubi "
+        "declined on purpose and a retry changes nothing.",
+    ),
+    Constant(
         "application/export.py",
         "ROW_GROUP",
         "bound",

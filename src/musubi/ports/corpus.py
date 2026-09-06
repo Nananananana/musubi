@@ -59,12 +59,18 @@ class CorpusReader(Protocol):
         """The map for one artefact, read against its contract."""
         ...
 
-    def source(self, reference: SourceReference) -> tuple[Path, bytes] | None:
-        """The file the artefact was made from, if it is still findable.
+    def locate(self, reference: SourceReference) -> Path | None:
+        """Where the file the artefact was made from is, if it is still findable.
 
-        ``None`` rather than a raise: the map alone is still an answer, and a
-        missing source degrades a report rather than failing it.
+        Locating and reading are two steps, because a confined caller may be
+        allowed the first and not the second. ``None`` rather than a raise: the
+        map alone is still an answer, and a missing source degrades a report
+        rather than failing it.
         """
+        ...
+
+    def read_source(self, path: Path) -> bytes | None:
+        """The bytes at a path `locate` returned, or ``None`` if it went away."""
         ...
 
     def manifest_document(self) -> dict[str, Any]:
