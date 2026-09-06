@@ -8,7 +8,7 @@ and what the manifest will record when it is used.
 ```text
 family      names                          decided by
 ----------  -----------------------------  --------------------------
-source      filesystem, notion, obsidian   how a folder is read
+source      fetched, filesystem, notion, obsidian   how a folder is read
 screener    signatures, signatures+entropy  ADR-0017
 rules       core, none                     ADR-0016
 converter   markdown@1, text@1, html@1,    ADR-0004; per media type

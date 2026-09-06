@@ -31,7 +31,7 @@ from ..errors import SourceError
 from ..ports.converter import Converted, Converter
 from ..ports.emitter import Document, Emitter, Previous, Retained
 from ..ports.screener import Screener
-from ..ports.source import Source
+from ..ports.source import Found, Source
 
 __all__ = ["Outcome", "Settings", "run"]
 
@@ -133,7 +133,7 @@ def run(
         retained = retainable.get(key)
         if (
             retained is not None
-            and _still_holds(retained, digest, found.media_type, settings)
+            and _still_holds(retained, digest, found, settings)
             # Last, because it reads the artefact back off the disk.
             and emitter.retain(retained.artefact, found.modified_at)
         ):
@@ -169,7 +169,9 @@ def run(
             content_hash=digest,
             media_type=found.media_type,
         )
-        document, struck = _cleanse(unit, converted, settings.ruleset, found.modified_at)
+        document, struck = _cleanse(
+            unit, converted, settings.ruleset, found.modified_at, facts=found.facts
+        )
         removals.extend((key, record) for record in struck)
 
         artefacts.append(emitter.stage(document) if write else emitter.render(document).artefact)
@@ -219,22 +221,33 @@ def _decided_by(settings: Settings, emitter: Emitter) -> dict[str, object]:
     }
 
 
-def _still_holds(retained: Retained, digest: str, media_type: str, settings: Settings) -> bool:
-    """The bytes are the bytes, and the converter is the converter.
+def _still_holds(retained: Retained, digest: str, found: Found, settings: Settings) -> bool:
+    """The bytes are the bytes, the facts are the facts, and the converter is
+    the converter.
 
     The per-unit half of the decision. The converter is compared by name for
     this unit's media type rather than by the set the previous run used: a
     setting that switched `text/html` to a different extractor changes what
     this unit would become and may leave the set of names looking the same.
+    The facts are compared because they are in the artefact and not in the
+    source's bytes ([ADR-0037]): a record that changed under an unchanged page
+    is a different document.
     """
     if digest != retained.artefact.source_hash:
         return False
-    converter = settings.converter_for(media_type)
+    if tuple(found.facts) != tuple(retained.artefact.facts):
+        return False
+    converter = settings.converter_for(found.media_type)
     return converter is not None and converter.name == retained.artefact.converter
 
 
 def _cleanse(
-    unit: Unit, converted: Converted, ruleset: Ruleset, modified_at: float | None = None
+    unit: Unit,
+    converted: Converted,
+    ruleset: Ruleset,
+    modified_at: float | None = None,
+    *,
+    facts: tuple[tuple[str, str], ...] = (),
 ) -> tuple[Document, Sequence[RemovalRecord]]:
     """Stages four and five: take the tracking out, and compose the two maps."""
     cleansed = cleanse(converted.text, ruleset)
@@ -248,6 +261,7 @@ def _cleanse(
             source_encoding=converted.source_encoding,
             source_bom_bytes=converted.source_bom_bytes,
             modified_at=modified_at,
+            facts=facts,
         ),
         cleansed.removals,
     )

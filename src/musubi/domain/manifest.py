@@ -85,6 +85,12 @@ class Artefact:
     #: of ``run_id``: the id is over the outputs, and an input hash added to it
     #: would change the id of every existing corpus on upgrade.
     source_hash: str = ""
+    #: The facts the source stated about this unit, as written into the front
+    #: matter ([ADR-0037]). Recorded so that a re-sync whose record changed
+    #: while the page did not still converts the unit ([ADR-0036]). Not part of
+    #: ``run_id``: the facts are in the artefact's text and therefore already
+    #: in its ``content_hash``.
+    facts: tuple[tuple[str, str], ...] = ()
 
     @property
     def traceable_coverage(self) -> float:
@@ -290,6 +296,7 @@ def render(manifest: Manifest) -> str:
                 "layer": artefact.layer,
                 "characters": artefact.characters,
                 "traceable_characters": artefact.traceable_characters,
+                **({"facts": dict(artefact.facts)} if artefact.facts else {}),
             }
             for artefact in manifest.artefacts
         ],

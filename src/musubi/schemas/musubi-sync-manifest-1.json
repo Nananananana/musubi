@@ -202,6 +202,11 @@
           }
         },
         "converter": { "type": "string", "minLength": 1 },
+        "facts": {
+          "description": "What the source stated about this unit that the unit does not say about itself -- a fetched page's source_url and fetched_at -- exactly as written into the document's front matter (ADR-0037). Optional: most sources have nothing to add. Recorded here so that a re-sync whose record changed while the page did not still converts the unit.",
+          "type": "object",
+          "additionalProperties": { "type": "string", "minLength": 1 }
+        },
         "layer": {
           "description": "What kind of statement this document is, in kiseki's vocabulary. musubi emits 'fact' and 'measure' and never 'interpretation': an interpretation needs a reading, a reading needs a model, and musubi has none (ADR-0010).",
           "enum": ["fact", "measure"]

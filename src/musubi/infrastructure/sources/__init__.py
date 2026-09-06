@@ -7,6 +7,7 @@ form without having to know the implementation.
 
 from __future__ import annotations
 
+from .fetched import FetchedSource
 from .filesystem import (
     MACHINERY,
     MAXIMUM_BYTES,
@@ -20,6 +21,7 @@ __all__ = [
     "MACHINERY",
     "MAXIMUM_BYTES",
     "MEDIA_TYPES",
+    "FetchedSource",
     "FilesystemSource",
     "NotionSource",
     "ObsidianSource",

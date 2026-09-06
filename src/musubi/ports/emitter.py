@@ -81,6 +81,9 @@ class Document:
     #: The source's own timestamp, to be put back on the written file
     #: (ADR-0022). ``None`` from a source that does not know.
     modified_at: float | None = None
+    #: The source's facts about this unit, stated in the front matter
+    #: ([ADR-0037]). See `Found.facts`.
+    facts: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

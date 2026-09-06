@@ -164,6 +164,7 @@ class DocumentEmitter:
                 characters=trace.artefact_length,
                 layer=document.layer,
                 source_hash=document.unit.content_hash,
+                facts=tuple(document.facts),
             ),
         )
 
@@ -187,10 +188,15 @@ class DocumentEmitter:
         self._write(Path(MANIFEST), body)
 
     def _with_front_matter(self, document: Document) -> tuple[str, TraceMap]:
-        if document.unit.media_type not in _TAKES_FRONT_MATTER:
+        # A Markdown document always gets front matter. Any other document gets
+        # it when the source stated facts about it ([ADR-0037]): the facts have
+        # nowhere else to travel, and a fetched page's URL that stays in the
+        # manifest never reaches the consumer that indexes the documents.
+        if document.unit.media_type not in _TAKES_FRONT_MATTER and not document.facts:
             return document.text, document.trace
 
-        inserted = rewrite(document.text, replacements(document.text, FrontMatter(document.layer)))
+        matter = FrontMatter(document.layer, facts=tuple(document.facts))
+        inserted = rewrite(document.text, replacements(document.text, matter))
         try:
             composed = document.trace.followed_by(TraceMap.of_rewrite(inserted))
         except ValueError as error:  # pragma: no cover - a bug, not an input
@@ -528,9 +534,20 @@ def _artefact_from(entry: Mapping[str, Any]) -> Artefact | None:
             characters=int(entry["characters"]),
             layer=_string(entry, "layer"),
             source_hash=str(source.get("content_hash") or ""),
+            facts=_facts(entry.get("facts")),
         )
     except (KeyError, TypeError, ValueError):
         return None
+
+
+def _facts(value: object) -> tuple[tuple[str, str], ...]:
+    if not isinstance(value, Mapping):
+        return ()
+    return tuple(
+        (str(key), str(fact))
+        for key, fact in value.items()
+        if isinstance(key, str) and isinstance(fact, str)
+    )
 
 
 def _removal_from(entry: Mapping[str, Any]) -> RemovalRecord:
