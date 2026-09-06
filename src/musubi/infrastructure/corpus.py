@@ -48,11 +48,21 @@ class Corpus:
         Walks up looking for the layout rather than asking the caller for it: a
         reader following a citation has a path to a document and no reason to
         know how musubi arranges a destination.
+
+        **Both folders, which is what the refusal below has always claimed and
+        what this did not check.** A `documents/` beside a `traces/` is a
+        corpus; a `documents/` on its own is a folder somebody named
+        `documents`, which is an ordinary thing to have. Matching on the first
+        alone made `~/notes/documents/gear.md` a corpus artefact, and every
+        answer about it a refusal naming a `traces/` nobody was ever going to
+        have.
         """
         resolved = artefact.expanduser().resolve()
         for parent in resolved.parents:
             documents = parent / DOCUMENTS
             if parent.name == DOCUMENTS or not documents.is_dir():
+                continue
+            if not (parent / TRACES).is_dir():
                 continue
             try:
                 key = resolved.relative_to(documents).as_posix()
@@ -63,6 +73,17 @@ class Corpus:
             f"{artefact} is not inside a musubi destination: nothing above it holds a "
             f"{DOCUMENTS}/ and a {TRACES}/"
         )
+
+    def holds(self, key: str) -> bool:
+        """Is this key one this corpus can answer about?
+
+        The document and its map, both present. A caller with a path and no
+        idea whether it is a corpus artefact asks this rather than catching the
+        refusal, because a refusal is the answer to a different question.
+        """
+        return (self.destination / DOCUMENTS / key).is_file() and (
+            self.destination / TRACES / f"{key}.json"
+        ).is_file()
 
     # -- what is there -----------------------------------------------------
 

@@ -72,6 +72,13 @@ for them. Pages with no record are never taken for one another.
 page with no record is read and states nothing. The record files themselves
 are neither documents nor skips.
 
+**`discover()` opens the records**, which is the one place a source departs
+from the two stages: deduplication decides what is found and what is skipped,
+and that is discovery's answer to give. **No page is opened** — a plan still
+reports what it will skip without having read a word of what it will convert,
+and a record is the orchestrator's note about a fetch rather than the owner's
+document.
+
 **Keys by path.** The orchestrator controls the layout, and a key it can read
 in a citation is worth more than one derived from a URL.
 

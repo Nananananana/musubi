@@ -220,6 +220,46 @@ def test_convert_then_trace_in_one_session_cites_the_source(root: Path) -> None:
     assert source[cited["span"][0] : cited["span"][1]] == "2.4kg"
 
 
+def test_a_plain_folder_that_happens_to_hold_documents_still_traces(
+    tmp_path: Path,
+) -> None:
+    """A regression, found by pointing the server at an ordinary notes folder.
+
+    `musubi_trace` learned to answer a corpus document from its trace map, and
+    decided what was a corpus by the layout alone -- so `notes/documents/` made
+    every file under it a corpus artefact, and every answer about one a refusal
+    naming a `traces/` that was never going to exist. The tool used to answer
+    these and has to go on answering them.
+    """
+    (tmp_path / "documents").mkdir()
+    (tmp_path / "documents" / "gear.md").write_text(NOTE, encoding="utf-8")
+
+    converted = body(call(tmp_path, "musubi_convert", path="documents/gear.md"))
+    at = converted["text"].index("2.4kg")
+    cited = body(call(tmp_path, "musubi_trace", path="documents/gear.md", start=at, end=at + 5))
+
+    assert cited["status"] == "resolved"
+    assert cited["excerpt"] == "2.4kg"
+
+
+def test_a_document_a_corpus_does_not_hold_falls_back_to_converting_it(
+    tmp_path: Path,
+) -> None:
+    """The layout is there, the corpus is real, and this file is not in it --
+    somebody dropped a note into `documents/` by hand. Converting it is an
+    answer; refusing is an answer to a different question."""
+    (tmp_path / "documents").mkdir()
+    (tmp_path / "traces").mkdir()
+    (tmp_path / "documents" / "dropped.md").write_text(NOTE, encoding="utf-8")
+
+    converted = body(call(tmp_path, "musubi_convert", path="documents/dropped.md"))
+    at = converted["text"].index("2.4kg")
+    cited = body(call(tmp_path, "musubi_trace", path="documents/dropped.md", start=at, end=at + 5))
+
+    assert cited["status"] == "resolved"
+    assert cited["excerpt"] == "2.4kg"
+
+
 def test_plan_reports_and_writes_nothing(root: Path) -> None:
     found = body(call(root, "musubi_plan", folder="."))
     assert found["nothing_was_written"] is True

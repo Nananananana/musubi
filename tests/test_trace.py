@@ -268,6 +268,41 @@ def test_the_corpus_is_found_by_walking_up_from_the_document(tmp_path: Path) -> 
     assert key == "design/gear.md"
 
 
+# -- a folder named `documents` is not a corpus ------------------------------
+
+
+def test_a_documents_folder_without_traces_is_not_a_corpus(tmp_path: Path) -> None:
+    """The refusal has always claimed to look for both folders and looked for
+    one. A `documents/` beside a `traces/` is a corpus; a `documents/` on its
+    own is a folder somebody named `documents`, which is an ordinary thing to
+    have in a notes tree."""
+    notes = tmp_path / "notes"
+    (notes / "documents").mkdir(parents=True)
+    (notes / "documents" / "gear.md").write_text(NOTE, encoding="utf-8")
+
+    with pytest.raises(TraceError, match="not inside a musubi destination"):
+        Corpus.holding(notes / "documents" / "gear.md")
+
+
+def test_a_real_corpus_is_still_found_by_walking_up(tmp_path: Path) -> None:
+    _, into = built(tmp_path)
+    corpus, key = Corpus.holding(into / DOCUMENTS / "design" / "gear.md")
+    assert corpus.destination == into.resolve()
+    assert key == "design/gear.md"
+
+
+def test_a_corpus_says_whether_it_holds_a_key(tmp_path: Path) -> None:
+    """Both files, because a caller with a path and no idea whether it is a
+    corpus artefact should be able to ask rather than catch a refusal."""
+    _, into = built(tmp_path)
+    corpus = Corpus(into)
+    assert corpus.holds("design/gear.md")
+    assert not corpus.holds("design/nothing.md")
+
+    (into / TRACES / "design" / "gear.md.json").unlink()
+    assert not corpus.holds("design/gear.md"), "a document with no map is not answerable"
+
+
 def test_a_file_outside_a_destination_says_so(tmp_path: Path) -> None:
     stray = tmp_path / "elsewhere.md"
     stray.write_text("x\n", encoding="utf-8")
