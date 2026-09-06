@@ -228,18 +228,18 @@ class Corpus:
             if source.get("root")
         }
 
-    def source(self, reference: SourceReference) -> tuple[Path, bytes] | None:
+    def locate(self, reference: SourceReference) -> Path | None:
         """The file this artefact was made from, if it is still findable.
 
         ``None`` rather than a raise: the map alone is still an answer, and a
         source that has been moved or deleted degrades a report rather than
         failing it.
         """
-        path = self._source_file(reference)
-        if path is None:
-            return None
+        return self._source_file(reference)
+
+    def read_source(self, path: Path) -> bytes | None:
         try:
-            return path, path.read_bytes()
+            return path.read_bytes()
         except OSError:  # pragma: no cover - a race, not a state
             # The file was there when `is_file()` was asked and gone, or
             # unreadable, by the time it was opened. There is no portable way to

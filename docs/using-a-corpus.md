@@ -179,6 +179,91 @@ is checked rather than asserted.
 That works after the text has been through an embedding model, a vector store
 and a chat interface, because the only thing it needs is the offset and the map.
 
+## For a program driving musubi
+
+Three things a person reading the report already had, stated so that a program
+has them too.
+
+### Exit codes
+
+| code | meaning | what a caller may conclude |
+|---|---|---|
+| `0` | done | the corpus is what the report says; `manifest.json` is current |
+| `1` | failed | something was wrong with the input or the corpus -- a manifest that will not parse, a path outside the layout, an offset past the end. Fix it and run again |
+| `2` | usage | the arguments were wrong. argparse's own value |
+| `3` | refused | **musubi declined on purpose and wrote nothing.** A credential, or a source that emptied under an existing corpus (ADR-0021). Retrying changes nothing; a person has to look, and `plan` predicts this code before `sync` returns it |
+
+The one that matters is the last. An orchestrator that retries a `1` must not
+retry a `3`: a feed with a leaked key in it stays refused until somebody reads
+the message and either fixes the feed or passes `--allow`. The family precedent
+is `0 / 2 / 1`; refusal is `3` here because `2` was argparse's before any of
+this was written, and a code that means two things means neither.
+
+### Reading a corpus while it is being written
+
+Every file `sync` writes lands by one atomic replace, and **`manifest.json`
+lands last**. So at any instant a reader sees:
+
+- a `manifest.json` that is *entirely* the old one or *entirely* the new one,
+  never a mixture and never half a file;
+- documents that may already be newer than the manifest describing them, for
+  the window between the first replace and the last.
+
+What follows from that:
+
+- **Reading `manifest.json` is always safe.** It describes a corpus that
+  existed. During a sync it may describe the one being replaced.
+- **Reading `documents/` during a sync may see a mixture** of the old corpus
+  and the new. A consumer that indexes the folder while a sync runs can index a
+  document the manifest does not yet name, or one whose hash the manifest no
+  longer states. `musubi verify` would report that state as a fault, correctly.
+- **`runs.jsonl` is appended one line per run**, after the manifest has landed.
+  A reader that opens it mid-append can see a truncated last line, and
+  `musubi log` refuses a truncated line rather than reading around it.
+
+The recommendation is the simple one: **run `sync` and the consumer's ingest
+in series**, and read `manifest.json` and `runs.jsonl` after `sync` has exited
+with `0`. musubi does not take a lock, because a lock file in the owner's
+output folder is a file they did not ask for and a stale one after a crash is
+a corpus nobody can sync.
+
+### What `musubi_trace` answers, and how to read it
+
+`musubi mcp <root>` serves `musubi_trace(path, start, end)`. Two cases, told
+apart by where `path` sits:
+
+- **A document inside a corpus musubi wrote** -- `<corpus>/documents/<unit_key>`
+  -- is answered from its trace map, exactly as `musubi trace` answers. The
+  offsets are into the document *as it sits in the corpus*, front matter
+  included, which is what an anchor made by a consumer that ingested the
+  corpus points at.
+- **Any other file** is converted afresh and the offsets are into the text
+  `musubi_convert` returned.
+
+The first is the one an orchestrator uses. Its answer is the same document
+`musubi trace --json` prints, and it leads with one word:
+
+| `status` | meaning | what to draw |
+|---|---|---|
+| `resolved` | a place in the source, and the file on disk still holds what the map was built from. `source.bytes` and `source.excerpt` are filled | the original, opened at those bytes |
+| `synthetic` | musubi wrote every character in the range -- front matter, a heading it inserted. There is no source to open | *musubi wrote this*, and nothing else |
+| `source_changed` | a place in the source, but the file has been edited since the sync. The offsets are about a document that no longer exists | the range, with a warning |
+| `source_missing` | a place in the source, and no file to open: moved, deleted, or the manifest's root is not mounted | the range, and *not found* |
+| `source_outside_root` | a place in the source, and the server may not read it from where it is rooted (below) | the range, and *not found* |
+
+`synthetic` and the three `source_*` answers are the distinction `docs/contracts.md`
+rule 7 draws: *musubi wrote this* is not *this did not resolve*, and a screen
+that shows one wording for both is wrong about one of them.
+
+**The root, and what it confines.** The manifest names where each source was
+read from as an absolute path, and following it is the point of a trace. But
+the server is confined to the folder it was started in (ADR-0007), and a
+manifest somebody else wrote must not be able to walk it out: a source outside
+the root is *located* and not *opened*, and the answer says `source_outside_root`
+with no path, no bytes and no excerpt. So **root the server at a folder that
+contains both the corpus and the fetched originals** when the originals are
+what the screen should open.
+
 ## `body_offset`, and why the front matter is still there
 
 The text is emitted **whole**. Stripping the front matter would shift every

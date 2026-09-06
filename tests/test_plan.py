@@ -258,7 +258,9 @@ def test_a_credential_makes_the_command_fail(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     root = vault(tmp_path / "vault", {"setup.md": f"key: {AWS}\n"})
-    assert main(["plan", str(root)]) == 1
+    # 3, not 1: a predicted refusal is a refusal, and an orchestrator that
+    # retries a 1 must not retry this.
+    assert main(["plan", str(root)]) == 3
     out = capsys.readouterr().out
     assert "Would refuse" in out
     assert "an AWS access key id" in out

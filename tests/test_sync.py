@@ -261,7 +261,8 @@ def test_the_command_reports_a_refusal_without_a_traceback(
 ) -> None:
     root = vault(tmp_path / "vault", {"setup.md": f"key: {AWS}\n"})
     into = tmp_path / "synced"
-    assert main(["sync", str(root), "--into", str(into)]) == 1
+    # 3: refused on purpose, nothing written, and not a thing to retry.
+    assert main(["sync", str(root), "--into", str(into)]) == 3
 
     captured = capsys.readouterr()
     assert "an AWS access key id" in captured.err
@@ -419,7 +420,7 @@ def test_the_plan_says_the_sync_will_refuse(
     code = main(["plan", str(root), "--into", str(into)])
     out = capsys.readouterr().out
 
-    assert code == 1
+    assert code == 3, "a predicted stop exits the way the stop itself would"
     assert "will refuse" in out
     assert "--withdraw-all" in out
 

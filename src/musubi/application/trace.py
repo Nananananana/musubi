@@ -41,7 +41,7 @@ from ..domain.trace import CHARACTERS, Kind, Segment
 from ..errors import TraceError
 from ..ports.corpus import CorpusReader, SourceReference
 
-__all__ = ["Resolution", "resolve"]
+__all__ = ["STATUSES", "Resolution", "as_document", "resolve"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,15 +72,64 @@ class Resolution:
     #: Set when the source is no longer the file the map was built from. The
     #: offsets are then about a document that no longer exists.
     changed: bool = False
+    #: Set when the source exists and was **not** opened, because it lies
+    #: outside the folder the caller is confined to. The character range is
+    #: still the answer; the bytes and the excerpt are not offered.
+    source_withheld: bool = False
 
     @property
     def is_synthetic(self) -> bool:
         """Nothing in this range came from the source: musubi wrote all of it."""
         return all(kind is Kind.SYNTHETIC for kind in self.kinds)
 
+    @property
+    def status(self) -> str:
+        """One word for what kind of answer this is, for a caller that branches.
 
-def resolve(corpus: CorpusReader, key: str, out: Span) -> Resolution:
-    """Answer for one range of one artefact."""
+        `docs/contracts.md` rule 7 separates *musubi wrote this* from *this did
+        not resolve*, and a consumer drawing a screen has to draw them
+        differently. Five words, checked in the order that decides:
+
+        ``synthetic``            musubi wrote every character in the range
+        ``resolved``             a place in the source, and the file agrees
+        ``source_changed``       a place in the source, and the file no longer
+                                 holds what the map was built from
+        ``source_missing``       a place in the source, and no file to open
+        ``source_outside_root``  a place in the source, and a file the caller
+                                 may not read from where it stands
+        """
+        if self.is_synthetic:
+            return "synthetic"
+        if self.source_withheld:
+            return "source_outside_root"
+        if self.source_path is None:
+            return "source_missing"
+        if self.changed:
+            return "source_changed"
+        return "resolved"
+
+
+#: Every value `Resolution.status` can take, for a consumer to switch on and a
+#: test to enumerate. A status not in this list is a musubi bug.
+STATUSES: tuple[str, ...] = (
+    "resolved",
+    "synthetic",
+    "source_changed",
+    "source_missing",
+    "source_outside_root",
+)
+
+
+def resolve(corpus: CorpusReader, key: str, out: Span, *, within: Path | None = None) -> Resolution:
+    """Answer for one range of one artefact.
+
+    ``within`` confines what this may open. The manifest names where each
+    source was read from as an absolute path, and following it is the point of
+    a trace -- but a caller that is itself confined to a folder (the MCP
+    server, [ADR-0007]) must not be walked out of it by a manifest somebody
+    else wrote. A source outside ``within`` is located, not opened, and the
+    answer says so.
+    """
     text = corpus.artefact(key)
     if out.end > len(text):
         raise TraceError(f"{out} is outside {key}, which has {len(text)} characters")
@@ -104,21 +153,65 @@ def resolve(corpus: CorpusReader, key: str, out: Span) -> Resolution:
         source_span=held.trace.source_span_of(out),
         source_unit=held.source_unit,
     )
-    return _against_the_file(corpus, resolution)
+    return _against_the_file(corpus, resolution, within)
 
 
-def _against_the_file(corpus: CorpusReader, resolution: Resolution) -> Resolution:
-    """Open the source, if it is still there, and say what the map cannot.
+def as_document(found: Resolution) -> dict[str, object]:
+    """The answer as the one shape every interface hands out.
+
+    The command line and the MCP server used to each shape their own, and a
+    consumer reading both had two vocabularies for one answer. One function,
+    and `status` in it, so that a screen can branch on a word rather than on
+    the presence of a byte range.
+    """
+    return {
+        "status": found.status,
+        "artefact": found.artefact,
+        "out": [found.out.start, found.out.end],
+        "excerpt": found.excerpt,
+        "kinds": [kind.value for kind in found.kinds],
+        "rules": list(found.rules),
+        "converter": found.converter,
+        "source": {
+            "source_id": found.source.source_id,
+            "unit_key": found.source.unit_key,
+            "encoding": found.source.encoding,
+            "bom_bytes": found.source.bom_bytes,
+            "unit": found.source_unit,
+            "characters": [found.source_span.start, found.source_span.end],
+            "bytes": (
+                None
+                if found.source_bytes is None
+                else [found.source_bytes.start, found.source_bytes.end]
+            ),
+            "path": None if found.source_path is None else str(found.source_path),
+            "excerpt": found.source_excerpt,
+            "changed": found.changed,
+        },
+    }
+
+
+def _against_the_file(
+    corpus: CorpusReader, resolution: Resolution, within: Path | None
+) -> Resolution:
+    """Open the source, if it is still there and may be opened, and say what
+    the map cannot.
 
     A resolution without the file is still an answer -- the character range is
     what the map holds -- so a missing source degrades the report rather than
     failing it. What it cannot do without the file is give a byte offset, and it
     says that rather than guessing one.
     """
-    found = corpus.source(resolution.source)
-    if found is None:
+    path = corpus.locate(resolution.source)
+    if path is None:
         return resolution
-    path, raw = found
+    if within is not None and not _under(path, within):
+        # Located and not opened. Returning the path would already say more
+        # than a confined caller should learn about a folder it cannot read.
+        return replace(resolution, source_withheld=True)
+    raw = corpus.read_source(path)
+    if raw is None:
+        return resolution
 
     changed = content_hash(raw) != resolution.source.content_hash
     if resolution.source_unit != CHARACTERS:
@@ -149,6 +242,14 @@ def _against_the_file(corpus: CorpusReader, resolution: Resolution) -> Resolutio
         source_excerpt=span.slice(decoded.text),
         changed=changed,
     )
+
+
+def _under(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+    except (OSError, ValueError):
+        return False
+    return True
 
 
 def _as_the_map_read_it(raw: bytes, encoding: str) -> Decoded | None:
