@@ -74,6 +74,12 @@ class FrontMatter:
 
     layer: str = "fact"
     producer: str = PRODUCER
+    #: What the source knows about the document that the document does not say
+    #: -- ``source_url``, ``fetched_at`` ([ADR-0037]). Stated because a fact
+    #: about the source is the one other kind of thing musubi is entitled to
+    #: say, and stated *here* because a sidecar is indexed as a document and a
+    #: producer writing into the page would change the bytes a trace leads to.
+    facts: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if self.layer not in _LAYERS:
@@ -82,16 +88,28 @@ class FrontMatter:
                 f"interpretation needs a reading, a reading needs a model, and musubi "
                 f"has none"
             )
-        for name, value in (("layer", self.layer), ("producer", self.producer)):
-            if not value or value.strip() != value:
-                raise ValueError(f"{name} must be a bare single-line value, not {value!r}")
-            if "\n" in value or "\r" in value:
-                raise ValueError(
-                    f"{name} contains a line break, and the reader takes one line per key"
-                )
+        for name, value in (("layer", self.layer), ("producer", self.producer), *self.facts):
+            _bare(name, value)
+        for name, _ in self.facts:
+            _bare(name, name)
+            if ":" in name or name in {"layer", "producer"}:
+                # The reader splits on the first colon, so a colon in a key is
+                # two keys; and a fact may not overwrite what musubi states.
+                raise ValueError(f"{name!r} is not a key a fact may be stated under")
 
     def as_lines(self) -> tuple[str, ...]:
-        return (f"layer: {self.layer}", f"producer: {self.producer}")
+        return (
+            f"layer: {self.layer}",
+            f"producer: {self.producer}",
+            *(f"{key}: {value}" for key, value in self.facts),
+        )
+
+
+def _bare(name: str, value: str) -> None:
+    if not value or value.strip() != value:
+        raise ValueError(f"{name} must be a bare single-line value, not {value!r}")
+    if "\n" in value or "\r" in value:
+        raise ValueError(f"{name} contains a line break, and the reader takes one line per key")
 
 
 def block_of(text: str) -> Span | None:

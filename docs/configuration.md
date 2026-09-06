@@ -58,7 +58,7 @@ allow     = ["stripe.secret-key:archive/2019-invoice.md"]
 
 | Key | Values | Default | What it decides |
 |---|---|---|---|
-| `source` | `filesystem`, `notion`, `obsidian` | `obsidian` | how the root folder is read |
+| `source` | `fetched`, `filesystem`, `notion`, `obsidian` | `obsidian` | how the root folder is read |
 | `into` | a path | `synced` | where the corpus goes |
 | `screener` | `signatures`, `signatures+entropy` | `signatures` | which credential tiers run ([ADR-0017](adr/0017-entropy-is-a-tier-not-a-default.md)) |
 | `rules` | `core`, `none` | `core` | which cleansing pack runs ([ADR-0016](adr/0016-a-rule-is-a-matcher-not-a-regular-expression.md)) |

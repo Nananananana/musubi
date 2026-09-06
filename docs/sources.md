@@ -39,6 +39,44 @@ history the vault had.
 
 ---
 
+## `FetchedSource`
+
+`--as fetched`, or `source = "fetched"`. A folder of pages somebody fetched --
+an orchestrator pulling articles from feeds -- with a **record of the fetch
+beside each page**:
+
+```text
+<root>/<feed>/<date>/<id>.html
+<root>/<feed>/<date>/<id>.html.fetch.json
+```
+
+```json
+{"url": "https://example.test/a/1", "fetched_at": "2026-09-05T03:12:00Z",
+ "canonical_url": "https://example.test/a/1"}
+```
+
+**Reads** what `FilesystemSource` reads, keyed by path, and states the record's
+facts in the document's front matter as `source_url`, `fetched_at` and
+`canonical_url` -- beside `layer` and `producer`, as flat `key: value` lines
+([ADR-0037](adr/0037-a-fetch-record-beside-the-page-is-a-fact-musubi-may-state.md)).
+**The page's bytes are never touched**, so `musubi trace` still leads to what
+was fetched. The facts are also recorded in the manifest beside the artefact,
+and a record that changed under an unchanged page converts the unit again.
+
+**Reads one article once.** Two pages whose records share a `canonical_url`
+(or a `url`, when no canonical one is given) are one article: the first in walk
+order is read, the rest are skipped as `duplicate` naming the page that stood
+for them. Pages with no record are never taken for one another.
+
+**Skips** a record that cannot be read as `bad_fetch_record`, with the reason. A
+page with no record is read and states nothing. The record files themselves
+are neither documents nor skips.
+
+**Keys by path.** The orchestrator controls the layout, and a key it can read
+in a citation is worth more than one derived from a URL.
+
+---
+
 ## `NotionSource`
 
 **Reads** the archive a Notion export produces, or a folder holding one.
@@ -117,7 +155,7 @@ The one that is known, and worth answering for every source whoever consumes it:
 
 > **What could this reveal that the owner would not choose to reveal?**
 
-For all three sources the answer is the same, and it is stated here rather than
+For all four sources the answer is the same, and it is stated here rather than
 pointed at, because `docs/threat-model.md` is a file this repository plans and
 does not have: **a synced folder is a copy of the owner's documents, and a trace
 map is a per-character index of them.** The screener (ADR-0008) stops a run that

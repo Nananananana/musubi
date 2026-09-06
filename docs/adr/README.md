@@ -51,6 +51,7 @@ later ADR supersedes it and says so.
 | [0034](0034-a-corpus-that-remembers-what-it-was.md) | A corpus that remembers what it was |
 | [0035](0035-what-content-addressing-buys-and-where-it-stops.md) | What content addressing buys, and where it stops |
 | [0036](0036-a-unit-whose-bytes-did-not-change-is-not-converted-again.md) | A unit whose bytes did not change is not converted again |
+| [0037](0037-a-fetch-record-beside-the-page-is-a-fact-musubi-may-state.md) | A fetch record beside the page is a fact musubi may state |
 
 [0004](0004-a-conversion-carries-a-map-back-to-its-source.md) is the one to read
 first. The rest of the design is arranged around it, and

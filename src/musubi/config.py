@@ -61,7 +61,7 @@ from typing import Any
 from .application.pipeline import Settings
 from .errors import ContractError
 from .infrastructure.algorithms import chooser, ruleset_named, screener_named
-from .infrastructure.sources import FilesystemSource, NotionSource, ObsidianSource
+from .infrastructure.sources import FetchedSource, FilesystemSource, NotionSource, ObsidianSource
 from .ports.source import Source
 
 __all__ = [
@@ -79,7 +79,7 @@ __all__ = [
     "source_from",
 ]
 
-#: The three ways a folder can be read, by the name a setting uses. Here rather
+#: The four ways a folder can be read, by the name a setting uses. Here rather
 #: than in the CLI because this module is the composition root: what an
 #: interface does with a configuration is print it or run it, and neither should
 #: require knowing which class implements `notion`.
@@ -89,6 +89,7 @@ __all__ = [
 #: protocol says nothing about a constructor. What these have in common is that
 #: they can be called with a root; that is the only thing this needs.
 SOURCES: Mapping[str, Callable[..., Source]] = {
+    "fetched": FetchedSource,
     "filesystem": FilesystemSource,
     "notion": NotionSource,
     "obsidian": ObsidianSource,
@@ -126,7 +127,7 @@ OPTIONS: tuple[Option, ...] = (
         str,
         "obsidian",
         "what kind of folder the root is",
-        ("filesystem", "notion", "obsidian"),
+        ("fetched", "filesystem", "notion", "obsidian"),
     ),
     Option("into", str, "synced", "where the corpus goes"),
     Option(

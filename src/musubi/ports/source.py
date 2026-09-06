@@ -39,6 +39,11 @@ class Found:
     #: musubi writes can keep it (ADR-0022) -- never put into the artefact's
     #: content, which would make a re-sync rewrite a corpus nothing changed in.
     modified_at: float | None = None
+    #: What the source knows about this unit that the unit does not say about
+    #: itself -- the URL a page was fetched from, when. Flat ``(key, value)``
+    #: pairs, because they become front matter lines ([ADR-0037]). Empty for a
+    #: source with nothing to add, which is most of them.
+    facts: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
