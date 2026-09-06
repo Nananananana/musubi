@@ -32,7 +32,7 @@ from ...config import SOURCES, Configuration, describe, destination, settings_fr
 from ...config import load as load_configuration
 from ...domain.journal import CONTRACT as JOURNAL_CONTRACT
 from ...domain.journal import Change, Entry, attribution, folded, run_named, touching
-from ...domain.manifest import Manifest, render
+from ...domain.manifest import Coverage, Manifest, render
 from ...domain.span import Span
 from ...domain.trace import CHARACTERS
 from ...errors import (
@@ -685,6 +685,7 @@ def _coverage(manifest: Manifest, verb: str, *, kept: int = 0) -> None:
             f"  {coverage.traceable_characters} of {coverage.characters} characters traceable "
             f"({coverage.traceable_coverage:.1%})"
         )
+        _answer_width(coverage)
     else:
         # Rather than `0 of 0 characters traceable (100.0%)`, which is what a
         # ratio of nothing came out as.
@@ -693,6 +694,27 @@ def _coverage(manifest: Manifest, verb: str, *, kept: int = 0) -> None:
         for cap in source_record.caps:
             print(f"  cap: {cap}")
     _unused_converters(manifest)
+
+
+def _answer_width(coverage: Coverage) -> None:
+    """The number that goes the wrong way when the guarantee stops holding.
+
+    Printed under the percentage because the percentage is the one that reads
+    as a success and can be maximised by a map that resolves everywhere and
+    locates nothing ([ADR-0033]). A reader who stops after one line should have
+    seen this one.
+    """
+    width = coverage.answer_width
+    if width is None:
+        if len(coverage.source_units) > 1:
+            print(
+                f"  answer width: no single number -- this corpus measures its sources in "
+                f"{' and '.join(coverage.source_units)}, and their sum has no dimension"
+            )
+        return
+    unit = coverage.source_units[0] if coverage.source_units else CHARACTERS
+    each = "source characters" if unit == CHARACTERS else f"{unit} locators"
+    print(f"  answer width {width:.2f}: one character resolves to {width:.2f} {each}")
 
 
 def _unused_converters(manifest: Manifest) -> None:

@@ -235,12 +235,27 @@ class TraceMap:
         """
         if not self.traceable_characters:
             return 1.0
-        total = sum(
+        return self.answered_source_units / self.traceable_characters
+
+    @property
+    def answered_source_units(self) -> int:
+        """How much source this map hands back, summed over every character.
+
+        `answer_width`'s numerator, published in its own right so that a run
+        can aggregate it. A mean of per-document widths is not the width of a
+        corpus -- a 4-character document answering with 40 characters and a
+        40,000-character one answering exactly would average to something
+        alarming about a corpus that is almost entirely exact. Summing the
+        numerators and the denominators separately is the aggregate that means
+        anything, and it needs this.
+
+        Counted in `source_unit`, like the width itself.
+        """
+        return sum(
             (1 if segment.kind is Kind.VERBATIM else segment.src.length) * segment.out.length
             for segment in self.segments
             if segment.is_traceable
         )
-        return total / self.traceable_characters
 
     def segment_at(self, offset: int) -> Segment:
         """The segment covering this artefact offset.
