@@ -189,6 +189,7 @@
         "source",
         "converter",
         "layer",
+        "title",
         "characters",
         "traceable_characters",
         "source_unit",
@@ -217,6 +218,11 @@
           }
         },
         "converter": { "type": "string", "minLength": 1 },
+        "title": {
+          "description": "What the document calls itself: its front-matter `title`, or its first heading, or null. NULL AND NEVER THE EMPTY STRING -- a document that states an empty title has said something and one that says nothing has not, and a consumer that cannot tell them apart falls back for the wrong one. Here so that a citation can carry a name a person reads rather than an artefact path, without the consumer opening every document and guessing at its first line (ADR-0040).",
+          "type": ["string", "null"],
+          "minLength": 1
+        },
         "source_unit": {
           "description": "What this artefact's map counts its source in: 'characters' of the decoded source (ADR-0018), or 'opaque' for a converter whose source has no decoded text to count -- a PDF's pages (ADR-0025). Here as well as in the trace map, because a reader deciding whether two artefacts' answer widths may be added should not have to open every sidecar to find out.",
           "type": "string",

@@ -924,11 +924,11 @@ def test_the_journal_check_is_one_of_the_checks_verify_counts(tmp_path: Path) ->
     synced(root, destination)
 
     checked = verify(Corpus(destination))
-    # Five checks of the manifest and its history -- run_id, coverage totals,
-    # records naming units, the source units, the journal -- and one per
-    # artefact.
+    # Six checks of the manifest and its history -- run_id, coverage totals,
+    # records naming units, the source units, orphans, the journal -- and one
+    # per artefact.
     assert checked.artefacts == 2
-    assert checked.checks == 5 + checked.artefacts
+    assert checked.checks == 6 + checked.artefacts
 
     # And the count does not depend on whether there is a history to check: a
     # corpus written before ADR-0034 was looked at just as hard.
