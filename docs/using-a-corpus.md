@@ -73,6 +73,49 @@ docs = [Document(**json.loads(line)) for line in open("corpus.jsonl", encoding="
 
 `musubi export --format llamaindex` names them `id_` and `text`.
 
+### Haystack
+
+```python
+import json
+from haystack import Document
+
+docs = [Document(**json.loads(line)) for line in open("corpus.jsonl", encoding="utf-8")]
+```
+
+`musubi export --format haystack` names them `id`, `content` and `meta` -- the
+one shape whose metadata key is not `metadata`, which is the whole of the
+difference.
+
+### Parquet, for pandas, polars, DuckDB and `datasets`
+
+```bash
+musubi export ./corpus --format parquet --out corpus.parquet   # needs musubi[arrow]
+```
+
+```python
+import pandas as pd
+
+table = pd.read_parquet("corpus.parquet")  # id, text, and one column per metadata field
+```
+
+The columns are the JSON Lines keys under the same names, so a reader moving
+between the two finds nothing renamed. Written in row groups of a thousand,
+so neither the writer nor a reader that streams row groups holds the corpus.
+`pyarrow` is Apache-2.0 and is an extra -- offered, never claimed: nothing
+imports it until this format is asked for, and without it the command names
+the extra to install rather than raising an ImportError.
+
+### Or in Python, without a file
+
+```python
+import musubi
+
+for row in musubi.documents("./corpus"):  # a generator, one document at a time
+    collection.upsert(ids=[row.id], documents=[row.text], metadatas=[dict(row.metadata)])
+```
+
+The same rows the command writes, with the same fields, handed over as values.
+
 ### Hugging Face `datasets`
 
 ```python

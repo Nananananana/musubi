@@ -14,12 +14,13 @@ thing musubi was built to keep.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
 
 from musubi import __version__
-from musubi.application.export import SHAPES, as_line, documents
+from musubi.application.export import ARROW_EXTRA, SHAPES, as_line, documents, write_parquet
 from musubi.application.pipeline import Settings
 from musubi.application.sync import sync
 from musubi.application.trace import resolve
@@ -166,18 +167,18 @@ def test_every_shape_carries_the_same_three_things(corpus: Path, shape: str) -> 
     record = next(iter(documents(reader, str(corpus))))
     body = json.loads(as_line(record, shape))
 
-    identifier, content = SHAPES[shape]
-    assert set(body) == {identifier, content, "metadata"}
+    identifier, content, metadata = SHAPES[shape]
+    assert set(body) == {identifier, content, metadata}
     assert body[identifier] == record.id
     assert body[content] == record.text
-    assert body["metadata"] == dict(record.metadata)
+    assert body[metadata] == dict(record.metadata)
 
 
 def test_an_unknown_shape_is_refused_and_the_known_ones_are_named(corpus: Path) -> None:
     reader = Corpus(corpus)
     record = next(iter(documents(reader, str(corpus))))
     with pytest.raises(ContractError, match="jsonl"):
-        as_line(record, "haystack")
+        as_line(record, "csv")
 
 
 def test_a_line_is_valid_utf8_json_with_the_characters_unescaped(corpus: Path) -> None:
@@ -244,3 +245,117 @@ def test_the_command_writes_the_document_to_a_pipe(
         "vault:design/gear.md",
         "vault:stove.md",
     ]
+
+
+# -- the shapes that were missing, and the table ---------------------------
+
+
+def test_the_haystack_shape_is_what_its_document_takes(corpus: Path) -> None:
+    """`haystack.Document(id=..., content=..., meta=...)`. The third shape to
+    differ in the metadata key, which is why SHAPES grew a third slot."""
+    reader = Corpus(corpus)
+    record = next(iter(documents(reader, str(corpus))))
+    body = json.loads(as_line(record, "haystack"))
+    assert set(body) == {"id", "content", "meta"}
+    assert body["meta"]["unit_key"] == "design/gear.md"
+
+
+def test_a_parquet_export_holds_the_same_rows_with_the_same_names(
+    corpus: Path, tmp_path: Path
+) -> None:
+    """The columns are the JSON Lines keys, so a reader moving between the two
+    finds the same names -- and the citation still comes home from a table."""
+    pyarrow = pytest.importorskip("pyarrow")
+    pq = pytest.importorskip("pyarrow.parquet")
+
+    out = tmp_path / "corpus.parquet"
+    count = write_parquet(documents(Corpus(corpus), str(corpus)), out)
+    table = pq.read_table(out)
+
+    assert count == 2 == table.num_rows
+    rows = exported(corpus)
+    assert table.column("id").to_pylist() == [row["id"] for row in rows]
+    assert table.column("text").to_pylist() == [row["text"] for row in rows]
+    metadatas = [row["metadata"] for row in rows]
+    assert all(isinstance(metadata, dict) for metadata in metadatas)
+    for name in ("unit_key", "trace_map", "corpus", "body_offset", "traceable_coverage"):
+        assert table.column(name).to_pylist() == [
+            metadata[name] for metadata in metadatas if isinstance(metadata, dict)
+        ], name
+    assert isinstance(table.schema.field("characters").type, type(pyarrow.int64()))
+
+
+def test_the_parquet_command_needs_a_file(corpus: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    pytest.importorskip("pyarrow")
+    assert main(["export", str(corpus), "--format", "parquet"]) == 1
+    assert "--out" in capsys.readouterr().err
+
+
+def test_the_parquet_command_writes_a_table(corpus: Path, tmp_path: Path) -> None:
+    pq = pytest.importorskip("pyarrow.parquet")
+    out = tmp_path / "t" / "corpus.parquet"
+    assert main(["export", str(corpus), "--format", "parquet", "--out", str(out)]) == 0
+    assert pq.read_table(out).num_rows == 2
+
+
+def test_without_pyarrow_the_message_names_the_extra(
+    corpus: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Offered, never claimed ([ADR-0028]): nothing imports pyarrow until the
+    format is asked for, and the caller who lacks it is told what to install
+    rather than shown an ImportError from inside a writer."""
+    import builtins
+
+    real_import = builtins.__import__
+
+    def refusing(name: str, *args: object, **kwargs: object) -> object:
+        if name.startswith("pyarrow"):
+            raise ImportError(name)
+        return real_import(name, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(builtins, "__import__", refusing)
+    monkeypatch.delitem(sys.modules, "pyarrow", raising=False)
+    monkeypatch.delitem(sys.modules, "pyarrow.parquet", raising=False)
+    with pytest.raises(ContractError, match=ARROW_EXTRA.replace("[", "\\[")):
+        write_parquet(documents(Corpus(corpus), str(corpus)), tmp_path / "x.parquet")
+
+
+def test_the_package_hands_out_the_rows_one_at_a_time(corpus: Path) -> None:
+    """`musubi.documents()` for the caller who wants Python rather than a
+    file, and a generator so that a corpus of any size costs one document."""
+    import musubi
+
+    rows = musubi.documents(corpus)
+    assert hasattr(rows, "__next__"), "a list would hold the whole corpus"
+    first = next(rows)
+    assert first.id == "vault:design/gear.md"
+    assert first.metadata["corpus"] == str(corpus.resolve())
+
+
+def test_the_command_does_not_hold_the_corpus(
+    corpus: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The writer sees the first line before the reader has produced the last.
+
+    Asserted by interleaving rather than by measuring memory: a generator that
+    is consumed as it yields cannot have been collected into a list first, and
+    that is the whole of the property.
+    """
+    from musubi.application import export
+
+    order: list[str] = []
+    real = export.documents
+
+    def noting(reader: object, root: str = "") -> object:
+        for record in real(reader, root):  # type: ignore[arg-type]
+            order.append(f"read {record.id}")
+            yield record
+
+    class Sink:
+        def write(self, chunk: bytes) -> int:
+            order.append("write")
+            return len(chunk)
+
+    monkeypatch.setattr(export, "documents", noting)
+    export.write(noting(Corpus(corpus), str(corpus)), Sink())  # type: ignore[arg-type]
+    assert order[:2] == ["read vault:design/gear.md", "write"], order

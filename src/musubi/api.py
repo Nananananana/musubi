@@ -50,9 +50,11 @@ policy did not apply.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
+from .application.export import Exported
 from .application.pipeline import Settings
 from .config import Configuration, destination, load, settings_from, source_from
 from .domain.cleansing import cleanse
@@ -65,7 +67,7 @@ from .errors import ConversionError, CredentialFoundError
 from .infrastructure.sources.filesystem import MEDIA_TYPES
 from .ports.converter import Converted
 
-__all__ = ["Converted", "Where", "convert", "history", "media_type_of", "settings"]
+__all__ = ["Converted", "Where", "convert", "documents", "history", "media_type_of", "settings"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -286,6 +288,21 @@ def history(corpus: Path | str) -> tuple[Entry, ...]:
     from .infrastructure.corpus import Corpus
 
     return Corpus(Path(corpus)).journal()
+
+
+def documents(corpus: Path | str) -> Iterator[Exported]:
+    """Every document of a corpus, one at a time, with the fields `export` writes.
+
+    For a caller who wants the rows in Python rather than in a file -- to hand
+    to a vector store, a `datasets.Dataset.from_generator`, or their own loop
+    -- without going through a file and a parser to get back what musubi had
+    in hand. A generator, so a corpus of any size costs one document at a time.
+    """
+    from .application.export import documents as every
+    from .infrastructure.corpus import Corpus
+
+    where = Path(corpus)
+    return every(Corpus(where), str(where.resolve()))
 
 
 def _version() -> str:

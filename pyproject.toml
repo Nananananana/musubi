@@ -61,6 +61,11 @@ pdf = ["pypdfium2>=4"]
 # a library nobody can use. With it and `encoding = "detect"`, the file is read
 # and the detected encoding is recorded with every offset (ADR-0031).
 encoding = ["charset-normalizer>=3"]
+# `musubi export --format parquet`. Apache-2.0. Read-side only: it changes what
+# a corpus can be exported *as* and nothing about what a folder builds, which
+# is the line ADR-0028 draws. Nothing imports it until that format is asked
+# for, and a caller without it is told the name of this extra.
+arrow = ["pyarrow>=17"]
 dev = [
     "pytest>=8",
     "pytest-cov",
