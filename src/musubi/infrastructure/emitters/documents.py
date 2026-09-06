@@ -76,7 +76,7 @@ from ...domain.removal import RemovalRecord
 from ...domain.screening import Finding
 from ...domain.span import Span
 from ...domain.text import rewrite
-from ...domain.trace import TraceMap
+from ...domain.trace import CHARACTERS, TraceMap
 from ...errors import ContractError, ConversionError
 from ...ports.emitter import Document, Previous, Rendered, Retained
 
@@ -163,6 +163,8 @@ class DocumentEmitter:
                 traceable_characters=trace.traceable_characters,
                 characters=trace.artefact_length,
                 layer=document.layer,
+                source_unit=trace.source_unit,
+                answered_source_units=trace.answered_source_units,
                 source_hash=document.unit.content_hash,
                 facts=tuple(document.facts),
             ),
@@ -533,6 +535,8 @@ def _artefact_from(entry: Mapping[str, Any]) -> Artefact | None:
             traceable_characters=int(entry["traceable_characters"]),
             characters=int(entry["characters"]),
             layer=_string(entry, "layer"),
+            source_unit=str(entry.get("source_unit") or CHARACTERS),
+            answered_source_units=int(entry.get("answered_source_units") or 0),
             source_hash=str(source.get("content_hash") or ""),
             facts=_facts(entry.get("facts")),
         )

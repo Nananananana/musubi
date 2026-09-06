@@ -118,6 +118,9 @@ def verify(corpus: CorpusReader) -> Verified:
     faults.extend(_records_name_units_the_run_saw(document, units))
 
     checks += 1
+    faults.extend(_source_units_are_the_ones_the_artefacts_state(document, entries))
+
+    checks += 1
     faults.extend(_journal_agrees(corpus, document))
 
     for entry in entries:
@@ -131,6 +134,39 @@ def verify(corpus: CorpusReader) -> Verified:
         checks=checks,
         faults=tuple(faults),
     )
+
+
+def _source_units_are_the_ones_the_artefacts_state(
+    document: dict[str, Any], entries: list[dict[str, Any]]
+) -> list[Fault]:
+    """`coverage.source_units` is what the artefacts actually say.
+
+    The field a reader consults to decide whether the run's answer width means
+    anything ([ADR-0038]). A corpus of Markdown and PDFs whose coverage claims
+    one unit would have that reader dividing pages-plus-characters by
+    characters and believing the result.
+    """
+    coverage = document.get("coverage") or {}
+    stated = coverage.get("source_units")
+    if not isinstance(stated, list):
+        return [Fault("manifest 5", "coverage", "source_units is not a list of units")]
+
+    actual = sorted(
+        {
+            str(entry.get("source_unit") or "")
+            for entry in entries
+            if int(entry.get("traceable_characters") or 0)
+        }
+    )
+    if sorted(str(unit) for unit in stated) != actual:
+        return [
+            Fault(
+                "manifest 5",
+                "coverage",
+                f"claims source_units {stated} and its artefacts measure in {actual}",
+            )
+        ]
+    return []
 
 
 # -- journal ---------------------------------------------------------------
@@ -303,10 +339,15 @@ def _run_id_re_derives(document: dict[str, Any]) -> list[Fault]:
 
 
 def _coverage_totals_agree(document: dict[str, Any], entries: list[dict[str, Any]]) -> list[Fault]:
-    """The published denominators are the sums of the artefacts."""
+    """The published denominators are the sums of the artefacts.
+
+    `answered_source_units` is in the loop with them ([ADR-0038]): a published
+    number that nothing adds up is a number free to drift, and this one is the
+    numerator of the metric that exists to catch a coverage figure lying.
+    """
     coverage = document.get("coverage") or {}
     faults = []
-    for name in ("characters", "traceable_characters"):
+    for name in ("characters", "traceable_characters", "answered_source_units"):
         stated = int(coverage.get(name, 0))
         summed = sum(int(entry.get(name, 0)) for entry in entries)
         if stated != summed:

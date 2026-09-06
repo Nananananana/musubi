@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from .hashing import Canonical, hash_of
 from .removal import RemovalRecord
 from .screening import Finding
+from .trace import CHARACTERS
 
 __all__ = [
     "CONTRACT",
@@ -78,6 +79,16 @@ class Artefact:
     traceable_characters: int
     characters: int
     layer: str
+    #: What this artefact's map counts its source in -- `characters`, or
+    #: `opaque` for a converter whose source has no decoded text ([ADR-0025]).
+    #: In the manifest as well as in the map, because a reader deciding whether
+    #: two coverage numbers may be added had to open every sidecar to find out.
+    source_unit: str = CHARACTERS
+    #: `answer_width`'s numerator: how much source the map hands back, summed
+    #: over every traceable character, in `source_unit`. Published so that a
+    #: run's aggregate is a sum of numerators over a sum of denominators rather
+    #: than a mean of means ([ADR-0038]).
+    answered_source_units: int = 0
     #: The hash of the **source** bytes this was converted from -- the trace
     #: map already carries it; the manifest carries it so that a re-sync can
     #: ask *did the bytes change* without opening ten thousand sidecars
@@ -98,6 +109,24 @@ class Artefact:
         if not self.characters:
             return 1.0
         return self.traceable_characters / self.characters
+
+    @property
+    def answer_width(self) -> float | None:
+        """Ask about one character of this artefact: how much source comes back?
+
+        1.0 answers a character with a character. A large number answers a
+        character with a paragraph, which is what a map that resolves
+        everywhere and locates nothing looks like ([ADR-0033]).
+
+        ``None`` where there is no numerator -- an artefact with nothing
+        traceable, or one read out of a manifest written before the field
+        existed. Not 0.0, which would claim that a character resolves to no
+        source at all: a number no real map can produce, and the shape
+        `traceable_coverage` was filed for producing (#81).
+        """
+        if not self.answered_source_units:
+            return None
+        return self.answered_source_units / self.traceable_characters
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,12 +167,39 @@ class Coverage:
     skipped: int
     characters: int
     traceable_characters: int
+    #: Summed across the run, in whichever unit the artefacts share.
+    answered_source_units: int = 0
+    #: Every `source_unit` the run's artefacts measure their sources in.
+    #: One entry is a corpus whose widths may be added; more than one is a
+    #: corpus whose widths may not ([ADR-0038]).
+    source_units: tuple[str, ...] = ()
 
     @property
     def traceable_coverage(self) -> float:
         if not self.characters:
             return 1.0
         return self.traceable_characters / self.characters
+
+    @property
+    def answer_width(self) -> float | None:
+        """The run's answer width, or ``None`` where there is no such number.
+
+        **A sum of numerators over a sum of denominators**, weighted by
+        traceable characters exactly as coverage is -- not a mean of the
+        per-document widths, which would let one tiny document dominate a
+        corpus.
+
+        ``None`` when the run's artefacts do not share a `source_unit`. A PDF's
+        map answers in pages and a Markdown map answers in characters, and
+        their sum is pages added to characters: a number with no dimension,
+        printed to four decimal places. `traceable_coverage` survives the same
+        corpus because its numerator and denominator are both *output*
+        characters; this one does not, and says so rather than being averaged
+        into nonsense.
+        """
+        if len(self.source_units) > 1 or not self.answered_source_units:
+            return None
+        return self.answered_source_units / self.traceable_characters
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,6 +238,14 @@ class Manifest:
             skipped=len(self.skipped),
             characters=sum(a.characters for a in self.artefacts),
             traceable_characters=sum(a.traceable_characters for a in self.artefacts),
+            answered_source_units=sum(a.answered_source_units for a in self.artefacts),
+            # Only the artefacts that have something to measure: an empty
+            # document's unit says nothing about whether two widths may be
+            # added, and counting it would make a corpus look mixed because it
+            # holds one empty file.
+            source_units=tuple(
+                sorted({a.source_unit for a in self.artefacts if a.traceable_characters})
+            ),
         )
 
     @property
@@ -246,9 +310,16 @@ class Manifest:
             if coverage.characters
             else "no characters to trace"
         )
+        # Beside the percentage and never instead of it. The percentage is the
+        # one that reads as a success and can be maximised by a map that
+        # resolves everywhere and locates nothing ([ADR-0033]); this is the one
+        # that goes the wrong way when that happens, so a reader who sees only
+        # the headline still sees it.
+        width = coverage.answer_width
+        beside = f", {width:.2f} answer width" if width is not None else ""
         return (
             f"{coverage.emitted} emitted, {coverage.skipped} skipped, "
-            f"{len(self.removals)} removals, {traceable}"
+            f"{len(self.removals)} removals, {traceable}{beside}"
         )
 
 
@@ -296,6 +367,8 @@ def render(manifest: Manifest) -> str:
                 "layer": artefact.layer,
                 "characters": artefact.characters,
                 "traceable_characters": artefact.traceable_characters,
+                "source_unit": artefact.source_unit,
+                "answered_source_units": artefact.answered_source_units,
                 **({"facts": dict(artefact.facts)} if artefact.facts else {}),
             }
             for artefact in manifest.artefacts
@@ -343,6 +416,8 @@ def render(manifest: Manifest) -> str:
             "skipped": coverage.skipped,
             "characters": coverage.characters,
             "traceable_characters": coverage.traceable_characters,
+            "answered_source_units": coverage.answered_source_units,
+            "source_units": list(coverage.source_units),
         },
         "limits": list(manifest.limits),
     }

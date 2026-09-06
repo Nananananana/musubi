@@ -13,7 +13,7 @@
       "units": 2,
       "caps": [
         "files larger than 8388608 bytes are not read",
-        "only these suffixes are read: .markdown, .md, .mdown, .mkd, .text, .txt"
+        "only these suffixes are read: .htm, .html, .markdown, .md, .mdown, .mkd, .pdf, .text, .txt, .xhtml"
       ]
     }
   ],
@@ -36,12 +36,15 @@
       "trace_map": "traces/design/gear.md.json",
       "source": {
         "source_id": "vault",
-        "unit_key": "design/gear.md"
+        "unit_key": "design/gear.md",
+        "content_hash": "sha256:78b3fff7e05d4b51a4a325075581ba83a65d7a76a544f9888cd46e5189cea8d0"
       },
       "converter": "markdown@1",
       "layer": "fact",
       "characters": 119,
-      "traceable_characters": 83
+      "traceable_characters": 83,
+      "source_unit": "characters",
+      "answered_source_units": 222
     },
     {
       "path": "documents/plain.txt",
@@ -49,12 +52,15 @@
       "trace_map": "traces/plain.txt.json",
       "source": {
         "source_id": "vault",
-        "unit_key": "plain.txt"
+        "unit_key": "plain.txt",
+        "content_hash": "sha256:adefb60e9ced8eee4c59eaee7825ba0d11425656b6f27c88b7e8e4282b64f3fb"
       },
       "converter": "plaintext@1",
       "layer": "fact",
       "characters": 10,
-      "traceable_characters": 10
+      "traceable_characters": 10,
+      "source_unit": "characters",
+      "answered_source_units": 11
     }
   ],
   "removals": [
@@ -86,11 +92,16 @@
     "emitted": 2,
     "skipped": 1,
     "characters": 129,
-    "traceable_characters": 93
+    "traceable_characters": 93,
+    "answered_source_units": 233,
+    "source_units": [
+      "characters"
+    ]
   },
   "limits": [
     "A traceable character means an offset resolves to a place in the source. It does not mean the conversion read the document in the right order.",
-    "Source offsets are counted in characters of the decoded text. Turning one into a byte offset takes the encoding, the byte-order mark's length and the file itself.",
+    "How precisely it resolves depends on the converter, and the totals here do not say. A character map answers with a character; a PDF's map answers with a page. Each trace map states its own `source_unit`, and a corpus of mixed formats has one coverage number over more than one meaning of traceable.",
+    "Where a map's `source_unit` is `characters`, turning a source offset into a byte offset takes the encoding, the byte-order mark's length and the file itself. Where it is not, there is no byte offset to turn it into.",
     "The screener catches credential formats their issuers made recognisable. Its recall against a labelled corpus has not been measured, and no number is claimed for it.",
     "Removals are recorded by hash, not by value. Confirming one requires the source.",
     "Rules remove what they name and nothing else. That is not a guarantee about what is left."

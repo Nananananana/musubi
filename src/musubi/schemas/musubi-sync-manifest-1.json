@@ -109,7 +109,9 @@
         "emitted",
         "skipped",
         "characters",
-        "traceable_characters"
+        "traceable_characters",
+        "answered_source_units",
+        "source_units"
       ],
       "additionalProperties": false,
       "properties": {
@@ -117,7 +119,18 @@
         "emitted": { "type": "integer", "minimum": 0 },
         "skipped": { "type": "integer", "minimum": 0 },
         "characters": { "type": "integer", "minimum": 0 },
-        "traceable_characters": { "type": "integer", "minimum": 0 }
+        "traceable_characters": { "type": "integer", "minimum": 0 },
+        "answered_source_units": {
+          "description": "The run's answer width numerator, summed over its artefacts. Divide by traceable_characters for the run's width -- BUT ONLY IF source_units holds exactly one entry. Where it holds more, the sum adds pages to characters and there is no such number; traceable_coverage survives the same corpus because its numerator and denominator are both output characters.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "source_units": {
+          "description": "Every source_unit the run's artefacts with something to measure count in. One entry is a corpus whose answer widths may be added; more than one is a corpus whose widths may not.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
       }
     },
     "limits": {
@@ -177,7 +190,9 @@
         "converter",
         "layer",
         "characters",
-        "traceable_characters"
+        "traceable_characters",
+        "source_unit",
+        "answered_source_units"
       ],
       "additionalProperties": false,
       "properties": {
@@ -202,6 +217,16 @@
           }
         },
         "converter": { "type": "string", "minLength": 1 },
+        "source_unit": {
+          "description": "What this artefact's map counts its source in: 'characters' of the decoded source (ADR-0018), or 'opaque' for a converter whose source has no decoded text to count -- a PDF's pages (ADR-0025). Here as well as in the trace map, because a reader deciding whether two artefacts' answer widths may be added should not have to open every sidecar to find out.",
+          "type": "string",
+          "minLength": 1
+        },
+        "answered_source_units": {
+          "description": "How much source this artefact's map hands back, summed over every traceable character, counted in source_unit. This is answer_width's NUMERATOR and is published instead of the ratio so that a run's aggregate is a sum of numerators over a sum of denominators rather than a mean of means: divide by traceable_characters for this artefact's width. 1.0 answers a character with a character; a large number answers a character with a paragraph, which is what a map that resolves everywhere and locates nothing looks like (ADR-0033).",
+          "type": "integer",
+          "minimum": 0
+        },
         "facts": {
           "description": "What the source stated about this unit that the unit does not say about itself -- a fetched page's source_url and fetched_at -- exactly as written into the document's front matter (ADR-0037). Optional: most sources have nothing to add. Recorded here so that a re-sync whose record changed while the page did not still converts the unit.",
           "type": "object",

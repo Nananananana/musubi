@@ -150,7 +150,11 @@ turn them from *checked on these examples* into *checked at all*.
    means re-running, which is what `musubi verify` will be for. No schema can do
    it.
 2. **`coverage.units_read == emitted + skipped`**, and
-   `traceable_characters <= characters`.
+   `traceable_characters <= characters`. **`characters`,
+   `traceable_characters` and `answered_source_units` are each the sum of the
+   artefacts'**, and `coverage.source_units` is exactly the set of
+   `source_unit` values the artefacts with something to measure state.
+   `musubi verify` checks all of it.
 3. **A `removal` or a `finding` names a `unit_key` that appears somewhere in the
    run** — as an artefact, or as a skip.
 4. **An artefact's `trace_map` names a file that exists**, and that file's
@@ -249,6 +253,28 @@ entry names what moved and *counts* what did not. Listing every untouched
 artefact would make a hundred runs over ten thousand documents a history larger
 than the thing it describes, which is the difference between a feature that
 works on a real corpus and one that only works in a demonstration.
+
+### Answer width, and when there is no such number
+
+`answered_source_units` is published and the **ratio is not**. Divide it by
+`traceable_characters` for an artefact's answer width: 1.0 answers a character
+with a character, and a large number answers a character with a paragraph —
+which is what a map that resolves everywhere and locates nothing looks like
+([ADR-0033](adr/0033-a-threshold-that-nobody-swept-is-a-number-fitted-to-one-corpus.md)).
+
+The numerator travels rather than the ratio because **a corpus's width is a sum
+of numerators over a sum of denominators, not a mean of the per-document
+widths**. A four-character document answering with forty characters and a
+forty-thousand-character one answering exactly would average to something
+alarming about a corpus that is almost entirely exact.
+
+**And a run of mixed formats has no such number.** A PDF's map answers in pages
+and a Markdown map answers in characters; their sum is pages added to
+characters. So `coverage.source_units` is published beside the total, and a
+consumer divides **only when it holds exactly one entry**. `traceable_coverage`
+survives the same corpus because its numerator and denominator are both output
+characters; this one does not, and the manifest says so rather than being
+averaged into nonsense.
 
 ### And what a schema cannot check at all
 
