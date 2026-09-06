@@ -166,8 +166,12 @@ class Server:
         try:
             corpus, key = Corpus.holding(path)
         except TraceError:
-            corpus, key = None, ""
-        if corpus is not None:
+            corpus = None
+        # `holds` and not a caught refusal: a folder that looks like a corpus
+        # and does not hold this key is a folder, and the answer for a file in
+        # one is the conversion below. Refusing instead turned an ordinary
+        # `documents/` subfolder into an error where an answer used to be.
+        if corpus is not None and corpus.holds(key):
             found = resolve(corpus, key, Span(start, end), within=self.root)
             return json.dumps(as_document(found), ensure_ascii=False, indent=2)
 

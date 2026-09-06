@@ -158,6 +158,41 @@ def test_a_fact_may_not_overwrite_what_musubi_states() -> None:
         FrontMatter(facts=(("a:b", "x"),))
 
 
+def test_discovery_opens_the_records_and_never_a_page(tmp_path: Path) -> None:
+    """The one departure this source makes from the two stages, asserted.
+
+    Deduplication decides what is found and what is skipped, and that is
+    discovery's answer to give, so the records are opened. The promise that
+    mattered is that `musubi plan` can report what it will skip before a word
+    of what it will convert has been read -- so the pages stay shut, and this
+    watches every `open` to say so.
+    """
+    root = fetched(
+        tmp_path / "fetched",
+        {"feed/a.html": (PAGE, RECORD), "feed/b.html": (PAGE.replace("Gear", "Stove"), None)},
+    )
+
+    opened: list[str] = []
+    real = Path.read_text
+    real_bytes = Path.read_bytes
+
+    def noting_text(self: Path, *args: object, **kwargs: object) -> str:
+        opened.append(self.name)
+        return real(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    def noting_bytes(self: Path) -> bytes:
+        opened.append(self.name)
+        return real_bytes(self)
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(Path, "read_text", noting_text)
+        patch.setattr(Path, "read_bytes", noting_bytes)
+        discovery = FetchedSource(root).discover()
+
+    assert len(discovery.found) == 2
+    assert opened == ["a.html" + RECORD_SUFFIX], opened
+
+
 # -- the same article from two feeds ----------------------------------------
 
 

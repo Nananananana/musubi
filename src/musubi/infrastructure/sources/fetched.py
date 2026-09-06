@@ -51,6 +51,20 @@ even though the page did not change ([ADR-0036] compares both).
 A record that is present and cannot be read *is* a skip, with a reason: a
 record that lies is worse than none.
 
+## The one thing this source does that the others do not
+
+**`discover()` opens the records.** Every other source opens nothing until
+`read()` -- so that `musubi plan` can say what will be skipped and why before a
+single private file has been read (`ports/source.py`). This one reads the
+`.fetch.json` beside each page, because deduplication decides what is *found*
+and what is *skipped*, and that is discovery's answer to give.
+
+The promise that mattered is kept exactly: **no page is opened.** A record is
+not the owner's document -- it is the orchestrator's note about a fetch, written
+by the same program that is asking for the sync. A plan still reports what it
+will skip without having read a word of what it will convert, and
+`tests/test_fetched_source.py` asserts that the pages stay shut.
+
 ## The same article from two feeds
 
 ``canonical_url`` is what the orchestrator asked for (U2). Two pages with the
