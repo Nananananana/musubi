@@ -273,6 +273,25 @@ having.
   which means a streaming JSON reader, which means a dependency [ADR-0001]
   refuses. [#80] holds this too.
 
+### The degenerate-input pass, and the one number it left open
+
+Sixteen shapes through a real sync — empty files, a lone byte-order mark,
+whitespace only, an unclosed fence, a 200 kB single line, NUL, BEL, VT, form
+feed, CRLF, lone CR, empty HTML and PDF. Everything was handled sensibly except
+two, and one of them was the worst defect found this month
+([ADR-0054](adr/0054-utf-16-without-a-mark-is-valid-utf-8.md)).
+
+The other is **open, deliberately**: a title is as long as the heading it came
+from. A 200,000-character heading gives a 200,000-character title in the
+manifest, which is then paid for at about 3.1× on every command that opens the
+corpus.
+
+Every fix has a real objection. Truncating contradicts what the field *is* —
+[ADR-0040]'s *the title is the document's claim, repeated* — and any length is
+a threshold with nothing swept behind it, which [ADR-0033] refuses. So it is
+written down in `docs/contracts.md` where a consumer reads, with the advice to
+clamp, and left for a decision rather than taken by one.
+
 ### And one constraint that turned out to need a sentence rather than a fix
 
 **Two runs into one destination.** There is no lock, so a second run clears the
