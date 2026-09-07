@@ -360,6 +360,43 @@ This is how every PDF holding Japanese encodes its text, and how most current
 producers encode a subsetted Latin font. It was found by the fixtures above and
 is now a refusal — `composite_font`, naming `musubi[pdf]`, which reads the CMap.
 
+## The floors, and what happens when one is crossed
+
+```text
+uv run python tools/floors.py
+
+  converter        measure                        now   floor    room
+  html@1           boilerplate rejected         0.500   0.333  +0.167
+  html@1           traceable coverage           0.935   0.850  +0.085
+  pdf_text@1       reading order agreement      0.678   0.550  +0.128
+  pdfium@1         reading order agreement      0.678   0.550  +0.128
+  pdfium@1         reads a PDF 1.5              1.000   1.000  +0.000
+  trafilatura@1    boilerplate rejected         1.000   0.667  +0.333
+  trafilatura@1    traceable coverage           0.997   0.900  +0.097
+```
+
+Every number above was measured and printed before this, and **nothing failed
+when one fell**: a change dropping `trafilatura@1` from 99.7% traceable to 70%
+passed every test in the repository. The floors are the gate, and the report
+prints either way — a number that went **up** is worth seeing, and a floor with
+less headroom than somebody thinks is a floor about to become a target.
+
+**Floors, not targets**, which `docs/proposals/0001-the-design.md` §9 decided
+and the register repeats: each one sits below what it measured, carries what it
+measured at and when, and says why the headroom is the size it is. Moving one
+up is a commit with a reason in it.
+
+**Three measures have no headroom on purpose.** `content kept`, `refuses a
+scan` and `reads a PDF 1.4` are bounds: losing a planted paragraph is not a
+score getting worse but a corpus answering questions without something the page
+said, and a scan becoming an empty document is [ADR-0033]'s shape — 100%
+traceable over no characters, reading as success.
+
+**Seen red.** A `trafilatura@1` blunted to keep a third of the page with a map
+that resolves everywhere and locates nothing takes traceable coverage to
+**0.000** and trips its floor; `content kept` falls to 0.333 and trips its
+bound. That is the regression #84 describes, and it used to pass.
+
 ## Still owed
 
 - **Cleansing precision** — firings that removed something a corpus labels as

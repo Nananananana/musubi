@@ -28,56 +28,18 @@ page. What it can answer is the relative question, which is the one being asked.
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tests"))
+
+from html_fixtures import BOILERPLATE, CONTENT, page
 from musubi.infrastructure.converters import known_converters
 from musubi.ports.converter import Converted
 
-#: Strings that must not survive. Each is in the fixture inside a structure a
-#: main-content extractor is supposed to reject.
-BOILERPLATE = (
-    "Skip to main content",
-    "Accept all cookies",
-    "Subscribe to our newsletter",
-    "Copyright 2026 Example Corporation",
-    "Related articles you may enjoy",
-    "Follow us on social media",
-)
-
-#: Strings that must survive. Losing one of these is worse than keeping a
-#: banner: a corpus that quietly dropped a paragraph answers questions without
-#: it and nothing anywhere says so.
-CONTENT = (
-    "A tent that weighs 2.4kg is a tent you carry all day",
-    "The stove is the part people get wrong",
-    "Boots matter more than the pack",
-)
-
-
-def fixture() -> bytes:
-    return f"""<!doctype html>
-<html lang="en"><head><title>The gear list</title>
-<meta name="description" content="notes on what to carry"></head>
-<body>
-<a href="#main">{BOILERPLATE[0]}</a>
-<div id="cookie-banner"><p>We use cookies. <button>{BOILERPLATE[1]}</button></p></div>
-<nav><ul><li><a href="/">Home</a></li><li><a href="/about">About</a></li>
-<li><a href="/blog">Blog</a></li><li><a href="/contact">Contact</a></li></ul></nav>
-<main id="main"><article>
-<h1>The gear list</h1>
-<p>{CONTENT[0]} &mdash; and the difference is measured in kilometres.</p>
-<p>{CONTENT[1]}. A remote canister freezes; a liquid-fuel stove does not.</p>
-<p>{CONTENT[2]}, because a blister ends a walk and a heavy pack only slows it.</p>
-<table><tr><th>Item</th><th>Mass</th></tr><tr><td>Tent</td><td>2.4&nbsp;kg</td></tr></table>
-</article></main>
-<aside><h2>{BOILERPLATE[4]}</h2><ul><li><a href="/x">Another post</a></li></ul></aside>
-<div class="newsletter"><p>{BOILERPLATE[2]}</p></div>
-<footer><p>{BOILERPLATE[3]}. All rights reserved.</p>
-<p>{BOILERPLATE[5]}.</p></footer>
-</body></html>
-""".encode()
-
 
 def main() -> int:
-    document = fixture()
+    document = page()
     candidates = [c for c in known_converters() if "text/html" in c.media_types]
 
     print(
