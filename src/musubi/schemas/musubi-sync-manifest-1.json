@@ -193,7 +193,9 @@
         "characters",
         "traceable_characters",
         "source_unit",
-        "answered_source_units"
+        "answered_source_units",
+        "encoding",
+        "encoding_detected"
       ],
       "additionalProperties": false,
       "properties": {
@@ -232,6 +234,15 @@
           "description": "How much source this artefact's map hands back, summed over every traceable character, counted in source_unit. This is answer_width's NUMERATOR and is published instead of the ratio so that a run's aggregate is a sum of numerators over a sum of denominators rather than a mean of means: divide by traceable_characters for this artefact's width. 1.0 answers a character with a character; a large number answers a character with a paragraph, which is what a map that resolves everywhere and locates nothing looks like (ADR-0033).",
           "type": "integer",
           "minimum": 0
+        },
+        "encoding": {
+          "description": "How this artefact's source bytes were read. The trace map has carried it since ADR-0018; it is here so that a question about a whole run -- how much of this corpus rests on a guess -- does not mean opening every sidecar.",
+          "type": "string",
+          "minLength": 1
+        },
+        "encoding_detected": {
+          "description": "Was that encoding DETECTED rather than declared? 'shift_jis' is a fact when the settings named it and a guess when a detector did, and the name alone does not say which. Detection cannot be trusted by its own confidence: every miss measured reported 100% coherence, and the runner-up candidate does not separate a right reading from a wrong one either (#82, ADR-0044). So this does not say the reading is wrong; it says which readings are guesses.",
+          "type": "boolean"
         },
         "facts": {
           "description": "What the source stated about this unit that the unit does not say about itself -- a fetched page's source_url and fetched_at -- exactly as written into the document's front matter (ADR-0037). Optional: most sources have nothing to add. Recorded here so that a re-sync whose record changed while the page did not still converts the unit.",

@@ -90,7 +90,72 @@ def main() -> int:
     print()
     print("The label is not the measurement. `euc-jp` read as `euc_jis_2004` is a pass:")
     print("a superset that decodes the same bytes the same way. What is compared is text.")
+    _rivals(short=short)
     return 0
+
+
+def _rivals(*, short: bool) -> None:
+    """Does the **runner-up** separate a right reading from a wrong one?
+
+    [#82] proposed it as the first thing to try: *a large gap between best and
+    second is weak evidence; a small gap on two single-byte Western encodings
+    is the failure case exactly. Needs measuring, not assuming.* So this
+    measures it, and the answer is no.
+
+    A rival reading is another candidate that decodes the same bytes to
+    different text. It is a fact rather than a threshold -- there is no number
+    to tune -- which is why it was worth measuring before anything was built on
+    a gap size.
+
+    [#82]: https://github.com/Nananananana/musubi/issues/82
+    """
+    try:
+        import charset_normalizer
+    except ImportError:  # pragma: no cover - the caller already checked
+        return
+
+    print()
+    print("== and the runner-up, which does not separate them either ==")
+    print()
+    table: dict[tuple[bool, bool], int] = {}
+    for paragraph in SAMPLES.values():
+        text = paragraph if short else paragraph * 6
+        for encoding in ENCODINGS:
+            try:
+                raw = text.encode(encoding)
+            except UnicodeEncodeError:
+                continue
+            candidates = list(charset_normalizer.from_bytes(raw))
+            if not candidates:
+                continue
+            read = _decoded(raw, str(candidates[0].encoding))
+            rival = any(_decoded(raw, str(other.encoding)) != read for other in candidates[1:])
+            key = (read == text, rival)
+            table[key] = table.get(key, 0) + 1
+
+    print(f"  {'a rival reading exists':26s} {'right':>7s} {'WRONG':>7s}")
+    for rival in (False, True):
+        label = "yes" if rival else "no"
+        print(f"  {label:26s} {table.get((True, rival), 0):>7d} {table.get((False, rival), 0):>7d}")
+    caught = table.get((False, True), 0)
+    cried = table.get((True, True), 0)
+    print()
+    print(f"  It fires on {caught + cried} readings to find {caught} wrong ones.")
+    print("  As a gate that is close to the entropy tier's published precision, which")
+    print("  ADR-0017 made opt-in for exactly this reason. What it is good for is the")
+    print("  other direction: a reading with no rival is right far more often than one")
+    print("  with one, and neither is a number anybody should act on per document.")
+    print()
+    print("  So musubi records **which readings are guesses** and does not pretend to")
+    print("  rank them (ADR-0044). The manifest carries `encoding_detected` and the run")
+    print("  report says how many, which is the honest thing a corpus can offer.")
+
+
+def _decoded(raw: bytes, encoding: str) -> str | None:
+    try:
+        return raw.decode(encoding)
+    except (LookupError, UnicodeDecodeError):
+        return None
 
 
 if __name__ == "__main__":

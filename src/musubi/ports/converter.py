@@ -39,6 +39,15 @@ class Converted:
     #: file, nothing can, which is why the map does not pretend to.
     source_encoding: str = "utf-8"
     source_bom_bytes: int = 0
+    #: Was `source_encoding` **detected** rather than declared or assumed?
+    #:
+    #: The difference matters and nothing carried it. `shift_jis` here is a
+    #: fact when the settings named it and a guess when a detector did, and a
+    #: reader deciding how far to trust a document cannot tell those apart from
+    #: the name alone. `CONFIDENT` cannot separate a right reading from a wrong
+    #: one (#82), so what a corpus can honestly offer is which documents rest
+    #: on a guess at all ([ADR-0044]).
+    encoding_detected: bool = False
 
 
 @dataclass(frozen=True, slots=True)

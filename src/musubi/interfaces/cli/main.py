@@ -690,10 +690,34 @@ def _coverage(manifest: Manifest, verb: str, *, kept: int = 0) -> None:
         # Rather than `0 of 0 characters traceable (100.0%)`, which is what a
         # ratio of nothing came out as.
         print("  no characters were emitted, so there is no coverage to report")
+    _guessed_encodings(manifest)
     for source_record in manifest.sources:
         for cap in source_record.caps:
             print(f"  cap: {cap}")
     _unused_converters(manifest)
+
+
+def _guessed_encodings(manifest: Manifest) -> None:
+    """How many documents rest on a detected encoding rather than a known one.
+
+    #82 measured that `CONFIDENT` cannot separate a right reading from a wrong
+    one: every miss reported 100% coherence, and the runner-up does not
+    separate them either ([ADR-0044]). So the threshold is not a quality gate
+    and no number in this report can be made into one.
+
+    What the report *can* do is stop being quiet about it. A run that read
+    forty documents by guessing said exactly as much as one that read none that
+    way, and the reader of a corpus had no way to know which they had.
+    """
+    guessed = [artefact for artefact in manifest.artefacts if artefact.encoding_detected]
+    if not guessed:
+        return
+    print(
+        f"  {len(guessed)} of {len(manifest.artefacts)} read by detecting the encoding, "
+        f"which is a guess and not a reading of a declaration"
+    )
+    for encoding, count in sorted(Counter(a.encoding for a in guessed).items()):
+        print(f"    {encoding}  {count}x")
 
 
 def _answer_width(coverage: Coverage) -> None:

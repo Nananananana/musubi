@@ -13,6 +13,7 @@ here is that a corpus built with it says so.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -221,6 +222,75 @@ def test_a_shift_jis_vault_becomes_a_corpus_that_names_the_encoding(tmp_path: Pa
     held = Corpus(into).held("old.md")
     assert held.source.encoding == "cp932", "the corpus does not say what was assumed"
     assert held.source.encoding != "utf-8"
+
+
+@available
+def test_the_manifest_says_which_documents_were_read_by_guessing(tmp_path: Path) -> None:
+    """#82's third option, and the only one its measurement supports.
+
+    `CONFIDENT` cannot separate a right reading from a wrong one -- every miss
+    reported 100% coherence -- and the runner-up does not separate them either:
+    measured, a rival candidate fires on eight readings to find two wrong ones
+    ([ADR-0044]). So no number here can be made into a quality gate.
+
+    What a corpus **can** honestly say is which of its documents rest on a
+    guess. The issue assumed the manifest already recorded the encoding per
+    artefact. It did not; only the trace map did, so the question *how much of
+    this corpus was guessed at* meant opening every sidecar.
+    """
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "old.md").write_bytes((NOTE * 4).encode("cp932"))
+    (vault / "new.md").write_text(NOTE * 4, encoding="utf-8")
+    into = tmp_path / "corpus"
+
+    result = sync(FilesystemSource(vault), settings(detect=True), DocumentEmitter(into))
+
+    by_key = {a.unit_key: a for a in result.manifest.artefacts}
+    assert by_key["old.md"].encoding == "cp932"
+    assert by_key["old.md"].encoding_detected, "a guess, recorded as one"
+    assert by_key["new.md"].encoding == "utf-8"
+    assert not by_key["new.md"].encoding_detected, "utf-8 was read, not guessed"
+
+
+@available
+def test_a_detected_encoding_survives_the_manifest_being_read_back(tmp_path: Path) -> None:
+    """A field the emitter writes and the reader drops is a field that exists
+    only in the process that made it."""
+    from musubi.infrastructure.emitters.documents import _artefact_from
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "old.md").write_bytes((NOTE * 4).encode("cp932"))
+    into = tmp_path / "corpus"
+    sync(FilesystemSource(vault), settings(detect=True), DocumentEmitter(into))
+
+    body = json.loads((into / "manifest.json").read_text(encoding="utf-8"))
+    (entry,) = body["artefacts"]
+    assert entry["encoding"] == "cp932" and entry["encoding_detected"] is True
+
+    again = _artefact_from(entry)
+    assert again is not None
+    assert again.encoding == "cp932"
+    assert again.encoding_detected, "written and then dropped on the way back in"
+
+
+def test_a_declared_encoding_is_not_reported_as_a_guess(tmp_path: Path) -> None:
+    """The other direction, and it runs without the extra installed.
+
+    If everything were flagged, the count in the run report would be the number
+    of documents and would tell a reader nothing -- which is the shape of every
+    metric this repository has had to take back.
+    """
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "a.md").write_text(NOTE, encoding="utf-8")
+    into = tmp_path / "corpus"
+
+    result = sync(FilesystemSource(vault), settings(detect=False), DocumentEmitter(into))
+
+    assert result.manifest.artefacts
+    assert not any(a.encoding_detected for a in result.manifest.artefacts)
 
 
 @available

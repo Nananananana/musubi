@@ -19,7 +19,7 @@ Every number below is measured, with the command that re-derives it.
 |---|---|---|---|
 | 1 | [#97](https://github.com/Nananananana/musubi/issues/97) | Reading order is not the document's | **Wrong text, silently.** Half done: see below |
 | 2 | [#76](https://github.com/Nananananana/musubi/issues/76) | The trace map is 1.5x the corpus | **Done.** 10.7x when filed |
-| 3 | [#82](https://github.com/Nananananana/musubi/issues/82) | `CONFIDENT` cannot tell right from wrong | A guess with nothing drawing attention to it |
+| 3 | [#82](https://github.com/Nananananana/musubi/issues/82) | `CONFIDENT` cannot tell right from wrong | **Still open**, and the corpus now says where it guessed |
 | 4 | [#80](https://github.com/Nananananana/musubi/issues/80) | A run holds the whole corpus | A written ceiling, not yet reached |
 | — | [#57](https://github.com/Nananananana/musubi/issues/57) | The first real export | **Rises with delay.** Owner, not musubi |
 
@@ -97,17 +97,38 @@ would drop the attribution ADR-0005 exists for.
 
 Re-derive: `uv run python tools/scaling.py --only map`.
 
-### Why #82 is next, and smaller than it looks
+### What was done about #82, and why it stays open
 
-The threshold cannot separate a right reading from a wrong one; it excludes only
-a detector that recognised nothing. The issue's own third option — say louder
-how many documents were read by detection — is cheap, honest, and does not
-pretend to fix the detection. The other two options need measuring first.
+The threshold cannot separate a right reading from a wrong one: every miss
+reported 100% coherence. The issue offered three ways forward and asked for the
+first to be measured rather than assumed.
 
-Third because it is bounded, opt-in (`musubi[encoding]`, off by default), and
-the risk is already registered as a threshold rather than dressed as a gate.
+**Measured, the runner-up does not separate them either.** A rival reading —
+another candidate decoding the same bytes to different text — fires on eight
+readings to find two wrong ones, which is about the entropy tier's precision
+that ADR-0017 made opt-in for the same reason. The score gap says the same: two
+of the three misses had the correct encoding at rank two with a gap of exactly
+0.0000, and so did a case the detector got right.
 
-### Why #80 is fourth
+So musubi does the third option: it records **which readings are guesses** and
+does not rank them. `encoding` and `encoding_detected` are in the manifest, and
+the run report says how many
+([ADR-0044](adr/0044-a-second-opinion-from-the-same-detector-is-not-a-second-opinion.md)).
+The issue's premise that the manifest already carried the encoding was wrong —
+only the trace map did — which is why this was more than a print statement.
+
+**`CONFIDENT` does not move.** Raising it would exclude nothing that is wrong
+and start refusing files that read correctly.
+
+It stays open because detection is no better than it was. The one remaining
+idea with evidence behind it is #82's second: **use the file's neighbours**, on
+the grounds that a vault is usually written in one encoding. That is a design
+change, because `Source` reads one unit at a time on purpose, and it is a bigger
+piece of work than this was.
+
+Re-derive: `uv run python tools/encoding_detection.py`.
+
+### Why #80 is next
 
 A ceiling, at 1.3x to 1.5x of input, linear and written down. The fix argues
 with [ADR-0008](adr/0008-a-credential-stops-the-run.md), which is fail-closed on

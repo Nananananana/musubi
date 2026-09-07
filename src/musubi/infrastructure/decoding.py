@@ -242,4 +242,5 @@ class Decoding:
             converted,
             source_encoding=detection.encoding,
             source_bom_bytes=0,
+            encoding_detected=True,
         )

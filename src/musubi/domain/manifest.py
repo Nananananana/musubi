@@ -107,6 +107,15 @@ class Artefact:
     #: ``run_id``: the facts are in the artefact's text and therefore already
     #: in its ``content_hash``.
     facts: tuple[tuple[str, str], ...] = ()
+    #: How the source bytes were read. The trace map has carried this since
+    #: [ADR-0018]; the manifest carries it so that a question about a whole run
+    #: -- *how much of this corpus rests on a guess* -- does not mean opening
+    #: every sidecar. #82 assumed it was already here. It was not.
+    encoding: str = "utf-8"
+    #: And whether that was **detected** rather than declared. `shift_jis` is a
+    #: fact when the settings named it and a guess when a detector did, and the
+    #: name alone does not say which ([ADR-0044]).
+    encoding_detected: bool = False
 
     @property
     def traceable_coverage(self) -> float:
@@ -375,6 +384,8 @@ def render(manifest: Manifest) -> str:
                 "traceable_characters": artefact.traceable_characters,
                 "source_unit": artefact.source_unit,
                 "answered_source_units": artefact.answered_source_units,
+                "encoding": artefact.encoding,
+                "encoding_detected": artefact.encoding_detected,
                 **({"facts": dict(artefact.facts)} if artefact.facts else {}),
             }
             for artefact in manifest.artefacts
