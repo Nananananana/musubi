@@ -338,3 +338,68 @@ def test_a_forged_key_cannot_talk_the_emitter_out_of_its_own_folder(tmp_path: Pa
     with pytest.raises(ConversionError, match="outside the staging area"):
         emitter.stage(forged)
     assert not (tmp_path.parent / "escaped.md").exists()
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "../escaped.md",
+        "../../escaped.md",
+        "documents/../../escaped.md",
+        "./../escaped.md",
+        "/etc/passwd",
+        "//server/share/x.md",
+        "C:/Windows/x.md",
+        "a/b/../../../escaped.md",
+    ],
+    ids=lambda k: k,
+)
+def test_no_key_walks_out_of_the_staging_area(key: str, tmp_path: Path) -> None:
+    """The check is now arithmetic on the string rather than a `resolve()` per
+    file ([ADR-0052]), so the shapes it has to refuse are worth naming.
+
+    An **absolute** key is the one joining would get wrong: `Path("/root") /
+    "/etc/passwd"` is `/etc/passwd` on POSIX, so a check that joined first and
+    compared after would be comparing the wrong thing. It is refused before
+    the join.
+    """
+    from musubi.infrastructure.emitters.documents import _under
+
+    emitter = DocumentEmitter(tmp_path)
+    emitter.begin()
+    assert _under(emitter._resolved_staging, Path(key)) is None, f"{key!r} was allowed"
+
+
+@pytest.mark.parametrize(
+    "key",
+    ["a.md", "design/gear.md", "a/b/c/deep.md", "traces/design/gear.md.json"],
+    ids=lambda k: k,
+)
+def test_an_ordinary_key_still_lands_where_it_should(key: str, tmp_path: Path) -> None:
+    """The other half. A containment check that refused everything would be
+    perfectly safe and would also stop musubi writing a corpus."""
+    from musubi.infrastructure.emitters.documents import _under
+
+    emitter = DocumentEmitter(tmp_path)
+    emitter.begin()
+    landed = _under(emitter._resolved_staging, Path(key))
+    assert landed is not None
+    assert landed.is_relative_to(emitter._resolved_staging)
+    assert landed.relative_to(emitter._resolved_staging).as_posix() == key
+
+
+def test_withdrawal_still_asks_the_disk(tmp_path: Path) -> None:
+    """**The check that was not relaxed.** Staging is made fresh by `begin()`
+    so everything under it was written by this run; withdrawal deletes what a
+    *previous manifest* names, and a manifest is a file somebody can edit.
+
+    Asserted on the function rather than on a fixture, because the point is
+    that the two paths use different checks on purpose ([ADR-0052]).
+    """
+    import inspect
+
+    from musubi.infrastructure.emitters.documents import DocumentEmitter as Emitter
+
+    body = inspect.getsource(Emitter.withdraw)
+    assert "_inside(" in body, "withdrawal stopped resolving the path it is about to delete"
+    assert "_under(" not in body

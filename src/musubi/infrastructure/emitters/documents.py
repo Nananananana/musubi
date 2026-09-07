@@ -126,6 +126,11 @@ class DocumentEmitter:
         #: Retained documents whose source timestamp moved, applied at
         #: promotion and dropped on a discard.
         self._retimed: list[tuple[Path, float]] = []
+        #: Directories this run has already made under the staging area.
+        #: `mkdir(exist_ok=True)` is a syscall whether or not the directory is
+        #: there, and it was one per file written -- ten thousand notes in
+        #: twenty folders made twenty directories ten thousand times.
+        self._made: set[Path] = set()
 
     # -- staging -----------------------------------------------------------
 
@@ -141,6 +146,7 @@ class DocumentEmitter:
         self.staging.mkdir(parents=True)
         self._staged = []
         self._retimed = []
+        self._made = set()
 
     def render(self, document: Document) -> Rendered:
         """What this document would become. Touches nothing.
@@ -235,11 +241,26 @@ class DocumentEmitter:
 
     def _staged_path(self, relative: Path) -> Path:
         """Where this goes, checked. One function, so the two writers cannot
-        come to disagree about what counts as inside the staging area."""
-        target = self.staging / relative
-        if not _inside(target, self._resolved_staging):
+        come to disagree about what counts as inside the staging area.
+
+        **Checked without asking the disk**, which the two paths that *delete*
+        still do. `begin()` removes the staging area and makes it again, so
+        everything under it was written by this run: there is no symbolic link
+        to follow that musubi did not just create, and it creates none. What is
+        left to defend against is a key that walks out of the root with `..`,
+        and that is arithmetic on the string ([ADR-0052]).
+
+        `resolve()` would not have defended against the other case anyway --
+        resolving and then opening is two operations, and a link appearing
+        between them is the race the syscall looks like it prevents.
+        """
+        target = _under(self._resolved_staging, relative)
+        if target is None:
             raise ConversionError(f"{relative} would be written outside the staging area")
-        target.parent.mkdir(parents=True, exist_ok=True)
+        parent = target.parent
+        if parent not in self._made:
+            parent.mkdir(parents=True, exist_ok=True)
+            self._made.add(parent)
         return target
 
     def _write(self, relative: Path, body: str) -> None:
@@ -283,11 +304,18 @@ class DocumentEmitter:
         converts them again.
         """
         moved: list[str] = []
+        made: set[Path] = set()
         ordered = sorted(self._staged, key=lambda relative: (relative == MANIFEST, relative))
         for relative in ordered:
             source = self.staging / relative
             target = self.destination / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
+            # `exist_ok=True` is a syscall whether or not the directory is
+            # there, and this ran once per promoted file: a flat vault of three
+            # hundred notes made two directories six hundred times ([ADR-0052]).
+            parent = target.parent
+            if parent not in made:
+                parent.mkdir(parents=True, exist_ok=True)
+                made.add(parent)
             source.replace(target)
             moved.append(relative)
         for document, modified_at in self._retimed:
@@ -529,6 +557,28 @@ def _render_trace(document: Document, text: str, trace: TraceMap, relative: str)
         **packed(trace.segments),
     }
     return json.dumps(body, ensure_ascii=False, separators=(",", ":")) + "\n"
+
+
+def _under(root: Path, relative: Path) -> Path | None:
+    """``root / relative`` when it stays under the root, else ``None``.
+
+    Lexical, so no syscall. `normpath` collapses `..` **before** the comparison,
+    which is the whole of what `resolve()` was doing for a path musubi built
+    out of a key it controls -- and it was doing it with a `_getfinalpathname`
+    per file, twice per artefact ([ADR-0052]).
+
+    An absolute `relative`, or one carrying a drive, is refused rather than
+    joined: `Path("/etc") / "/etc/passwd"` is `/etc/passwd` on POSIX, so
+    joining first and checking after would be checking the wrong thing.
+
+    **Not for a path that came out of a document.** Withdrawal deletes what a
+    previous manifest names, and a manifest is a file somebody can edit; that
+    check still resolves.
+    """
+    if relative.is_absolute() or relative.drive or relative.root:
+        return None
+    candidate = Path(os.path.normpath(root / relative))
+    return candidate if candidate.is_relative_to(root) else None
 
 
 def _inside(target: Path, root: Path) -> bool:
