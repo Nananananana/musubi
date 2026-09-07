@@ -38,6 +38,7 @@ from musubi.infrastructure.emitters import DOCUMENTS, MANIFEST, TRACES, Document
 from musubi.infrastructure.rules import CORE
 from musubi.infrastructure.screeners import default_screener
 from musubi.infrastructure.sources import ObsidianSource
+from musubi.infrastructure.trace_format import unpacked
 from musubi.interfaces.cli import main
 from musubi.schemas import path_to, schemas
 
@@ -166,15 +167,18 @@ def test_the_real_output_carries_the_things_the_schema_cannot_check(tmp_path: Pa
         body = json.loads(path.read_text(encoding="utf-8"))
         at = 0
         traceable = 0
-        for segment in body["segments"]:
-            assert segment["out"][0] == at, f"{path.name}: a gap or an overlap at {at}"
-            assert segment["out"][1] >= segment["out"][0], f"{path.name}: a backwards span"
-            assert segment["src"][1] >= segment["src"][0], f"{path.name}: a backwards span"
-            if segment["kind"] in {"verbatim", "transformed"}:
-                traceable += segment["out"][1] - segment["out"][0]
-            at = segment["out"][1]
+        for segment in unpacked(body, path.name):
+            assert segment.out.start == at, f"{path.name}: a gap or an overlap at {at}"
+            assert segment.src.end >= segment.src.start, f"{path.name}: a backwards span"
+            if segment.kind in {Kind.VERBATIM, Kind.TRANSFORMED}:
+                traceable += segment.out.length
+            at = segment.out.end
         assert at == body["coverage"]["characters"], f"{path.name}: the tiling stops short"
         assert traceable == body["coverage"]["traceable"]
+        assert body["rules"] == sorted(set(body["rules"]), key=body["rules"].index), (
+            f"{path.name}: the rule table repeats itself, so the hoisting bought less "
+            f"than it says it did"
+        )
 
 
 def test_a_removal_in_the_real_manifest_carries_a_hash_and_not_a_value(tmp_path: Path) -> None:
@@ -192,6 +196,11 @@ def test_a_removal_in_the_real_manifest_carries_a_hash_and_not_a_value(tmp_path:
     ("fixture", "schema"),
     [
         ("trace-map-valid.json", TRACE_MAP),
+        # The shape maps were written in before [ADR-0043]. Kept and still
+        # validated: corpora written in it exist and are synced against for
+        # months, and a schema that stopped accepting them would be telling
+        # their owners their maps were invalid.
+        ("trace-map-valid-objects.json", TRACE_MAP),
         ("sync-manifest-valid.json", SYNC_MANIFEST),
     ],
 )

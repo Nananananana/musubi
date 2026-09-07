@@ -79,6 +79,7 @@ from ...domain.text import rewrite
 from ...domain.trace import CHARACTERS, TraceMap
 from ...errors import ContractError, ConversionError
 from ...ports.emitter import Document, Previous, Rendered, Retained
+from ..trace_format import packed
 
 __all__ = [
     "DOCUMENTS",
@@ -474,15 +475,9 @@ def _render_trace(document: Document, text: str, trace: TraceMap, relative: str)
             "characters": trace.artefact_length,
             "traceable": trace.traceable_characters,
         },
-        "segments": [
-            {
-                "out": [segment.out.start, segment.out.end],
-                "src": [segment.src.start, segment.src.end],
-                "kind": segment.kind.value,
-                **({"rule": segment.rule} if segment.rule else {}),
-            }
-            for segment in trace.segments
-        ],
+        # The tiling, as rows of numbers with the names and the rule strings
+        # hoisted into tables ([ADR-0043]). 18.9 bytes a segment against 71.
+        **packed(trace.segments),
     }
     return json.dumps(body, ensure_ascii=False, separators=(",", ":")) + "\n"
 

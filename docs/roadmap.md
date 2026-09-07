@@ -18,7 +18,7 @@ Every number below is measured, with the command that re-derives it.
 | | Issue | What it is | Cost of leaving it |
 |---|---|---|---|
 | 1 | [#97](https://github.com/Nananananana/musubi/issues/97) | Reading order is not the document's | **Wrong text, silently.** Half done: see below |
-| 2 | [#76](https://github.com/Nananananana/musubi/issues/76) | The trace map is 4.9x the corpus | A falsification condition of the design |
+| 2 | [#76](https://github.com/Nananananana/musubi/issues/76) | The trace map is 1.5x the corpus | **Done.** 10.7x when filed |
 | 3 | [#82](https://github.com/Nananananana/musubi/issues/82) | `CONFIDENT` cannot tell right from wrong | A guess with nothing drawing attention to it |
 | 4 | [#80](https://github.com/Nananananana/musubi/issues/80) | A run holds the whole corpus | A written ceiling, not yet reached |
 | — | [#57](https://github.com/Nananananana/musubi/issues/57) | The first real export | **Rises with delay.** Owner, not musubi |
@@ -64,29 +64,40 @@ one unbroken word at full coverage. `docs/measurements.md` has both.
 
 Re-derive: `uv run python tools/reading_order.py`.
 
-### Why #76 is second and no longer what it says
+### Why #76 was second, and where its cost actually was
 
-Filed at 10.7x. Measured today at **4.9x**, because minifying the sidecar is
-done. What is left is not whitespace:
+Filed at 10.7x, and §10 named it as a falsification condition: *if a map
+routinely exceeds its document, the guarantee costs more storage than the
+corpus*. It did, by an order of magnitude.
 
 ```text
-  traces/  517,140   4.9x the documents
-  one .html document   2,592  map  16,614   216 segments,  16,093 minified
+                     filed      minified       now
+  traces/            10.7x         4.9x        1.5x
+  a segment            ---      71 bytes   18.9 bytes
 ```
 
-The map is now within 3% of its own minified size, so **the remaining cost is
-the segments**, at roughly 74 bytes each. That moves the issue from the emitter
-to the two places the original issue named as harder: a segment per line ending,
-and genuinely many short segments. Both have a precision cost attached
-(merging changes what `source_span_of` answers inside a run), so both need an
-ADR and a measurement rather than a patch.
+The proposal predicted **the fix is converter-side**. It was wrong twice.
+Minifying the sidecar took it to 4.9x, after which a map was within 3% of its
+own minified size — so the remaining cost was neither whitespace nor the
+converter. It was the segments: five key names and a rule string, written out
+once per segment. A segment is now a row of numbers with those hoisted into
+tables the file carries, and the output start is not stored at all because the
+tiling already determines it
+([ADR-0043](adr/0043-a-segment-is-a-row-of-numbers-and-the-tiling-supplies-the-rest.md)).
 
-Second rather than first because it is a cost the design predicted and named in
-§10, and costs that are known are not the ones that hurt.
+At 1.5x a map still exceeds its document and is now the same order of magnitude
+as the corpus rather than an order above it. The map stays mandatory, which is
+what the falsification condition was actually asking.
+
+**One idea was measured and discarded before it was built.** Merging adjacent
+removals costs no precision, because a removal has no output for a query to land
+in. On the worst real case not one adjacent pair shared a rule — they alternate
+`markup.tag.a`, `boilerplate.nav`, `markup.tag.a` — and merging across rules
+would drop the attribution ADR-0005 exists for.
 
 Re-derive: `uv run python tools/scaling.py --only map`.
 
-### Why #82 is third and smaller than it looks
+### Why #82 is next, and smaller than it looks
 
 The threshold cannot separate a right reading from a wrong one; it excludes only
 a detector that recognised nothing. The issue's own third option — say louder
