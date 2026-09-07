@@ -13,15 +13,21 @@ finding and it is written down here rather than smoothed away there.
 Every number below is measured, with the command that re-derives it.
 `docs/measurements.md` holds the tables; this holds the ordering.
 
-## The order
+## The order, and where each one ended up
 
-| | Issue | What it is | Cost of leaving it |
+All four code items have been worked, in this order. **Three of the four are
+still open**, and each says below exactly what is left of it. An issue closed
+because something was done to it, rather than because the thing it describes
+stopped being true, is a corpus of green checkmarks over a project that still
+has the problem.
+
+| | Issue | What it is now | Where it stands |
 |---|---|---|---|
-| 1 | [#97](https://github.com/Nananananana/musubi/issues/97) | Reading order is not the document's | **Wrong text, silently.** Half done: see below |
-| 2 | [#76](https://github.com/Nananananana/musubi/issues/76) | The trace map is 1.5x the corpus | **Done.** 10.7x when filed |
-| 3 | [#82](https://github.com/Nananananana/musubi/issues/82) | `CONFIDENT` cannot tell right from wrong | **Still open**, and the corpus now says where it guessed |
-| 4 | [#80](https://github.com/Nananananana/musubi/issues/80) | A run holds 0.8x of what it read | **Cause found**, still linear |
-| — | [#57](https://github.com/Nananananana/musubi/issues/57) | The first real export | **Rises with delay.** Owner, not musubi |
+| 1 | [#97](https://github.com/Nananananana/musubi/issues/97) | Reading order is a setting; the default is unchanged | **open** — `pdfium@1` and 縦書き remain |
+| 2 | [#76](https://github.com/Nananananana/musubi/issues/76) | The trace map is 1.5x the corpus, from 10.7x | **closed** |
+| 3 | [#82](https://github.com/Nananananana/musubi/issues/82) | The corpus now says which readings are guesses | **open** — detection is no better |
+| 4 | [#80](https://github.com/Nananananana/musubi/issues/80) | A run holds 0.8x of what it read, from 1.9x | **open** — still linear |
+| — | [#57](https://github.com/Nananananana/musubi/issues/57) | The first real export | **owner, not musubi.** Cost rises with delay |
 
 ### Why #97 was first, and what is left of it
 
@@ -160,10 +166,30 @@ fell by 2.4x and the cause is now known, which is a different position to be in.
 
 Re-derive: `uv run python tools/scaling.py --only memory`.
 
-### Why #57 is outside the order
+### Why #57 is outside the order, and the only one still costing
 
 musubi cannot do it. It needs a real export from a real account, and a second
 one taken the same way weeks later. **It is the only item whose cost rises with
 delay** — every week that passes is a week added to when the pair can be
-compared. The order above is about what musubi does next; this one is about what
-is being lost while that happens.
+compared, and no amount of work here shortens it.
+
+Nothing above was blocked on it, and nothing above shortened it either. The
+order in this file is about what musubi does next; this one is about what is
+being lost while that happens.
+
+## What the four had in common
+
+Worth writing down, because it was not the plan.
+
+**Three of the four were not where they were filed.** #76's remaining cost was
+predicted to be converter-side and was in how a segment was written down. #80's
+peak was blamed on three things read off the code and was in none of them.
+#97's own measurement rested on two fixtures stating answers their geometry
+could not produce. In each case the code was read, a cause was reasoned out, and
+measuring found somewhere else.
+
+**Two of the four were guarded only by a printout.** `tools/` measured and
+nothing compared, so the trace-map ratio and the memory ratio had both drifted
+with no test, report or reader able to say so. That is #84's finding, and it
+turned up twice more while these were being worked. Both now have gates with
+their headroom written down.
