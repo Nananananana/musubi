@@ -29,6 +29,7 @@ __all__ = [
     "DifferentSourceError",
     "EmptySourceError",
     "EverythingSkippedError",
+    "InterruptedRunError",
     "Kind",
     "MusubiError",
     "SourceError",
@@ -334,6 +335,20 @@ CATALOGUE: tuple[Kind, ...] = (
         "標準出力のレポートが各不整合を挙げる。何も変更していない。",
     ),
     Kind(
+        "InterruptedRunError",
+        FAILED,
+        "failed",
+        True,
+        "Another musubi run into the same destination removed this one's "
+        "staging area while it was promoting. Some documents were moved and "
+        "the manifest was not: `musubi verify` will say which, and **running "
+        "the sync again repairs it**. One run at a time per destination.",
+        "同じ宛先へのもう 1 つの musubi の run が、promote 中にこの run の "
+        "staging を消した。一部の文書だけが移り、manifest は移っていない。"
+        "`musubi verify` がどれかを言う。**もう一度 sync すれば直る。**"
+        "1 つの宛先につき run は 1 つ。",
+    ),
+    Kind(
         "Unreadable",
         FAILED,
         "failed",
@@ -393,3 +408,24 @@ NOT_PRINTED: dict[str, str] = {
         "own error channel, and this catalogue is about the command line."
     ),
 }
+
+
+class InterruptedRunError(MusubiError):
+    """The staging area went away while this run was promoting it.
+
+    One thing does that: **another musubi run into the same destination**.
+    `begin()` removes the staging area and makes it again, so a second run
+    starting while a first is mid-flight takes the first one's files with it.
+
+    Measured, with the second run's `begin()` landing after four of six
+    documents had been promoted: the corpus held four new documents and an old
+    manifest, `musubi verify` reported eight faults, and **the next ordinary
+    sync repaired all of it**. So this is a detectable, self-healing
+    inconsistency rather than a corrupt corpus -- which is what [ADR-0008]'s
+    promotion order is for.
+
+    It is named because of how it used to arrive. `promote()` let the
+    `FileNotFoundError` out, so the command line reported `Unreadable: the file
+    system refused`, and a person read that and went to look at their disk. The
+    file system was fine. Another copy of musubi was running ([ADR-0053]).
+    """

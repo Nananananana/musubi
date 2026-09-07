@@ -77,7 +77,7 @@ from ...domain.screening import Finding
 from ...domain.span import Span
 from ...domain.text import rewrite
 from ...domain.trace import CHARACTERS, TraceMap
-from ...errors import ContractError, ConversionError
+from ...errors import ContractError, ConversionError, InterruptedRunError
 from ...ports.emitter import Document, Previous, Rendered, Retained
 from ..trace_format import packed
 
@@ -316,7 +316,29 @@ class DocumentEmitter:
             if parent not in made:
                 parent.mkdir(parents=True, exist_ok=True)
                 made.add(parent)
-            source.replace(target)
+            try:
+                source.replace(target)
+            except OSError as gone:
+                # The one thing that takes a staged file mid-run is another
+                # musubi run into the same destination ([ADR-0053]). Named
+                # here, because letting the `FileNotFoundError` out reported
+                # `Unreadable: the file system refused` and sent a person to
+                # look at a disk that was fine.
+                #
+                # The **file**, not the directory: `begin()` removes the
+                # staging area and makes it again, so the folder is there and
+                # empty. Checking the folder was the first thing this did and
+                # it never fired once.
+                if not source.exists():
+                    raise InterruptedRunError(
+                        f"a file this run staged under {self.destination} was gone when it came to "
+                        f"move it, which is what another musubi run into the same destination "
+                        f"does. {len(moved)} of {len(ordered)} file(s) were "
+                        f"moved and the manifest was not, so the corpus is ahead of its own "
+                        f"account: `musubi verify` names each one, and running this sync "
+                        f"again repairs it. One run at a time per destination."
+                    ) from gone
+                raise
             moved.append(relative)
         for document, modified_at in self._retimed:
             with contextlib.suppress(OSError):  # a filesystem, not a state
