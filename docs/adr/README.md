@@ -68,6 +68,7 @@ later ADR supersedes it and says so.
 | [0051](0051-a-title-the-document-actually-wrote.md) | A title the document actually wrote |
 | [0052](0052-a-path-musubi-built-does-not-need-the-disk-to-check-it.md) | A path musubi built does not need the disk to check it |
 | [0053](0053-a-run-that-was-interrupted-says-so.md) | A run that was interrupted says so |
+| [0054](0054-utf-16-without-a-mark-is-valid-utf-8.md) | UTF-16 without a mark is valid UTF-8 |
 
 [0004](0004-a-conversion-carries-a-map-back-to-its-source.md) is the one to read
 first. The rest of the design is arranged around it, and

@@ -203,6 +203,11 @@ That is right and it is unusable on its own: **a vault holding anything written
 on a Japanese Windows machine before about 2015 is Shift-JIS**, and musubi
 reports every one of those files as `undecodable`.
 
+**UTF-16 without a byte-order mark is refused too**, and for a subtler reason:
+it *does* decode as UTF-8, into the text interleaved with NUL characters. Some
+Windows editors and export tools write it. `encoding = "detect"` reads it
+correctly ([ADR-0054](adr/0054-utf-16-without-a-mark-is-valid-utf-8.md)).
+
 ```bash
 pip install "musubi[encoding] @ git+https://github.com/Nananananana/musubi"
 ```

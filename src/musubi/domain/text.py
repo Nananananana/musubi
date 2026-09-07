@@ -48,6 +48,10 @@ LINE_ENDING = "line_ending"
 #: UTF-8 at all -- see :func:`decode`.
 ESCAPE = ""
 
+#: U+0000. Its presence in a successful UTF-8 decode means the bytes were very
+#: likely UTF-16 without a byte-order mark -- see :func:`decode`.
+NUL = "\x00"
+
 #: The seven-bit stateful encodings, tried by name when a UTF-8 decode comes
 #: back holding escape sequences.
 #:
@@ -286,6 +290,28 @@ def decode(data: bytes) -> Decoded:
             f"(byte {error.start} is {data[error.start]:#04x}); musubi does not guess an "
             f"encoding, because a wrong guess is indistinguishable from a successful read"
         ) from error
+
+    # The same failure as the escape check below, arriving from the other common
+    # mis-encoding. **UTF-16 without a byte-order mark is valid UTF-8** whenever
+    # its text is ASCII: every character becomes itself followed by a NUL, the
+    # decode succeeds, and the reading is reported as `utf-8`.
+    #
+    # Measured, on one file: the corpus held 43 NULs, the text was unreadable,
+    # and `traceable_coverage` came out at **66% against the correctly-read
+    # file's 49%** -- the number a reader trusts, *better* for the broken
+    # document, because the mangling doubled the body and made musubi's own
+    # front matter a smaller share of it ([ADR-0054]).
+    #
+    # Refused rather than read. Unlike ISO-2022 below there is nothing
+    # self-describing to check a reading against: every even-length byte string
+    # decodes and re-encodes as UTF-16 unchanged, so a round trip proves nothing
+    # here and the only honest answer is to stop.
+    if NUL in text:
+        raise ValueError(
+            f"decodes as UTF-8 and contains a NUL at {text.index(NUL)}, so it is not "
+            f"text; UTF-16 without a byte-order mark reads exactly this way, one NUL "
+            f"per ASCII character"
+        )
 
     # A successful decode is not the same as a correct one, and this is the case
     # where the difference is invisible. **ISO-2022-JP is seven-bit**: a Japanese

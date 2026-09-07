@@ -84,8 +84,13 @@ def test_the_converter_names_itself_for_the_manifest() -> None:
 #: surrogate exclusion `st.text()` applies by default, and the first version of
 #: this generated a lone `\ud800`, which no encoder will take. Narrowing a
 #: strategy widened it.
+#: `\x00` joins `\x1b` for the same reason and from the other direction:
+#: **UTF-16 without a byte-order mark is valid UTF-8**, one NUL per ASCII
+#: character, and a decoding that holds one is refused rather than written into
+#: a corpus as mojibake ([ADR-0054]). Generating one here would be generating a
+#: document musubi deliberately does not accept.
 DOCUMENTS = st.text(
-    alphabet=st.characters(codec="utf-8", exclude_characters="\x1b"),
+    alphabet=st.characters(codec="utf-8", exclude_characters="\x1b\x00"),
     max_size=200,
 )
 

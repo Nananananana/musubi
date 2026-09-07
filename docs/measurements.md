@@ -224,6 +224,33 @@ cp1250, Russian in KOI8-R read as `shift_jis_2004`, all confidently. So
 only the case where the detector found nothing at all, which is a much smaller
 job than it looks like.
 
+### And a mis-encoding that coverage rewarded
+
+A UTF-16 file with no byte-order mark decodes as UTF-8 without an error: every
+ASCII character becomes itself followed by a NUL. It was written into the
+corpus.
+
+```text
+  with-bom.md    coverage 43/87 (49%)   NULs=0    readable: True
+  le-no-bom.md   coverage 86/130 (66%)  NULs=43   readable: False
+  utf8.md        coverage 43/87 (49%)   NULs=0    readable: True
+```
+
+**The broken document scored better**, because the mangling doubled the body
+and made musubi's own front matter — synthetic, and counted against coverage —
+a smaller share of it. `musubi verify` held.
+
+Refused now, on the same grounds `decode` already refuses an escape character
+([ADR-0054](adr/0054-utf-16-without-a-mark-is-valid-utf-8.md)), and
+`encoding = "detect"` reads all three UTF-16 shapes correctly.
+
+**What this says about the numbers on this page.** Coverage measures whether an
+offset *resolves*, and every character of that mojibake resolved perfectly —
+it really did come from where the map said. A wrong reading is upstream of
+anything a map can see, so no coverage number will ever fall because of one.
+That is the second demonstration rather than assertion: ADR-0033 found the same
+metric at 100% over no characters at all.
+
 ### The runner-up does not separate them either
 
 #82 proposed taking the second-best candidate into account and was explicit
