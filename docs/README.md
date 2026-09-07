@@ -95,13 +95,17 @@ Read in this order:
 
 1. [`proposals/0001-the-design.md`](proposals/0001-the-design.md) — the design
    and the roadmap, written before the code and left as written afterwards.
-2. [`adr/0004`](adr/0004-a-conversion-carries-a-map-back-to-its-source.md) — the
+2. [`roadmap.md`](roadmap.md) — the other half of that: the order the **open**
+   work is being taken in now, and the measurement behind each position. This
+   one is kept current, and where it differs from the proposal the difference is
+   a finding rather than an edit.
+3. [`adr/0004`](adr/0004-a-conversion-carries-a-map-back-to-its-source.md) — the
    decision the rest of the design is arranged around.
-3. [`adr/0005`](adr/0005-say-what-was-removed-and-by-which-rule.md) — the
+4. [`adr/0005`](adr/0005-say-what-was-removed-and-by-which-rule.md) — the
    decision that makes 0004 honest.
-4. [`adr/0007`](adr/0007-musubi-reads-exports-never-services.md) — the boundary
+5. [`adr/0007`](adr/0007-musubi-reads-exports-never-services.md) — the boundary
    that makes everything else checkable.
-5. [`adr/README.md`](adr/README.md) — the rest.
+6. [`adr/README.md`](adr/README.md) — the rest.
 
 ## What exists
 
@@ -123,6 +127,7 @@ request as the code it describes.
 | Alignment | `domain/alignment.py`. Finds an extractor's text in the source and tiles what is left: verbatim where a run is there, transformed where it is not, `removal` for a stretch that produced nothing. A forward scan with a bounded window, not a diff |
 | `html@1` | HTML, where the output is a minority of the input: boilerplate removed as `removal` segments with rules, entities `transformed`, structure `synthetic`. The first converter whose traceable coverage is a measurement |
 | `pdf_text@1` | A PDF's text layer, page by page. The first map whose source is **not** characters: `src` is a page range and `source_unit` is `opaque` ([ADR-0025](adr/0025-a-map-with-no-verbatim-run-composes-whatever-it-measures.md)). A page with no text layer is reported, not guessed at |
+| Reading order | `pdf-reading-order` reads a PDF down its columns or across its rows instead of in the order the file happens to hold it ([ADR-0042](adr/0042-two-columns-and-a-table-are-the-same-page-and-opposite-readings.md)). **Off by default**, because two columns of prose and a table can be the same geometry with opposite correct readings, and what tells them apart is not in the file. Measured per layout against answers that are written down, and every one of those answers is now checked to be reachable — two of the three were not |
 | The tiling | Segments, composition, merging, coverage ([ADR-0004](adr/0004-a-conversion-carries-a-map-back-to-its-source.md)) |
 | Cleansing | 65 rules derived from ClearURLs, matched structurally and never by regex ([ADR-0016](adr/0016-a-rule-is-a-matcher-not-a-regular-expression.md)) |
 | Screening | 21 credential signatures; the entropy tier exists and is opt-in ([ADR-0017](adr/0017-entropy-is-a-tier-not-a-default.md)) |

@@ -44,9 +44,15 @@ from __future__ import annotations
 import re
 import zlib
 
+from ...domain import reading_order
 from ...domain.span import Span
 from ...domain.trace import OPAQUE, Kind, Segment, TraceMap
 from ...ports.converter import Converted, Unconvertible
+
+#: The file's own order: the default, and what every corpus written before
+#: [ADR-0042] already has. Not a member of `reading_order.STRATEGIES`, because
+#: it is the absence of a geometric decision rather than one of them.
+STREAM = "stream"
 
 __all__ = ["MAXIMUM_STREAM_BYTES", "PdfConverter"]
 
@@ -110,7 +116,27 @@ _SHOW = re.compile(
 )
 
 #: Operators that end a line of text, so the extraction keeps line structure.
-_BREAK = re.compile(rb"\b(?:T\*|TD|Td|TL)\b|(?:'|\")")
+#:
+#: **`Tm` is here, and was not.** It sets the text matrix absolutely, and a
+#: great many producers place every single line with one rather than stepping
+#: with `Td`. Without it in this list two separately placed runs were
+#: concatenated with nothing between them: a page positioned entirely by `Tm`
+#: came out as one unbroken word -- `middlerightleft` for the three runs of
+#: `out_of_order()` -- at full coverage, with every offset still resolving to
+#: the right page. Found by the reading-order fixtures ([ADR-0042]), which is
+#: not what they were built to find.
+_BREAK = re.compile(rb"\b(?:T\*|TD|Td|TL|Tm)\b|(?:'|\")")
+
+#: The operators that move the text position. These are the only thing in a
+#: content stream that says *where* a run sits, and a reading order is a
+#: question about where things sit ([ADR-0042]).
+_PLACE = re.compile(
+    rb"(?P<bt>\bBT\b)"
+    rb"|(?P<tm>-?[\d.]+\s+-?[\d.]+\s+-?[\d.]+\s+-?[\d.]+\s+(?P<tmx>-?[\d.]+)\s+(?P<tmy>-?[\d.]+)\s+Tm\b)"
+    rb"|(?P<td>(?P<tdx>-?[\d.]+)\s+(?P<tdy>-?[\d.]+)\s+(?:TD|Td)\b)"
+    rb"|(?P<tl>(?P<tly>-?[\d.]+)\s+TL\b)"
+    rb"|(?P<star>\bT\*)"
+)
 
 _ESCAPES = {
     ord("n"): "\n", ord("r"): "\r", ord("t"): "\t", ord("b"): "\b",
@@ -124,8 +150,26 @@ class PdfConverter:
     name = "pdf_text@1"
     media_types: tuple[str, ...] = ("application/pdf",)
 
-    def __init__(self, word_gap: float = WORD_GAP) -> None:
+    def __init__(self, word_gap: float = WORD_GAP, reading_order_name: str = STREAM) -> None:
         self.word_gap = word_gap
+        self.reading_order_name = reading_order_name
+        #: Resolved here rather than per page: a misspelled setting is a
+        #: composition error and should be raised where the settings are read,
+        #: not on the first PDF of a long run.
+        self._order = (
+            None
+            if reading_order_name == STREAM
+            else reading_order.strategy_named(reading_order_name)
+        )
+        #: The name goes in the manifest and the trace map, and an incremental
+        #: sync reuses a document when the converter name still matches
+        #: (`application/pipeline.py`, [ADR-0036]). Reading in a different order
+        #: produces different text, so it has to be a different name --
+        #: otherwise changing the setting reconverts nothing and the corpus
+        #: keeps an answer the settings no longer ask for.
+        self.name = (
+            "pdf_text@1" if reading_order_name == STREAM else f"pdf_text@1+{reading_order_name}"
+        )
 
     def convert(self, content: bytes, media_type: str) -> Converted | Unconvertible:
         if not content.startswith(b"%PDF-"):
@@ -157,7 +201,10 @@ class PdfConverter:
         segments: list[Segment] = []
         at = 0
         for index, page in enumerate(pages):
-            text = _text_of(page, self.word_gap)
+            if self._order is None:
+                text = _text_of(page, self.word_gap)
+            else:
+                text = reading_order.text_of(self._order(_runs_of(page, self.word_gap)))
             if not text:
                 # A scanned page. It contributes nothing and is not an error;
                 # what makes that honest is that the coverage says so.
@@ -295,6 +342,64 @@ def _text_of(stream: bytes, kerning: float) -> str:
         else:
             out.append(_hex(match.group("hex")))
     return "".join(out).strip()
+
+
+def _runs_of(stream: bytes, kerning: float) -> list[reading_order.Run]:
+    """Every run this page shows, and where the page puts it.
+
+    `_text_of` answers *what does this page say*. This answers *and where*,
+    which is what a reading order needs. They are two functions rather than one
+    on purpose: the stream-order path is the one every existing corpus was
+    built with, and it stays exactly the code it already was.
+
+    What is tracked is the **text line matrix** -- `BT`, `Tm`, `Td`, `TD`, `T*`
+    and the leading that `TL` sets -- because that is what places the start of a
+    line. The advance *within* a line is not tracked, because it depends on
+    glyph widths that live in the font: a producer showing two strings on one
+    line without moving between them gets one position for both, and they keep
+    the order the stream had them in. That is enough for a question about lines
+    and columns and it is not enough for anything finer, which is why nothing
+    here offers anything finer.
+    """
+    if not stream:
+        return []
+
+    runs: list[reading_order.Run] = []
+    x = y = leading = 0.0
+    events = sorted(
+        [(match.start(), 0, match) for match in _PLACE.finditer(stream)]
+        + [(match.start(), 1, match) for match in _SHOW.finditer(stream)],
+        key=lambda event: event[:2],
+    )
+    for _, kind, match in events:
+        if kind == 0:
+            if match.group("bt"):
+                x = y = 0.0
+            elif match.group("tm"):
+                x, y = float(match.group("tmx")), float(match.group("tmy"))
+            elif match.group("td"):
+                x += float(match.group("tdx"))
+                y += float(match.group("tdy"))
+                if match.group(0).rstrip().endswith(b"TD"):
+                    leading = -float(match.group("tdy"))
+            elif match.group("tl"):
+                leading = float(match.group("tly"))
+            else:
+                y -= leading
+            continue
+
+        if match.group(0).rstrip()[-1:] in (b"'", b'"'):
+            # Both of these move to the next line and *then* show.
+            y -= leading
+        if (array := match.group("array")) is not None:
+            text = _array(array, kerning)
+        elif (literal := match.group("literal")) is not None:
+            text = _literal(literal)
+        else:
+            text = _hex(match.group("hex"))
+        if text.strip():
+            runs.append(reading_order.Run(text.strip(), x, y))
+    return runs
 
 
 def _array(body: bytes, kerning: float) -> str:

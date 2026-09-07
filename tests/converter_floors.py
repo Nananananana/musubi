@@ -42,19 +42,20 @@ from dataclasses import dataclass
 
 from html_fixtures import BOILERPLATE, CONTENT, page
 from musubi.infrastructure.converters import known_converters
+from musubi.infrastructure.converters.pdf import PdfConverter
 from musubi.ports.converter import Converted
 from pdf_fixtures import (
     COLUMNS_READ,
     FIRST_LINE,
+    OUT_OF_ORDER_READ,
     SECOND_LINE,
     TABLE_READ,
-    VERTICAL_READ,
     a_table,
     classic,
     modern,
+    out_of_order,
     scanned,
     two_columns,
-    vertical,
 )
 
 HTML = "text/html"
@@ -145,22 +146,58 @@ FLOORS: tuple[Floor, ...] = (
         "pdf_text@1",
         "reading order agreement",
         0.55,
-        0.68,
-        "2026-09-08",
-        "the mean over the three layouts of #97, whose answers are written "
-        "down. Neither reader gets any of them right, so this is not a "
-        "quality bar -- it is the number that catches a change making the "
-        "wrong order *wronger* while coverage stays flat.",
+        0.678,
+        "2026-09-09",
+        "the mean over the three layouts of #97 **in the file's own order**, "
+        "which is the default and what every existing corpus has. Stream "
+        "order gets none of them right, so this is not a quality bar -- it is "
+        "the number that catches a change making the wrong order wronger "
+        "while coverage stays flat.",
     ),
     Floor(
         "pdfium@1",
         "reading order agreement",
         0.55,
-        0.68,
-        "2026-09-08",
-        "the same three layouts and the same purpose. Both readers score the "
-        "same today and fail differently, which the per-fixture assertions in "
-        "tests/test_reading_order.py record.",
+        0.789,
+        "2026-09-09",
+        "the same three layouts and the same purpose. It scores above "
+        "pdf_text@1 because it groups by baseline, which happens to be right "
+        "for one of the three; it has no reading-order setting yet, so this "
+        "is the only reading-order number it has.",
+    ),
+    # -- the geometric strategies, which are bounds and not floors ----------
+    Floor(
+        "pdf_text@1",
+        "two columns down",
+        1.0,
+        1.0,
+        "2026-09-09",
+        'a bound. `pdf-reading-order = "columns"` exists to read a '
+        "two-column page down its columns, and a setting that is asked for "
+        "and half delivered is worse than one that was never offered: the "
+        "owner set it, believes the corpus is in reading order, and it is not.",
+    ),
+    Floor(
+        "pdf_text@1",
+        "a table across",
+        1.0,
+        1.0,
+        "2026-09-09",
+        "a bound, for the same reason and the opposite geometry. `rows` "
+        "exists so a table emitted column by column is read row by row, and "
+        "pairing `Item` with `Tent` is a corpus asserting something the "
+        "document does not say.",
+    ),
+    Floor(
+        "pdf_text@1",
+        "one line, out of order",
+        1.0,
+        1.0,
+        "2026-09-09",
+        "a bound, and the smallest case in the set: three runs on one "
+        "baseline shown middle-first. One baseline is one line whatever order "
+        "the stream had, and this is what caught `Tm` missing from the "
+        "line-break operators -- the whole page as one word.",
     ),
 )
 
@@ -176,7 +213,33 @@ BOUNDS: dict[str, str] = {
         "shape: 100% traceable over no characters, reading as success"
     ),
     "reads a PDF 1.4": "the shape every reader here was written against",
+    "two columns down": (
+        'the whole case for `pdf-reading-order = "columns"`. Reading a '
+        "two-column page as one column is what #97 is, and a strategy that "
+        "asks for columns and does not deliver them is worse than the default "
+        "-- the owner set it and got the interleaving anyway"
+    ),
+    "a table across": (
+        'the whole case for `pdf-reading-order = "rows"`. A table read down '
+        "its columns pairs `Item` with `Tent` rather than with `Mass`, which "
+        "is a corpus stating a fact the document does not"
+    ),
+    "one line, out of order": (
+        "three runs on one baseline, shown middle-first. One baseline is one "
+        "line however the stream ordered it, and this is the smallest case "
+        "where geometry and stream order disagree"
+    ),
 }
+
+#: The strategy each of the geometric bounds is measured under, and the fixture
+#: with the answer it has to reach. Kept beside the bounds rather than inside
+#: `measured()` so that adding a layout is one entry rather than an edit in two
+#: places.
+GEOMETRIC: tuple[tuple[str, str, bytes, str], ...] = (
+    ("two columns down", "columns", two_columns(), COLUMNS_READ),
+    ("a table across", "rows", a_table(), TABLE_READ),
+    ("one line, out of order", "rows", out_of_order(), OUT_OF_ORDER_READ),
+)
 
 
 def claiming(media_type: str) -> list[object]:
@@ -220,7 +283,19 @@ def measured() -> dict[tuple[str, str], float]:
         ) / len(BOILERPLATE)
         found[name, "content kept"] = sum(1 for phrase in CONTENT if phrase in text) / len(CONTENT)
 
-    layouts = ((two_columns(), COLUMNS_READ), (a_table(), TABLE_READ), (vertical(), VERTICAL_READ))
+    # The geometric strategies, which only `pdf_text@1` offers. Measured on the
+    # converter the settings would build rather than the registry's instance --
+    # the registry holds the default, and measuring that would be measuring the
+    # setting being off.
+    for measure, order, made, answer in GEOMETRIC:
+        reader = PdfConverter(reading_order_name=order)
+        found["pdf_text@1", measure] = _agreement(answer, _read(reader, made, PDF))
+
+    layouts = (
+        (two_columns(), COLUMNS_READ),
+        (a_table(), TABLE_READ),
+        (out_of_order(), OUT_OF_ORDER_READ),
+    )
     for converter in claiming(PDF):
         name = converter.name  # type: ignore[attr-defined]
         for label, made in (("reads a PDF 1.4", classic()), ("reads a PDF 1.5", modern())):
