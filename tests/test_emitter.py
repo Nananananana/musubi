@@ -340,34 +340,59 @@ def test_a_forged_key_cannot_talk_the_emitter_out_of_its_own_folder(tmp_path: Pa
     assert not (tmp_path.parent / "escaped.md").exists()
 
 
-@pytest.mark.parametrize(
-    "key",
-    [
-        "../escaped.md",
-        "../../escaped.md",
-        "documents/../../escaped.md",
-        "./../escaped.md",
-        "/etc/passwd",
-        "//server/share/x.md",
-        "C:/Windows/x.md",
-        "a/b/../../../escaped.md",
-    ],
-    ids=lambda k: k,
-)
-def test_no_key_walks_out_of_the_staging_area(key: str, tmp_path: Path) -> None:
-    """The check is now arithmetic on the string rather than a `resolve()` per
-    file ([ADR-0052]), so the shapes it has to refuse are worth naming.
+#: Keys that must not put a file outside the staging area. Some are refused
+#: outright and some are harmless on one platform and not the other, which is
+#: why the assertion below is about **where the file lands** rather than about
+#: which of those happened.
+HOSTILE = [
+    "../escaped.md",
+    "../../escaped.md",
+    "documents/../../escaped.md",
+    "./../escaped.md",
+    "/etc/passwd",
+    "//server/share/x.md",
+    "C:/Windows/x.md",
+    "a/b/../../../escaped.md",
+]
 
-    An **absolute** key is the one joining would get wrong: `Path("/root") /
-    "/etc/passwd"` is `/etc/passwd` on POSIX, so a check that joined first and
-    compared after would be comparing the wrong thing. It is refused before
-    the join.
+
+@pytest.mark.parametrize("key", HOSTILE, ids=lambda k: k)
+def test_no_key_puts_a_file_outside_the_staging_area(key: str, tmp_path: Path) -> None:
+    """The invariant, and it is containment rather than refusal.
+
+    The first version of this asserted every one of these is refused, and CI
+    said otherwise on macOS and Linux: `C:/Windows/x.md` holds no `..`, is not
+    absolute by POSIX rules, and is a perfectly ordinary relative path naming a
+    directory called `C:`. It lands **inside** the staging area there, which is
+    correct — and on Windows it is a drive and is refused.
+
+    So a check written as *is it refused* is a check that knows which platform
+    it is on. What musubi promises is that nothing lands outside, and that is
+    the same sentence everywhere ([ADR-0052]).
     """
     from musubi.infrastructure.emitters.documents import _under
 
     emitter = DocumentEmitter(tmp_path)
     emitter.begin()
-    assert _under(emitter._resolved_staging, Path(key)) is None, f"{key!r} was allowed"
+    landed = _under(emitter._resolved_staging, Path(key))
+    assert landed is None or landed.is_relative_to(emitter._resolved_staging), (
+        f"{key!r} landed at {landed}, which is outside the staging area"
+    )
+
+
+@pytest.mark.parametrize(
+    "key",
+    ["../escaped.md", "../../escaped.md", "documents/../../escaped.md", "a/b/../../../x.md"],
+    ids=lambda k: k,
+)
+def test_a_key_that_walks_up_is_refused_on_every_platform(key: str, tmp_path: Path) -> None:
+    """`..` is the one shape that means the same thing everywhere, so it is the
+    one this may assert a refusal for."""
+    from musubi.infrastructure.emitters.documents import _under
+
+    emitter = DocumentEmitter(tmp_path)
+    emitter.begin()
+    assert _under(emitter._resolved_staging, Path(key)) is None
 
 
 @pytest.mark.parametrize(
