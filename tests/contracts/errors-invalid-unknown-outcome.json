@@ -1,0 +1,95 @@
+{
+  "contract": "musubi.errors/1-draft",
+  "by": "musubi/0.1.0.dev0",
+  "errors": [
+    {
+      "kind": "CredentialFoundError",
+      "exit_code": 3,
+      "outcome": "broken",
+      "retryable": false,
+      "detail": "Something matching a credential signature was found in the data being synced, so the whole run stopped and nothing was written. A person has to look; the exemption is `--allow rule:unit_key`.",
+      "detail_ja": "同期しようとしたデータの中に認証情報の形をしたものが見つかったため、run 全体を停止し、何も書いていない。人が見る必要がある。見た上で許すなら `--allow rule:unit_key`。"
+    },
+    {
+      "kind": "EmptySourceError",
+      "exit_code": 3,
+      "outcome": "refused",
+      "retryable": false,
+      "detail": "The source produced no units at all and a corpus already exists, so withdrawal would take every document in it. An empty source and an unreadable one look identical from here. `--withdraw-all` is the operator saying they have looked.",
+      "detail_ja": "source が unit を 1 件も返さず、既存のコーパスがあるため、取り下げれば全文書が消える。空の source と読めない source はここからは見分けがつかない。確認した上でなら `--withdraw-all`。"
+    },
+    {
+      "kind": "EverythingSkippedError",
+      "exit_code": 3,
+      "outcome": "refused",
+      "retryable": false,
+      "detail": "Units were read and not one became a document. The folder can be read; nothing in it could be converted. Check the skip reasons in the report: an optional extra may be what is missing.",
+      "detail_ja": "unit は読めたが、1 件も文書にならなかった。フォルダは読める。中身が 1 つも変換できなかった。レポートの skip 理由を見ること。optional な extra が入っていないだけのこともある。"
+    },
+    {
+      "kind": "SourceError",
+      "exit_code": 1,
+      "outcome": "failed",
+      "retryable": false,
+      "detail": "An export could not be read as the kind of export it claims to be, or a path does not exist. Reading it hopefully produces records attributed to the wrong conversation, so it is refused instead.",
+      "detail_ja": "export が名乗っている形式として読めなかったか、パスが存在しない。推測して読むと、間違った会話に紐づいたレコードができるので拒否する。"
+    },
+    {
+      "kind": "ConversionError",
+      "exit_code": 1,
+      "outcome": "failed",
+      "retryable": false,
+      "detail": "Text came out of a unit and the map back to its source did not. Not a skip -- a skip is reported in the manifest with its reason. This is the narrower and worse case.",
+      "detail_ja": "unit からテキストは出たが、source へ戻る map が出なかった。skip ではない（skip は理由つきで manifest に載る）。より狭く、より悪い方。"
+    },
+    {
+      "kind": "TraceError",
+      "exit_code": 1,
+      "outcome": "failed",
+      "retryable": false,
+      "detail": "A trace map does not hold against the artefact it describes: segments that overlap, run backwards, or name offsets outside the file. Every citation is resolved through this map, so it stops the run.",
+      "detail_ja": "trace map が、対象の artefact に対して成り立たない。segment の重複・逆走・ファイル外のオフセットなど。引用はすべてこの map を通して解決されるので、run を止める。"
+    },
+    {
+      "kind": "ContractError",
+      "exit_code": 1,
+      "outcome": "failed",
+      "retryable": false,
+      "detail": "A document did not conform to a contract musubi recognises: an unknown `contract` value, a missing required field, or a manifest whose `run_id` does not re-derive.",
+      "detail_ja": "musubi が知っている契約に文書が適合しない。未知の `contract` 値、必須フィールドの欠落、`run_id` が再導出できない manifest など。"
+    },
+    {
+      "kind": "Unverified",
+      "exit_code": 1,
+      "outcome": "failed",
+      "retryable": false,
+      "detail": "`musubi verify` found faults in a corpus. The corpus is on disk and it does not hold: the report on standard output names each fault. Nothing was changed.",
+      "detail_ja": "`musubi verify` がコーパスに不整合を見つけた。コーパスはディスク上にあり、成り立っていない。標準出力のレポートが各不整合を挙げる。何も変更していない。"
+    },
+    {
+      "kind": "Unreadable",
+      "exit_code": 1,
+      "outcome": "failed",
+      "retryable": true,
+      "detail": "The file system refused: a disk that is full, a file another process holds, a path that stopped resolving mid-run. **The one retryable kind musubi has**, because it is the one failure that is about the machine rather than about the data.",
+      "detail_ja": "ファイルシステムに断られた。ディスクが一杯、他プロセスがファイルを掴んでいる、run の途中でパスが解決しなくなった、など。**musubi で唯一 retry する価値のある kind**。データではなく機械についての失敗だから。"
+    },
+    {
+      "kind": "Usage",
+      "exit_code": 2,
+      "outcome": "failed",
+      "retryable": false,
+      "detail": "The arguments did not parse. `musubi <command> --help` states them. Retrying the same command line does the same thing.",
+      "detail_ja": "引数が解釈できなかった。`musubi <command> --help` に書いてある。同じコマンドラインを再実行しても結果は同じ。"
+    },
+    {
+      "kind": "Unexpected",
+      "exit_code": 1,
+      "outcome": "failed",
+      "retryable": false,
+      "detail": "A bug in musubi. The traceback follows on the same stream, for the person who has to fix it. Named rather than left as a bare traceback so that a reader folding by kind gets one bucket instead of a bucket per line of Python.",
+      "detail_ja": "musubi のバグ。同じストリームに traceback が続く（直す人のため）。裸の traceback にせず名前をつけてあるのは、kind で畳む読み手がPython の行ごとにバケツを作らずに済むようにするため。"
+    }
+  ],
+  "open_namespaces": []
+}
