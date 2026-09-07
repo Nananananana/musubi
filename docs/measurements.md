@@ -312,37 +312,68 @@ read numbers.
 
 ---
 
-## Reading order — every word, wrong order
+## Reading order — every word, wrong order, until it is asked otherwise
 
 ```text
 uv run python tools/reading_order.py
 fixtures whose correct reading is written down
 
-  fixture                  pdf_text@1   pdfium@1
-  two columns                  0.70       0.70
-  a table                      0.67       0.67
-  right-to-left columns        0.67       0.67
+  fixture                  pdf_text@1  pdfium@1  +columns  +rows
+  two columns                 0.70       0.70      1.00     0.70
+  a table                     0.67       0.67      0.67     1.00
+  one line, out of order      0.67       1.00      1.00     1.00
 ```
 
-The ratio is how much of the known answer the reading is, by word. **Neither
-converter reads any of the three layouts correctly**, and the failure is the
-comfortable kind: every word of the document present, in an order that is not
-the document's, with every offset resolving and coverage unchanged.
+The ratio is how much of the known answer the reading is, by word. The first
+two columns are the **default**, which is the file's own order, and it gets none
+of the three right. The failure is the comfortable kind: every word of the
+document present, in an order that is not the document's, with every offset
+resolving and coverage unchanged.
 
 A producer laying out by baseline writes the left cell of a line and then the
 right cell of the same line; reading order is column by column. A table emitted
 cell by cell down each column pairs `Item` with `Tent` rather than with `Mass`.
 
+The last two columns are `pdf-reading-order`, and each reads the layout it is
+for exactly. **No setting reads both**, and that is the finding rather than a
+gap: two columns of prose and a table can be the same geometry with opposite
+correct readings, so what separates them is what the words mean and that is not
+in the file
+([ADR-0042](adr/0042-two-columns-and-a-table-are-the-same-page-and-opposite-readings.md)).
+musubi offers the lever and does not guess.
+
+### Two of the three answers were unreachable
+
 These are the first fixtures here whose **correct answer is written down**
 ([ADR-0039](adr/0039-a-fixture-whose-answer-is-known-and-the-two-things-it-found.md)),
-which is what makes the number a measurement rather than an impression. They
-are built byte by byte, because a PDF whose right answer nobody can state
-measures nothing.
+and nothing checked that the answer was *in the fixture*. Two were not.
 
-Recorded rather than fixed: reading order needs geometry — clustering runs into
-columns and ordering the clusters — which is a converter and not a patch.
-`tests/test_reading_order.py` asserts the wrongness with the answer beside it,
-so the day it is fixed the tests go red.
+The table wrote its second column one row too high, so `Mass` sat above `Item`
+rather than beside it: `TABLE_READ` described a grid the file did not contain.
+The third fixture was three ASCII runs side by side whose answer was the
+rightmost first, as 縦書き reads — and the script that would have said so had
+been removed on purpose, because vertical Japanese needs a composite font that
+`pdf_text@1` refuses. Removing it removed the only evidence for the answer.
+
+**A test asserting that musubi gets a layout wrong passes just as happily when
+the layout is impossible.** It can never go green, so it never tells anybody
+anything: a red that is red about nothing. The guard is now
+`test_every_stated_answer_is_reachable_by_some_strategy`, verified against the
+reintroduced defect before being trusted.
+
+### And `Tm` was not a line break
+
+Found by those fixtures, and bigger than what they were built for. `Tm` sets the
+text matrix absolutely and is how a great many producers place **every line**.
+It was missing from the operators that end a line, so separately placed runs
+were concatenated with nothing between them:
+
+```text
+  three runs at x=300, x=400, x=200   ->   "middlerightleft"
+```
+
+One unbroken word, at full coverage, every offset still resolving to the right
+page. Fixed; it is what lifts the default from 0.456 to 0.678.
 
 ## A composite font was read as glyph numbers
 
@@ -368,8 +399,11 @@ uv run python tools/floors.py
   converter        measure                        now   floor    room
   html@1           boilerplate rejected         0.500   0.333  +0.167
   html@1           traceable coverage           0.935   0.850  +0.085
+  pdf_text@1       a table across               1.000   1.000  +0.000
+  pdf_text@1       one line, out of order       1.000   1.000  +0.000
   pdf_text@1       reading order agreement      0.678   0.550  +0.128
-  pdfium@1         reading order agreement      0.678   0.550  +0.128
+  pdf_text@1       two columns down             1.000   1.000  +0.000
+  pdfium@1         reading order agreement      0.789   0.550  +0.239
   pdfium@1         reads a PDF 1.5              1.000   1.000  +0.000
   trafilatura@1    boilerplate rejected         1.000   0.667  +0.333
   trafilatura@1    traceable coverage           0.997   0.900  +0.097

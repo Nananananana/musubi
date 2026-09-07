@@ -305,6 +305,7 @@ _NUMBERS = {
     39: "Thirty-nine",
     40: "Forty",
     41: "Forty-one",
+    42: "Forty-two",
 }
 
 

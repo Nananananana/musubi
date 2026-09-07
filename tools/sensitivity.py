@@ -138,10 +138,52 @@ def pdf_kerning() -> None:
     print("  some condensed ones, so the cut sits inside the range real files use.")
 
 
+def column_gap() -> None:
+    """How far apart two left edges must be before they are two columns.
+
+    Both ways it can go wrong, on one sweep. Too wide and a real gutter stops
+    being one, so a two-column page is read as a single column and the
+    interleaving `columns` exists to fix comes straight back. Too narrow and an
+    indented opening line becomes a column of its own, which splits an ordinary
+    paragraph.
+
+    What the number needs is a **plateau** between those two, and how wide it
+    is is the whole question ([ADR-0033]).
+    """
+    from musubi.domain.reading_order import Run, columns, text_of
+    from pdf_fixtures import COLUMNS_READ
+
+    lines = COLUMNS_READ.split("\n")
+    # The real fixture's two columns, 260 points apart; and an indented opening
+    # line inside a single column, 20 points in, which is what a gap that is
+    # too narrow breaks.
+    gutter = [
+        Run(text, x, y)
+        for x, side in ((72.0, lines[:3]), (332.0, lines[3:]))
+        for y, text in zip((720.0, 704.0, 688.0), side, strict=True)
+    ]
+    indent = [Run("An indented opening", 92.0, 720.0), Run("and the rest of it", 72.0, 704.0)]
+    whole = "An indented opening" + chr(10) + "and the rest of it"
+
+    print(f"  {'gap':>6}  {'a 260pt gutter':<16}  {'a 20pt indent':<16}")
+    for gap in (4.0, 12.0, 19.0, 20.0, 24.0, 100.0, 259.0, 260.0, 400.0):
+        two = (
+            "read down" if text_of(columns(gutter, gap=gap)) == COLUMNS_READ else "**interleaved**"
+        )
+        one = "one paragraph" if text_of(columns(indent, gap=gap)) == whole else "**two columns**"
+        print(f"  {gap:>6.0f}  {two:<16}  {one:<16}")
+    print()
+    print("  Both edges are visible, so the plateau is the rows between them. The")
+    print("  default of 24 is two 12pt line heights, chosen for that reason and")
+    print("  not for its position in the plateau -- which is what the sweep is")
+    print("  for: a number picked on a principle still has to land somewhere safe.")
+
+
 MEASUREMENTS: dict[str, tuple[str, Callable[[], None]]] = {
     "alignment": ("alignment: MINIMUM_RUN", alignment_minimum_run),
     "window": ("alignment: WINDOW", alignment_window),
     "kerning": ("pdf_text@1: the kerning cut", pdf_kerning),
+    "columns": ("reading order: COLUMN_GAP", column_gap),
 }
 
 

@@ -65,6 +65,7 @@ allow     = ["stripe.secret-key:archive/2019-invoice.md"]
 | `converters` | a table of media type → converter | *(empty)* | overrides the built-in claim for a format |
 | `allow` | a list of `rule:unit_key` | *(empty)* | credential hits already looked at and decided against |
 | `pdf-word-gap` | a number | `-180.0` | how negative a PDF kerning value must be to read as a space ([ADR-0033](adr/0033-a-threshold-that-nobody-swept-is-a-number-fitted-to-one-corpus.md)) |
+| `pdf-reading-order` | `stream`, `columns`, `rows` | `stream` | the order a PDF's runs are read in ([ADR-0042](adr/0042-two-columns-and-a-table-are-the-same-page-and-opposite-readings.md)) |
 | `encoding` | `strict`, `detect` | `strict` | whether a file that is not UTF-8 is refused or read by detection ([ADR-0031](adr/0031-a-guess-with-its-uncertainty-attached-is-not-the-guess-that-was-forbidden.md)) |
 
 Environment variables are the key uppercased with `MUSUBI_` in front:
@@ -136,6 +137,55 @@ pip install "musubi[pdf] @ git+https://github.com/Nananananana/musubi"
 [converters]
 "application/pdf" = "pdfium@1"
 ```
+
+## Reading a PDF in the order a person reads it
+
+A PDF holds text in whatever order suited the program that laid it out. A
+typesetter setting two columns writes the left cell of a line and then the right
+cell of the **same** line, because that is the order the baselines happen in. So
+a reader that takes the strings as it meets them interleaves the columns:
+
+```text
+Tents and poles        Stoves and fuel
+weigh two point four   weigh one point one
+kilograms in total     kilograms in total
+```
+
+comes out as `Tents and poles / Stoves and fuel / weigh two point four / …`.
+Every word of the page is there and the sentences are not. Nothing in the corpus
+says so: coverage is unchanged and every offset still resolves to the right
+page.
+
+`pdf-reading-order` chooses how the runs are put back in order:
+
+- **`stream`** — the order the file holds them in. The default, and what every
+  corpus written before this setting has.
+- **`columns`** — down each column, columns left to right. What a two-column
+  paper needs.
+- **`rows`** — across each line, lines down the page. What a table needs.
+
+```toml
+# musubi.toml
+pdf-reading-order = "columns"
+```
+
+**musubi does not guess between them**, and the reason is that it cannot. Two
+columns of prose and a table can be the same geometry — two groups of text with
+shared baselines — and their correct readings are opposite. What separates them
+is what the words mean, which is not in the file
+([ADR-0042](adr/0042-two-columns-and-a-table-are-the-same-page-and-opposite-readings.md)).
+
+Two things follow from that, and both are deliberate:
+
+- **A shelf with both in it cannot be right under one setting.** Split the
+  folders, or accept that one kind reads in stream order.
+- **The converter name changes with the setting**, from `pdf_text@1` to
+  `pdf_text@1+columns`. That is what makes an incremental sync reconvert the
+  PDFs when the setting changes rather than keeping documents built the old way.
+
+`columns` is safe on ordinary prose. A page whose lines all start at the same
+left edge is one column, and one column read down is the same answer stream
+order gives.
 
 ## Reading notes that are not UTF-8
 

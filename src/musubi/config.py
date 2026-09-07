@@ -158,6 +158,14 @@ OPTIONS: tuple[Option, ...] = (
         "how negative a PDF kerning value must be to read as a space (ADR-0033)",
     ),
     Option(
+        "pdf-reading-order",
+        str,
+        "stream",
+        "the order a PDF's runs are read in: the file's own, down columns, or "
+        "across rows (ADR-0042)",
+        ("stream", "columns", "rows"),
+    ),
+    Option(
         "encoding",
         str,
         "strict",
@@ -403,6 +411,7 @@ def settings_from(
             configuration["converters"],
             detect=configuration["encoding"] == "detect",
             word_gap=configuration["pdf-word-gap"],
+            pdf_reading_order=configuration["pdf-reading-order"],
         ),
         musubi_version=musubi_version,
         allowed=frozenset(configuration["allow"]),

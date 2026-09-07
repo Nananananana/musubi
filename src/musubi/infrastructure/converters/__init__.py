@@ -23,10 +23,11 @@ from collections.abc import Mapping
 from ...ports.converter import Converter
 from .external import adapters
 from .html import HtmlConverter
-from .pdf import PdfConverter
+from .pdf import STREAM, PdfConverter
 from .text import MarkdownConverter, PlainTextConverter, TextConverter
 
 __all__ = [
+    "STREAM",
     "HtmlConverter",
     "MarkdownConverter",
     "PdfConverter",

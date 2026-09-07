@@ -121,6 +121,27 @@ REGISTER: tuple[Constant, ...] = (
         "constant, and `pdfium@1` removes the question by reading the font.",
     ),
     Constant(
+        "domain/reading_order.py",
+        "COLUMN_GAP",
+        "threshold",
+        "tools/sensitivity.py --only columns: a plateau from 20 to 259 on the "
+        "two cases that bound it -- below 20 a 20pt indent becomes a column of "
+        "its own, at 260 the fixture's own gutter closes and the page is read "
+        "interleaved again. 24 is two 12pt line heights, which is a reason "
+        "rather than a fit, and it lands just inside the lower edge.",
+    ),
+    Constant(
+        "domain/reading_order.py",
+        "BASELINE_TOLERANCE",
+        "threshold",
+        "how far two baselines may differ and still be one line. Bounded on "
+        "both sides by typography rather than by a sweep: a superscript or a "
+        "mid-line font change moves a baseline by a point or two, and the next "
+        "line of 12pt text is 14 to 16 away. 4 sits between them with room on "
+        "each side. Only reached by the geometric strategies, which are off by "
+        "default (ADR-0042).",
+    ),
+    Constant(
         "infrastructure/decoding.py",
         "CONFIDENT",
         "threshold",

@@ -31,18 +31,18 @@ __all__ = [
     "COLUMNS",
     "COLUMNS_READ",
     "FIRST_LINE",
+    "OUT_OF_ORDER",
+    "OUT_OF_ORDER_READ",
     "SECOND_LINE",
     "TABLE",
     "TABLE_READ",
-    "VERTICAL",
-    "VERTICAL_READ",
     "a_table",
     "classic",
     "composite",
     "modern",
+    "out_of_order",
     "scanned",
     "two_columns",
-    "vertical",
 ]
 
 FIRST_LINE = "The gear list"
@@ -201,21 +201,32 @@ TABLE: tuple[tuple[str, str], ...] = (
 #: What a reader of `a_table()` gets: each row, left cell then right.
 TABLE_READ = "\n".join(f"{left} {right}" for left, right in TABLE)
 
-#: Columns that run **right to left**, as 縦書き does.
+#: Three runs on one baseline, whose stream order is not their page order.
 #:
-#: The text is ASCII on purpose, and that is the honest half of this fixture.
-#: Setting real Japanese needs a composite font, whose bytes are glyph indices
-#: rather than characters -- so a fixture with 縦書き *text* would be measuring
-#: `composite()` below and not reading order at all. The first draft of this
-#: did exactly that: it wrote UTF-8 into a Helvetica string, stated an answer
-#: no correct reader could produce from those bytes, and would have recorded
-#: its own mistake as musubi's.
+#: **This fixture used to state an answer it did not contain.** It was called
+#: `VERTICAL` and its answer was the rightmost run first, as 縦書き reads. The
+#: text was ASCII on purpose -- real vertical Japanese needs a composite font,
+#: which `composite()` below is about and which `pdf_text@1` refuses -- and
+#: removing the script removed the only evidence that the columns ran right to
+#: left. Three runs side by side are three runs side by side, whichever way the
+#: script goes; nothing in those coordinates says which.
 #:
-#: What is left is the geometry, which is what reading order is about.
-VERTICAL: tuple[str, ...] = ("first column", "second column", "third column")
+#: So it stated a target no correct reader could reach from these bytes. That
+#: is the same mistake its own first draft made and recorded one paragraph
+#: further down -- an answer the fixture wanted rather than one the fixture
+#: gave -- and [ADR-0042] has the whole of it. The real 縦書き case is filed
+#: rather than faked.
+#:
+#: What is left is a case worth having: page order is left to right, stream
+#: order is not, so a reader that takes the strings as it meets them gets this
+#: wrong and geometry gets it right.
+OUT_OF_ORDER: tuple[str, ...] = ("left", "middle", "right")
 
-#: What a reader of `vertical()` gets: the rightmost column first.
-VERTICAL_READ = "\n".join(VERTICAL)
+#: What a reader of `out_of_order()` gets: left to right across the page,
+#: and **one line**, because one baseline is one line. Three runs sharing a
+#: baseline are three parts of the same line of text, whatever order the
+#: stream showed them in.
+OUT_OF_ORDER_READ = " ".join(OUT_OF_ORDER)
 
 
 def _shown(text: str) -> bytes:
@@ -258,7 +269,14 @@ def a_table() -> bytes:
     lines = [b"BT /F1 12 Tf 72 720 Td"]
     for column, cells in enumerate(zip(*TABLE, strict=True)):
         if column:
-            lines.append(b"200 %d Td" % (16 * len(TABLE)))
+            # Back to the **top** row, which is `len(TABLE) - 1` steps up and
+            # not `len(TABLE)`. It was the latter, so every cell of the second
+            # column sat one row above the cell it was meant to be beside:
+            # `Mass` over `Item` rather than next to it, and `2.4kg` level with
+            # `Item`. Read by baseline that gives `Mass / Item 2.4kg / Tent
+            # 1.1kg / Stove`, so `TABLE_READ` was an answer this grid could not
+            # produce however well a reader read it ([ADR-0042]).
+            lines.append(b"200 %d Td" % (16 * (len(TABLE) - 1)))
         for row, cell in enumerate(cells):
             if row:
                 lines.append(b"0 -16 Td")
@@ -267,18 +285,22 @@ def a_table() -> bytes:
     return _paged(b" ".join(lines))
 
 
-def vertical() -> bytes:
-    """Columns that run right to left, as 縦書き does.
+#: Where each run sits, and the order the stream shows them in. Written out
+#: rather than derived, so that the two orders are visibly not the same.
+_OUT_OF_ORDER_AT: tuple[tuple[str, int], ...] = (("middle", 300), ("right", 400), ("left", 200))
 
-    Written **left to right** in the stream, because nothing stops a producer
-    doing that and the coordinates are what say otherwise. `VERTICAL_READ` is
-    the answer: the rightmost column first, which is the reverse of the order
-    the strings appear in the file.
+
+def out_of_order() -> bytes:
+    """Three runs on one baseline, shown in an order that is not their order.
+
+    Nothing stops a producer emitting the middle of a line first, and the
+    coordinates are the only thing that says otherwise. `OUT_OF_ORDER_READ` is
+    the answer and it is **reachable**: left to right by x, which is what any
+    of the geometric strategies gives and what stream order does not.
     """
-    lines = [b"BT /F1 12 Tf 200 720 Td"]
-    for column, text in enumerate(reversed(VERTICAL)):
-        if column:
-            lines.append(b"100 0 Td")
+    lines = [b"BT /F1 12 Tf"]
+    for text, x in _OUT_OF_ORDER_AT:
+        lines.append(b"1 0 0 1 %d 720 Tm" % x)
         lines.append(_shown(text))
     lines.append(b"ET")
     return _paged(b" ".join(lines))
