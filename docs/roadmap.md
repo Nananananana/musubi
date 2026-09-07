@@ -23,7 +23,7 @@ has the problem.
 
 | | Issue | What it is now | Where it stands |
 |---|---|---|---|
-| 1 | [#97](https://github.com/Nananananana/musubi/issues/97) | Reading order is a setting; the default is unchanged | **open** — `pdfium@1` and 縦書き remain |
+| 1 | [#97](https://github.com/Nananananana/musubi/issues/97) | Reading order is a setting, honoured by both readers | **open** — 縦書き remains |
 | 2 | [#76](https://github.com/Nananananana/musubi/issues/76) | The trace map is 1.5x the corpus, from 10.7x | **closed** |
 | 3 | [#82](https://github.com/Nananananana/musubi/issues/82) | The corpus now says which readings are guesses | **open** — detection is no better |
 | 4 | [#80](https://github.com/Nananananana/musubi/issues/80) | A run holds 0.8x of what it read, from 1.9x | **open** — still linear |
@@ -53,11 +53,17 @@ opposite correct readings ([ADR-0042](adr/0042-two-columns-and-a-table-are-the-s
 
 **What is left**, and why the issue stays open:
 
-- `pdfium@1` has no reading-order setting. It has its own extraction and its own
-  geometry, and wiring it to the same strategies is separate work.
+- ~~`pdfium@1` has no reading-order setting.~~ **Done.** It takes its runs from
+  pdfium's own text rects, so no threshold was invented for grouping characters,
+  and it reads all three layouts exactly under the right strategy
+  ([ADR-0050](adr/0050-the-better-reader-was-not-offered-the-setting.md)). It
+  had been **accepting the setting and silently ignoring it** — which the
+  previous ADR recorded as not-yet-done and did not notice was worse than that.
 - Columns that run right to left, as 縦書き does, are a different reading order
   and nothing in the geometry distinguishes them. That case needs composite-font
-  support before it is a reading-order question at all.
+  support before it is a reading-order question at all, and `pdfium@1` can read
+  one — so it is now reachable for one of the two readers, which makes it a
+  different issue rather than this one.
 - The default is still the file's own order, so a corpus with this problem today
   still has it until somebody reads the setting.
 

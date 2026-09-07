@@ -60,11 +60,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from ...domain import reading_order
 from ...domain.alignment import align
+from ...domain.reading_order import Run
 from ...domain.span import Span
 from ...domain.text import decode
 from ...domain.trace import OPAQUE, Kind, Segment, TraceMap
 from ...ports.converter import Converted, Converter, Unconvertible
+from .pdf import STREAM
 
 __all__ = [
     "PAGE_EXTRACTORS",
@@ -110,6 +113,10 @@ class PageExtractor:
     extra: str
     licence: str
     load: Callable[[], Callable[[bytes], list[str]] | None]
+    #: Optionally, the same pages **with positions**: one list of runs per
+    #: page. `None` for an extractor that hands back text and nothing else,
+    #: which is then simply not offered a reading order ([ADR-0050]).
+    place: Callable[[], Callable[[bytes], list[list[Run]]] | None] | None = None
 
 
 #: Either kind. A union rather than a protocol: the two differ only in what
@@ -174,10 +181,39 @@ class PagedConverter:
     extractor and every citation still says *page three*.
     """
 
-    def __init__(self, extractor: PageExtractor) -> None:
+    def __init__(self, extractor: PageExtractor, reading_order_name: str = STREAM) -> None:
         self._extractor = extractor
-        self.name = extractor.name
         self.media_types = extractor.media_types
+        self.reading_order_name = reading_order_name
+        #: Only where the extractor can say where its text sits. An extractor
+        #: with no `place` keeps the file's own order whatever is asked for,
+        #: and says so by keeping its plain name rather than silently
+        #: accepting a setting it cannot honour ([ADR-0050]).
+        self._order = (
+            reading_order.strategy_named(reading_order_name)
+            if reading_order_name != STREAM and extractor.place is not None
+            else None
+        )
+        self.name = (
+            extractor.name if self._order is None else f"{extractor.name}+{reading_order_name}"
+        )
+
+    def reading(self, order: str) -> PagedConverter:
+        """The same extractor, read in a different order.
+
+        A method rather than a caller reaching for the extractor: the registry
+        holds one instance per process and a run's setting belongs to the run,
+        which is the same reason `pdf_text@1` is rebuilt rather than mutated.
+        """
+        return PagedConverter(self._extractor, order)
+
+    def _read_placed(self, content: bytes) -> list[str]:
+        """Each page's runs, put in reading order and joined back into text."""
+        place = self._extractor.place() if self._extractor.place is not None else None
+        if place is None:  # pragma: no cover - `_order` is None without it
+            raise RuntimeError("a reading order was asked of an extractor with no positions")
+        assert self._order is not None
+        return [reading_order.text_of(self._order(runs)) for runs in place(content)]
 
     def convert(self, content: bytes, media_type: str) -> Converted | Unconvertible:
         read = self._extractor.load()
@@ -185,7 +221,7 @@ class PagedConverter:
             return Unconvertible("extractor_missing", f"install {self._extractor.extra}", self.name)
 
         try:
-            pages = read(content)
+            pages = read(content) if self._order is None else self._read_placed(content)
         except Exception as error:
             return Unconvertible("unreadable", _blame(error), self.name)
 
@@ -290,6 +326,44 @@ def _pdfium() -> Callable[[bytes], list[str]] | None:
     return pages
 
 
+def _pdfium_runs() -> Callable[[bytes], list[list[Run]]] | None:
+    """The same pages, as runs of text with where each one sits.
+
+    **pdfium's own rects, not characters grouped by a threshold this invents.**
+    A text page reports the rectangles it found; asking it for those is asking
+    the library that laid the page out, and it means no new number to sweep
+    ([ADR-0050]).
+
+    `top` rather than `bottom` for the baseline. Measured on the fixtures, tops
+    agree to a tenth of a point across a line where bottoms differ by two,
+    because a descender moves the bottom and nothing moves the top by as much.
+    `BASELINE_TOLERANCE` covers either; this one needs less of it.
+    """
+    try:
+        import pypdfium2
+    except ImportError:
+        return None
+
+    def placed(content: bytes) -> list[list[Run]]:
+        document = pypdfium2.PdfDocument(content)
+        try:
+            found: list[list[Run]] = []
+            for page in document:
+                text = page.get_textpage()
+                runs: list[Run] = []
+                for index in range(text.count_rects()):
+                    left, _, _, top = rect = text.get_rect(index)
+                    said = text.get_text_bounded(*rect).strip()
+                    if said:
+                        runs.append(Run(said, float(left), float(top)))
+                found.append(runs)
+        finally:
+            document.close()
+        return found
+
+    return placed
+
+
 TEXT_EXTRACTORS: tuple[TextExtractor, ...] = (
     TextExtractor(
         name="trafilatura@1",
@@ -307,6 +381,7 @@ PAGE_EXTRACTORS: tuple[PageExtractor, ...] = (
         extra="musubi[pdf]",
         licence="BSD-3-Clause",
         load=_pdfium,
+        place=_pdfium_runs,
     ),
 )
 

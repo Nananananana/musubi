@@ -76,8 +76,16 @@ def main() -> int:
     # Built here rather than registered, because a strategy is a setting and
     # the registry holds the default: measuring only what the registry has
     # would be measuring the setting being switched off ([ADR-0042]).
+    from musubi.infrastructure.converters.external import PAGE_EXTRACTORS, PagedConverter
+
     readers = [c for c in known_converters() if PDF in getattr(c, "media_types", ())]
-    readers += [PdfConverter(reading_order_name=order) for order in sorted(STRATEGIES)]
+    for order in sorted(STRATEGIES):
+        readers.append(PdfConverter(reading_order_name=order))
+        readers += [
+            PagedConverter(extractor, order)
+            for extractor in PAGE_EXTRACTORS
+            if extractor.load() is not None and extractor.place is not None
+        ]
     if not readers:  # pragma: no cover - the registry always claims PDFs
         print("no converter claims application/pdf")
         return 1

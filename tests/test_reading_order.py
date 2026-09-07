@@ -63,6 +63,29 @@ LAYOUTS: tuple[tuple[str, bytes, str, str], ...] = (
 )
 
 
+def ordering(order: str) -> list[object]:
+    """Every reader that can be asked for a reading order, built with it.
+
+    Two of them now. `pdfium@1` was left out when the setting arrived and
+    ignored it for three days ([ADR-0050]), so this is read out of what can
+    place its text rather than named -- an extractor that gains positions is
+    covered without anybody editing here.
+    """
+    from musubi.infrastructure.converters.external import PAGE_EXTRACTORS, PagedConverter
+
+    made: list[object] = [PdfConverter(reading_order_name=order)]
+    made += [
+        PagedConverter(extractor, order)
+        for extractor in PAGE_EXTRACTORS
+        if extractor.load() is not None and extractor.place is not None
+    ]
+    return made
+
+
+def named(reader: object) -> str:
+    return str(reader.name)  # type: ignore[attr-defined]
+
+
 def readers() -> list[object]:
     """Every converter that claims PDFs, installed or not.
 
@@ -134,12 +157,13 @@ def test_every_stated_answer_is_reachable_by_some_strategy(
     """
     _, made, answer, _ = case
     reached = {
-        order: text_read(PdfConverter(reading_order_name=order), made)
+        f"{order}/{named(reader)}": text_read(reader, made)
         for order in sorted(STRATEGIES)
+        for reader in ordering(order)
     }
     assert any(read is not None and read.strip() == answer for read in reached.values()), (
-        f"no reading order reaches this answer.\n  want: {answer!r}\n"
-        + "\n".join(f"  {order}: {read!r}" for order, read in reached.items())
+        f"no reading order reaches this answer. want: {answer!r}; got "
+        + "; ".join(f"{where}: {read!r}" for where, read in reached.items())
     )
 
 
@@ -154,7 +178,8 @@ def test_the_strategy_for_this_layout_reads_it_correctly(
     worse than one that was never offered: they believe the corpus is in
     reading order and it is not."""
     _, made, answer, order = case
-    assert text_read(PdfConverter(reading_order_name=order), made) == answer + "\n"
+    for reader in ordering(order):
+        assert text_read(reader, made) == answer + "\n", f"{named(reader)} did not"
 
 
 # -- and what the file's own order still does, which is the default ---------

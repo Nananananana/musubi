@@ -199,6 +199,38 @@ FLOORS: tuple[Floor, ...] = (
         "the stream had, and this is what caught `Tm` missing from the "
         "line-break operators -- the whole page as one word.",
     ),
+    # -- and the optional reader, wired to the same strategies --------------
+    Floor(
+        "pdfium@1",
+        "two columns down",
+        1.0,
+        1.0,
+        "2026-09-10",
+        "a bound, and the same one `pdf_text@1` carries. `pdf-reading-order` "
+        "was silently ignored by `pdfium@1` for the first three days it "
+        "existed -- by the reader an owner installs *because* their PDFs need "
+        "a better one ([ADR-0050]).",
+    ),
+    Floor(
+        "pdfium@1",
+        "a table across",
+        1.0,
+        1.0,
+        "2026-09-10",
+        "a bound. The runs come from pdfium's own text rects rather than from "
+        "characters this grouped by a threshold, so there is no new number "
+        "under this number -- which is why it can be a bound at all.",
+    ),
+    Floor(
+        "pdfium@1",
+        "one line, out of order",
+        1.0,
+        1.0,
+        "2026-09-10",
+        "a bound, and the one `pdfium@1` already passed in stream order "
+        "because it sorts what it finds. Kept so that a change to how runs "
+        "are built cannot lose it without saying so.",
+    ),
 )
 
 #: Measures with no headroom, and why each is a bound rather than a floor.
@@ -246,6 +278,25 @@ def claiming(media_type: str) -> list[object]:
     return [c for c in known_converters() if media_type in getattr(c, "media_types", ())]
 
 
+def _geometric(order: str) -> list[object]:
+    """Every reader that can be asked for a reading order, so asked.
+
+    Built here rather than taken from the registry, which holds the default:
+    measuring the registry's instance would be measuring the setting switched
+    off. `pdfium@1` is included when the extra is installed, and its absence is
+    a smaller measurement rather than a missing floor ([ADR-0050]).
+    """
+    from musubi.infrastructure.converters.external import PAGE_EXTRACTORS, PagedConverter
+
+    made: list[object] = [PdfConverter(reading_order_name=order)]
+    made += [
+        PagedConverter(extractor, order)
+        for extractor in PAGE_EXTRACTORS
+        if extractor.load() is not None and extractor.place is not None
+    ]
+    return made
+
+
 def _agreement(answer: str, read: str | None) -> float:
     if read is None:
         return 0.0
@@ -288,8 +339,9 @@ def measured() -> dict[tuple[str, str], float]:
     # the registry holds the default, and measuring that would be measuring the
     # setting being off.
     for measure, order, made, answer in GEOMETRIC:
-        reader = PdfConverter(reading_order_name=order)
-        found["pdf_text@1", measure] = _agreement(answer, _read(reader, made, PDF))
+        for reader in _geometric(order):
+            name = str(reader.name)  # type: ignore[attr-defined]
+            found[name.split("+")[0], measure] = _agreement(answer, _read(reader, made, PDF))
 
     layouts = (
         (two_columns(), COLUMNS_READ),
