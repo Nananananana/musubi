@@ -168,6 +168,7 @@ def run(
             unit_key=key,
             content_hash=digest,
             media_type=found.media_type,
+            origin=found.origin,
         )
         document, struck = _cleanse(
             unit, converted, settings.ruleset, found.modified_at, facts=found.facts

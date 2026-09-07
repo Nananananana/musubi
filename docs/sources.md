@@ -93,8 +93,18 @@ reports what it will skip without having read a word of what it will convert,
 and a record is the orchestrator's note about a fetch rather than the owner's
 document.
 
-**Keys by path.** The orchestrator controls the layout, and a key it can read
-in a citation is worth more than one derived from a URL.
+**Keys by path, with musubi's own suffix.** `feed/2026-09-05/a1b2.html` becomes
+`a1b2.md`, because the artefact is front matter and extracted prose and `.html`
+is a claim about a format it is not in. Measured consequence: `tsumugi` claims
+no parser for `.html`, so an ingest skipped every file and **the corpus was not
+indexed at all**
+([ADR-0041](adr/0041-an-artefact-is-named-for-what-musubi-wrote.md)).
+
+`key_derivation` says so in the manifest, and the trace map records `origin` —
+where the source finds the page — so `musubi trace` still opens the `.html` it
+was made from. **The other sources are unchanged**: a `.pdf` in a vault still
+produces an artefact named `.pdf`, because moving every key in every existing
+corpus is not a cost this lane's problem justifies.
 
 ---
 

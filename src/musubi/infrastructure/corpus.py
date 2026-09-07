@@ -135,6 +135,7 @@ class Corpus:
                 unit_key=str(source.get("unit_key", key)),
                 content_hash=str(source.get("content_hash", "")),
                 media_type=str(source.get("media_type", "")),
+                origin=str(source.get("origin", "")),
                 encoding=str(source.get("encoding", "utf-8")),
                 bom_bytes=int(source.get("bom_bytes", 0)),
             ),
@@ -286,13 +287,21 @@ class Corpus:
             return None
 
     def _source_file(self, reference: SourceReference) -> Path | None:
+        """Where the source's file is, by what the map says rather than by the key.
+
+        `origin` first: a key is the unit's *identity* and a source may derive
+        it, so joining the key to the root stops finding the file the moment
+        one does ([ADR-0041]). The key is the fallback, for a map written
+        before `origin` existed -- where the two were the same thing.
+        """
         root = self.roots().get(reference.source_id)
         if not root:
             return None
-        direct = Path(root).joinpath(*reference.unit_key.split("/"))
+        parts = (reference.origin or reference.unit_key).split("/")
+        direct = Path(root).joinpath(*parts)
         if direct.is_file():
             return direct
-        return _by_normalized_name(Path(root), reference.unit_key.split("/"))
+        return _by_normalized_name(Path(root), parts)
 
 
 def _by_normalized_name(root: Path, parts: list[str]) -> Path | None:

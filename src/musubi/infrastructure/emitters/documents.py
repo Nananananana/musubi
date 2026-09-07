@@ -458,6 +458,9 @@ def _render_trace(document: Document, text: str, trace: TraceMap, relative: str)
         "source": {
             "source_id": document.unit.source_id,
             "unit_key": document.unit.unit_key,
+            # Where the source finds it, which is not always what the key says
+            # ([ADR-0041]). This is what `musubi trace` opens.
+            "origin": document.unit.origin or document.unit.unit_key,
             "content_hash": document.unit.content_hash,
             "media_type": document.unit.media_type,
             # With these and the file, a character offset becomes a byte offset

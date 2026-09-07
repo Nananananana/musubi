@@ -70,6 +70,14 @@ class Unit:
     unit_key: str
     content_hash: str
     media_type: str
+    #: How the source finds this again -- a path for a folder, an entry name
+    #: for an archive. Opaque above the source that produced it.
+    #:
+    #: Carried because a key is **not** always a filename. `unit_key` is the
+    #: unit's identity and a source may derive it, so a corpus that resolved a
+    #: source file by joining the key to the root would stop finding the file
+    #: the moment a source derived anything ([ADR-0041]).
+    origin: str = ""
 
     @classmethod
     def of(

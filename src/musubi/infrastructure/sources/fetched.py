@@ -90,10 +90,18 @@ from pathlib import Path
 from ...ports.source import Discovery, Found, Skipped
 from .filesystem import MACHINERY, MAXIMUM_BYTES, FilesystemSource
 
-__all__ = ["FACTS", "RECORD_SUFFIX", "FetchedSource"]
+__all__ = ["FACTS", "RECORD_SUFFIX", "WRITTEN_SUFFIX", "FetchedSource"]
 
 #: What a record file is called, beside the page it describes.
 RECORD_SUFFIX = ".fetch.json"
+
+#: What musubi's own output is called, whatever the page was.
+#:
+#: The artefact is front matter and extracted prose. Front matter is a Markdown
+#: convention and the prose reads as Markdown, so this is the format it is in
+#: -- and the format a consumer's parser registry has to recognise to index it
+#: at all ([ADR-0041]).
+WRITTEN_SUFFIX = ".md"
 
 #: Record key -> front matter key. Only these travel; a record may say more,
 #: and what it says beyond this is the orchestrator's business.
@@ -107,9 +115,11 @@ FACTS: tuple[tuple[str, str], ...] = (
 class FetchedSource(FilesystemSource):
     """Satisfies :class:`~musubi.ports.source.Source`.
 
-    A filesystem source that reads the fetch record beside each page and
-    refuses to read the same article twice.
+    A filesystem source that reads the fetch record beside each page, refuses
+    to read the same article twice, and names what it writes for what it is.
     """
+
+    key_derivation = "path, with the suffix of what musubi writes"
 
     def __init__(
         self,
@@ -155,6 +165,24 @@ class FetchedSource(FilesystemSource):
             ),
         )
 
+    def _key_parts(self, entry: Path) -> tuple[str, ...]:
+        """The unit's key: its path, with the suffix musubi's output deserves.
+
+        **`a1b2.html` becomes `a1b2.md`,** because the artefact is front matter
+        and extracted prose and calling it `.html` is a claim about a format it
+        is not in. Measured consequence, from `tsumugi` (`musubi-work`): no
+        parser claims `.html`, so an ingest skips every file and **the corpus
+        is not indexed at all** -- worse than being read wrong, and silent
+        except for a count of skips.
+
+        The identity moves with the name, which is the cost ([ADR-0041]) and is
+        why the source declares it in `key_derivation` rather than leaving a
+        reader to notice. `musubi trace` still opens the page, because the map
+        records `origin` and no longer infers the filename from the key.
+        """
+        parts = entry.relative_to(self.root).parts
+        return (*parts[:-1], Path(parts[-1]).stem + WRITTEN_SUFFIX)
+
     def _consider(
         self, entry: Path, relative: str, found: list[Found], skipped: list[Skipped]
     ) -> None:
@@ -169,7 +197,7 @@ class FetchedSource(FilesystemSource):
         if len(found) == before:
             return  # skipped by the walk, with its reason already recorded
 
-        page = found.pop()
+        page = replace(found.pop(), key_parts=self._key_parts(entry))
         record = entry.with_name(entry.name + RECORD_SUFFIX)
         if not record.is_file():
             found.append(page)

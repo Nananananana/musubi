@@ -48,6 +48,11 @@
       "additionalProperties": false,
       "properties": {
         "source_id": { "type": "string", "minLength": 1 },
+        "origin": {
+          "description": "How the source finds this unit again -- a path relative to the source root for a folder, an entry name for an archive. Opaque: only the source that produced it may parse it. Present because a unit_key is the unit's IDENTITY and a source may derive it (the fetched source names its artefacts .md whatever the page was), so a reader that resolved the source file by joining the key to the root would stop finding it. `musubi trace` opens this. Optional: a map written before it existed omits it, and there the key was the filename.",
+          "type": "string",
+          "minLength": 1
+        },
         "unit_key": {
           "description": "Stable across exports of the same data (ADR-0006), NFC, '/'-joined (ADR-0014).",
           "type": "string",
