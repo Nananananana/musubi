@@ -290,7 +290,7 @@
         "source_id": { "type": "string", "minLength": 1 },
         "origin": { "type": "string", "minLength": 1 },
         "reason": {
-          "description": "A stable token a reader can count and filter on: unknown_format, machinery, too_large, undecodable, no_converter, credential, outside_the_root, directory_symlink.",
+          "description": "A stable token a reader can count and filter on -- `unknown_format`, `no_converter`, `no_text_layer` and so on. THE SET IS CLOSED AND THE WHOLE OF IT IS IN docs/contracts.md, with what each one means and which layer produces it; it is not repeated here, because a copy of a list is a second list to keep in step. NOT CHECKED HERE: that the token is one of them, which is a statement about musubi rather than about this document.",
           "type": "string",
           "minLength": 1
         },
