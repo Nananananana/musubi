@@ -221,6 +221,31 @@ several corpora joins them at its end — `musubi export` gives it a line per
 document from each, and the `corpus` field on every line says which it came
 from.
 
+### One run at a time per destination
+
+**There is no lock.** A run clears the staging area when it starts, so a second
+run into the same destination takes the first one's files with it, and the
+first stops with `InterruptedRunError`.
+
+What that leaves is recoverable, and measured rather than assumed. With the
+second run starting after four of six documents had been promoted:
+
+```text
+  corpus: 6 documents, 4 carry the new text, manifest lists the old 6
+  musubi verify: 8 faults
+  after one ordinary sync: all 6 new, verify holds
+```
+
+The corpus is **ahead of its own account**, never a mixture of two runs: the
+manifest is promoted last, so a run cut short leaves the old manifest
+describing the old corpus, `musubi verify` names every document that disagrees,
+and the next sync converts them again
+([ADR-0053](adr/0053-a-run-that-was-interrupted-says-so.md)).
+
+So the answer to a scheduled sync overlapping a manual one is **run it again**,
+which is why `InterruptedRunError` is one of the two kinds musubi marks
+`retryable`. If the overlap is routine, give the two a destination each.
+
 ### The names on standard error
 
 When musubi exits non-zero, **the first line of standard error begins with the

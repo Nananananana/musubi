@@ -189,14 +189,21 @@ def test_musubi_produces_two_of_soras_four_outcomes_and_says_which() -> None:
     assert used == {"refused", "failed"}
 
 
-def test_only_the_file_system_is_retryable() -> None:
-    """`retryable` is the field sora said only musubi can fill in. If every
-    entry answered the same way it would be a field that says nothing, so the
-    one that differs is worth pinning: a full disk may not be full next time,
-    and no other failure here is about the machine.
+def test_only_a_failure_about_the_machine_is_retryable() -> None:
+    """`retryable` is the field sora said only musubi can fill in, and a field
+    where every entry answered the same way would say nothing.
+
+    Two answer yes, and they are the two that are about the **machine** rather
+    than about the data: a full disk may not be full next time, and a second
+    musubi run into the same destination is over by the time you look. Every
+    other failure here is about a document or a setting, and asking again
+    unchanged gets the same answer forever.
     """
     retryable = {kind.kind for kind in CATALOGUE if kind.retryable}
-    assert retryable == {"Unreadable"}
+    assert retryable == {"Unreadable", "InterruptedRunError"}
+    assert not any(kind.retryable for kind in CATALOGUE if kind.outcome == "refused"), (
+        "a refusal that says retrying may help is the one mistake this table exists to stop"
+    )
 
 
 @pytest.mark.parametrize("kind", CATALOGUE, ids=lambda k: k.kind)
