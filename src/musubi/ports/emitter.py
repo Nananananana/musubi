@@ -81,6 +81,8 @@ class Document:
     #: How the source was read, so a character offset can become a byte offset
     #: for whoever holds the file ([ADR-0018]).
     source_encoding: str = "utf-8"
+    #: And whether that encoding was detected rather than declared ([ADR-0044]).
+    encoding_detected: bool = False
     source_bom_bytes: int = 0
     layer: str = "fact"
     #: The source's own timestamp, to be put back on the written file

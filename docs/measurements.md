@@ -19,6 +19,7 @@ wrong fix for. That is the falsification section working.
 | Re-read ratio | **0.32**, from 1.01 | falsified, then fixed (ADR-0036) |
 | Archive reads per unit | **O(1)** archives opened | fixed in [#78](https://github.com/Nananananana/musubi/issues/78) |
 | Screener precision, synthetic | **0.00%** false stops after ADR-0026 | holds |
+| Encoding detection | 17 of 19 recovered; **the confidence cannot tell which two** | recorded, not fixed ([#82](https://github.com/Nananananana/musubi/issues/82)) |
 | Cleansing precision | not measured | owed |
 | Screener recall | not measured | owed |
 
@@ -174,6 +175,63 @@ the shape of a real one and none of the mess, so these answer the *relative*
 question — is one converter better than another on the same input — and not
 *what coverage a real shelf of documents would get*. That number needs a
 collected corpus, which v0.4 also owes.
+
+## Encoding detection — right often, and it cannot tell you when
+
+```text
+uv run python tools/encoding_detection.py
+
+  a paragraph of prose   17 of 19 recovered exactly
+  one line of prose      16 of 19
+```
+
+**Every one of the misses reported 100% coherence.** French in Latin-1 read as
+cp1250, Russian in KOI8-R read as `shift_jis_2004`, all confidently. So
+`CONFIDENT = 0.3` cannot separate a right reading from a wrong one; it excludes
+only the case where the detector found nothing at all, which is a much smaller
+job than it looks like.
+
+### The runner-up does not separate them either
+
+#82 proposed taking the second-best candidate into account and was explicit
+that it needed measuring. Measured, on the same corpus, where *a rival reading*
+means another candidate that decodes the same bytes to different text:
+
+```text
+  a rival reading exists    right    WRONG
+  no                           11        0
+  yes                           6        2
+```
+
+It fires on eight readings to find two wrong ones. As a gate that is about the
+entropy tier's published precision of 21.1%, which
+[ADR-0017](adr/0017-entropy-is-a-tier-not-a-default.md) made opt-in and off by
+default for exactly this reason.
+
+The score gap says the same. Two of the three misses had the correct encoding
+at **rank two with a chaos gap of exactly 0.0000** — and so did a case the
+detector got right.
+
+### So the corpus says which readings are guesses
+
+The manifest carries `encoding` and `encoding_detected` per artefact, and the
+run report says how many:
+
+```text
+  1 of 2 read by detecting the encoding, which is a guess and not a
+  reading of a declaration
+    cp932  1x
+```
+
+That does not fix detection and does not claim to
+([ADR-0044](adr/0044-a-second-opinion-from-the-same-detector-is-not-a-second-opinion.md)).
+It stops the corpus being quiet about the fact that detection happened. `#82`
+assumed the manifest already recorded the encoding per artefact; it did not,
+only the trace map did, so the question *how much of this corpus rests on a
+guess* meant opening every sidecar.
+
+**`CONFIDENT` does not move.** Raising it would exclude nothing that is wrong
+and would start refusing files that read correctly.
 
 ## Screener precision — 0.00% false stops, on synthetic blobs
 

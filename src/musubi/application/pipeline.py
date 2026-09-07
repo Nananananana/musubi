@@ -260,6 +260,7 @@ def _cleanse(
             trace=composed,
             converter=converted.converter,
             source_encoding=converted.source_encoding,
+            encoding_detected=converted.encoding_detected,
             source_bom_bytes=converted.source_bom_bytes,
             modified_at=modified_at,
             facts=facts,

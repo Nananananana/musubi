@@ -148,7 +148,10 @@ REGISTER: tuple[Constant, ...] = (
         "below it a detection is reported and not acted on. Every miss in "
         "tools/encoding_detection.py reported 100% coherence, so this cannot "
         "separate a right reading from a wrong one -- it only excludes a detector "
-        "that recognised nothing. Filed as #82.",
+        "that recognised nothing. The runner-up does not separate them either: "
+        "measured, a rival reading fires on 8 to find 2, which is about the "
+        "entropy tier's precision (ADR-0044). So the number does not move, and "
+        "what a corpus offers instead is which readings were guesses. Still #82.",
     ),
     Constant(
         "infrastructure/screeners/entropy.py",

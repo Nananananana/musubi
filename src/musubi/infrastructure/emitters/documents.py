@@ -169,6 +169,8 @@ class DocumentEmitter:
                 answered_source_units=trace.answered_source_units,
                 source_hash=document.unit.content_hash,
                 facts=tuple(document.facts),
+                encoding=document.source_encoding,
+                encoding_detected=document.encoding_detected,
             ),
         )
 
@@ -541,6 +543,8 @@ def _artefact_from(entry: Mapping[str, Any]) -> Artefact | None:
             answered_source_units=int(entry.get("answered_source_units") or 0),
             source_hash=str(source.get("content_hash") or ""),
             facts=_facts(entry.get("facts")),
+            encoding=str(entry.get("encoding") or "utf-8"),
+            encoding_detected=bool(entry.get("encoding_detected", False)),
         )
     except (KeyError, TypeError, ValueError):
         return None
