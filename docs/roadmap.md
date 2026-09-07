@@ -210,6 +210,32 @@ the work, not overhead. `export` is fast enough that the 40% it spends on
 `resolve()` is 0.05 seconds, which is not worth weakening a security check that
 carries a written argument for asking the filesystem.
 
+### The survey that found four non-problems and one message
+
+Worth recording as carefully as the fixes, because *measured and discarded* is
+a result and because each of these looked like a defect first.
+
+| probed | verdict |
+|---|---|
+| The journal grows one entry per run, forever | **fine.** 675 bytes a run after the first; sync time flat over 60 runs; reading 60 entries 1.6ms |
+| A citation, which is the core promise | **fine.** 1.6ms, and `Corpus` deliberately caches nothing across calls |
+| `musubi export` holds the corpus | **no.** It streams. Its peak is 99–100% the *manifest*, parsed |
+| Every text document is decoded twice | **true and irrelevant.** 0.003ms a note, 0.08% of a run |
+| Two runs into one destination | **a message, not a defect** — see below |
+
+The double decode is the sharpest of these. `Decoding` decodes the bytes to
+find out whether it can, throws the text away, and the inner converter decodes
+the same bytes again — which reads like an obvious waste and costs one part in
+twelve hundred. Fixing it would have meant a change to the converter port.
+
+**What the export probe did establish** is a number worth having: a manifest
+parses to **3.1× its size on disk**, and that is the memory floor of every
+command that opens a corpus — `sync` reading the previous one, `verify`, and
+`export`. It is the same ceiling [#80] records, stated more precisely, and the
+manifest has no cheap win in it: hashes are 21% of the artefacts array,
+`path` and `trace_map` are 8% and derivable from `unit_key` but are contract
+fields a consumer reads, and indentation is 22% and deliberate.
+
 ### What performance work here has to look like
 
 Two corrections came out of doing it, and both are about the instrument.
@@ -240,7 +266,35 @@ having.
   mean a second reader of the format beside `unpacked` — which is the thing
   `trace_format` exists to prevent.
 - **Nothing else measured is above noise.** The sync path's remaining cost is
-  `open` and `replace`, which are the writes themselves.
+  `open` and `replace`, which are the writes themselves: one read and two
+  writes per document, which is the floor for staging plus atomic promotion.
+- **A manifest parses to 3.1x its size**, and that is the memory floor of
+  `sync`, `verify` and `export` alike. Lowering it means not parsing it whole,
+  which means a streaming JSON reader, which means a dependency [ADR-0001]
+  refuses. [#80] holds this too.
+
+### And one constraint that turned out to need a sentence rather than a fix
+
+**Two runs into one destination.** There is no lock, so a second run clears the
+first one's staging area. Probed deliberately, with the second `begin()`
+landing after four of six documents had been promoted: the corpus ends up
+**ahead of its own account**, `verify` names all eight faults, and the next
+ordinary sync repairs every one. [ADR-0008]'s promotion order was doing its job
+before anybody checked.
+
+What was wrong was that it arrived as `Unreadable: the file system refused` — a
+sentence about a machine that was fine. It is `InterruptedRunError` now, and
+one of the two kinds musubi marks retryable, because running the sync again
+*is* the repair ([ADR-0053](adr/0053-a-run-that-was-interrupted-says-so.md)).
+
+That is the third constraint this month that was reasonable, designed for, and
+written down nowhere — after one source per destination, and the skip
+vocabulary. In all three the **code handled the case correctly and the person
+was not told**, which is a different failure from a bug and needs looking for
+differently: by asking what happens, rather than by reading what should.
+
+[ADR-0001]: adr/0001-the-domain-depends-on-nothing.md
+[ADR-0008]: adr/0008-a-credential-stops-the-run.md
 
 [#80]: https://github.com/Nananananana/musubi/issues/80
 
