@@ -27,6 +27,7 @@ has the problem.
 | 2 | [#76](https://github.com/Nananananana/musubi/issues/76) | The trace map is 1.5x the corpus, from 10.7x | **closed** |
 | 3 | [#82](https://github.com/Nananananana/musubi/issues/82) | The corpus now says which readings are guesses | **open** — detection is no better |
 | 4 | [#80](https://github.com/Nananananana/musubi/issues/80) | A run holds 0.8x of what it read, from 1.9x | **open** — still linear |
+| 5 | [#114](https://github.com/Nananananana/musubi/issues/114) | The skip vocabulary is prose, not a document | **open** — nobody has asked |
 | — | [#57](https://github.com/Nananananana/musubi/issues/57) | The first real export | **owner, not musubi.** Cost rises with delay |
 
 ### Why #97 was first, and what is left of it
@@ -183,9 +184,72 @@ Nothing above was blocked on it, and nothing above shortened it either. The
 order in this file is about what musubi does next; this one is about what is
 being lost while that happens.
 
+## Where every number stands, measured today
+
+Re-derived rather than remembered. Each row names the command.
+
+| | when it was filed | now | |
+|---|---|---|---|
+| Trace map, against the documents | 10.7x | **1.5x** | `scaling.py --only map` |
+| What a run holds, against what it read | 1.9x | **0.8x** | `scaling.py --only memory` |
+| A re-sync that changed nothing | 1.01 | **0.30** | `scaling.py --only resync` |
+| A cold sync, 300 documents | 1.49s | **1.19s** | interleaved A/B |
+| Syscalls in that sync | 9,350 | **3,350** | exact, `cProfile` counts |
+| Archive reads per unit | O(n) | **O(1)** | `scaling.py --only archive` |
+
+And the two nobody had measured before this week:
+
+```text
+  verify, 400 artefacts     0.367s     half of it materialising trace maps
+  export, 400 documents     0.131s     a third of it resolving paths
+```
+
+**Neither is a problem and both are worth having written down.** `verify`
+re-reads every document and every map and rebuilds each map as objects; that is
+the work, not overhead. `export` is fast enough that the 40% it spends on
+`resolve()` is 0.05 seconds, which is not worth weakening a security check that
+carries a written argument for asking the filesystem.
+
+### What performance work here has to look like
+
+Two corrections came out of doing it, and both are about the instrument.
+
+**A stale number reads as a solved problem.** `Path.resolve()` was recorded as
+fixed at 7% and was back at 12%, because a later refactor put the syscall on
+every write. Nothing measured it again until somebody did.
+
+**The profiler and the stopwatch disagree in a predictable direction.**
+`cProfile` charges per call, so tens of thousands of tiny Python calls read as
+24% of a run when a stopwatch says 5%. Acting on that profile would have meant
+rewriting the composition algorithm for a twentieth of the run.
+
+So the rule this arrived at, and the reason the table above quotes counts:
+**count something exact, and use the clock only to corroborate.** Syscall
+counts do not move between runs, between machines, or with what else the laptop
+is doing — this one is noisy to ±15%, which is larger than most wins worth
+having.
+
+### What is left, and why none of it is scheduled
+
+- **Memory is still linear.** 0.8x of input, and the remaining half is the
+  manifest document built whole before it is streamed out. Streaming that too
+  means writing JSON by hand around a generator of artefacts, and the manifest
+  is the one document here whose exact bytes are a contract. [#80] holds it.
+- **Trace maps are materialised to be checked.** Half of `verify`. A map that
+  could be checked without building every `Segment` would halve it, and would
+  mean a second reader of the format beside `unpacked` — which is the thing
+  `trace_format` exists to prevent.
+- **Nothing else measured is above noise.** The sync path's remaining cost is
+  `open` and `replace`, which are the writes themselves.
+
+[#80]: https://github.com/Nananananana/musubi/issues/80
+
 ## What the four had in common
 
-Worth writing down, because it was not the plan.
+Worth writing down, because it was not the plan. **Everything below has since
+happened three more times**, in a schema description, in a contract's own
+prose, and in a test whose docstring argued for a distinction its assertions
+destroyed ([ADR-0047] through [ADR-0051]).
 
 **Three of the four were not where they were filed.** #76's remaining cost was
 predicted to be converter-side and was in how a segment was written down. #80's
@@ -199,3 +263,17 @@ nothing compared, so the trace-map ratio and the memory ratio had both drifted
 with no test, report or reader able to say so. That is #84's finding, and it
 turned up twice more while these were being worked. Both now have gates with
 their headroom written down.
+
+**And the shape kept going.** Since then: a contract shipped with no schema and
+no line in the document that publishes it; a reused manifest record republishing
+values musubi had invented for it; a second source silently deleting the first
+one's corpus; a published vocabulary of twenty-two skip reasons that named
+eight; and a distinction the contract told consumers to branch on that musubi
+had never once produced. Each was found the same way — by asking what the
+population was, or by checking a claim against the thing it described — and the
+last one was found because a **consumer wrote their reading of the contract
+down where musubi could read it back**.
+
+The generalisation is not *people forget*. It is that **a list beside a thing
+has no reason to change when the thing does**, and a promise in prose has no
+reason to be true.
