@@ -125,7 +125,7 @@ class Emitter(Protocol):
         """Write one document where it will wait, and say what it became."""
         ...
 
-    def stage_manifest(self, body: str) -> None:
+    def stage_manifest(self, body: Iterable[str]) -> None:
         """The run's own account, written last and promoted with the rest."""
         ...
 

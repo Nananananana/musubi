@@ -28,7 +28,7 @@ from musubi.application.pipeline import run as pipeline
 from musubi.application.sync import sync, withdrawals
 from musubi.application.verify import verify
 from musubi.domain.frontmatter import title_of
-from musubi.domain.manifest import Artefact, Manifest, render
+from musubi.domain.manifest import Artefact, Manifest, chunks
 from musubi.infrastructure.converters import converter_for
 from musubi.infrastructure.corpus import Corpus
 from musubi.infrastructure.emitters import DOCUMENTS, MANIFEST, STAGING, TRACES, DocumentEmitter
@@ -68,7 +68,7 @@ def crash_after_promoting(root: Path, into: Path, at: str) -> tuple[str, ...]:
     emitter.begin()
     outcome = pipeline(ObsidianSource(root), settings(at), emitter, write=True, previous=before)
     taken = withdrawals(before.written | before.withdrawn, outcome.manifest)
-    emitter.stage_manifest(render(replace(outcome.manifest, withdrawn=taken)))
+    emitter.stage_manifest(chunks(replace(outcome.manifest, withdrawn=taken)))
     emitter.promote()
     return taken
 

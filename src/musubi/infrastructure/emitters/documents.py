@@ -189,9 +189,23 @@ class DocumentEmitter:
         )
         return rendered.artefact
 
-    def stage_manifest(self, body: str) -> None:
-        """The run's own account, written last and promoted with the rest."""
-        self._write(Path(MANIFEST), body)
+    def stage_manifest(self, body: Iterable[str]) -> None:
+        """The run's own account, written last and promoted with the rest.
+
+        Takes pieces rather than a string. Building the whole document first
+        was the single largest thing a run held -- 1.51x the size of the input,
+        for a file of a few hundred kilobytes ([ADR-0045]) -- and every piece of
+        that is transient, which is why it took a phase-by-phase measurement to
+        find rather than showing up in what the run retained.
+        """
+        if isinstance(body, str):
+            raise ConversionError(
+                "stage_manifest takes the manifest a piece at a time -- "
+                "`manifest.chunks(...)`, not `manifest.render(...)`. A string is "
+                "iterable one character at a time, so this would have written "
+                "the right file the slowest possible way."
+            )
+        self._write_chunks(Path(MANIFEST), body)
 
     def _with_front_matter(self, document: Document) -> tuple[str, TraceMap]:
         # A Markdown document always gets front matter. Any other document gets
@@ -211,15 +225,28 @@ class DocumentEmitter:
             ) from error
         return inserted.text, composed.merged()
 
-    def _write(self, relative: Path, body: str) -> None:
+    def _write_chunks(self, relative: Path, body: Iterable[str]) -> None:
+        """The same as `_write`, without ever holding the whole document."""
+        target = self._staged_path(relative)
+        with target.open("w", encoding="utf-8", newline="\n") as stream:
+            for piece in body:
+                stream.write(piece)
+        self._staged.append(relative.as_posix())
+
+    def _staged_path(self, relative: Path) -> Path:
+        """Where this goes, checked. One function, so the two writers cannot
+        come to disagree about what counts as inside the staging area."""
         target = self.staging / relative
         if not _inside(target, self._resolved_staging):
             raise ConversionError(f"{relative} would be written outside the staging area")
         target.parent.mkdir(parents=True, exist_ok=True)
+        return target
+
+    def _write(self, relative: Path, body: str) -> None:
         # Written as UTF-8 with LF, on every platform. A corpus whose bytes
         # depend on which machine built it is a corpus whose hashes do
         # ([ADR-0003]).
-        target.write_text(body, encoding="utf-8", newline="\n")
+        self._staged_path(relative).write_text(body, encoding="utf-8", newline="\n")
         self._staged.append(relative.as_posix())
 
     def _keep_time(self, relative: Path, modified_at: float | None) -> None:

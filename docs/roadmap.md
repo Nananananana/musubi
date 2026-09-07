@@ -20,7 +20,7 @@ Every number below is measured, with the command that re-derives it.
 | 1 | [#97](https://github.com/Nananananana/musubi/issues/97) | Reading order is not the document's | **Wrong text, silently.** Half done: see below |
 | 2 | [#76](https://github.com/Nananananana/musubi/issues/76) | The trace map is 1.5x the corpus | **Done.** 10.7x when filed |
 | 3 | [#82](https://github.com/Nananananana/musubi/issues/82) | `CONFIDENT` cannot tell right from wrong | **Still open**, and the corpus now says where it guessed |
-| 4 | [#80](https://github.com/Nananananana/musubi/issues/80) | A run holds the whole corpus | A written ceiling, not yet reached |
+| 4 | [#80](https://github.com/Nananananana/musubi/issues/80) | A run holds 0.8x of what it read | **Cause found**, still linear |
 | — | [#57](https://github.com/Nananananana/musubi/issues/57) | The first real export | **Rises with delay.** Owner, not musubi |
 
 ### Why #97 was first, and what is left of it
@@ -128,12 +128,37 @@ piece of work than this was.
 
 Re-derive: `uv run python tools/encoding_detection.py`.
 
-### Why #80 is next
+### What was done about #80, and why the diagnosis mattered more than the fix
 
-A ceiling, at 1.3x to 1.5x of input, linear and written down. The fix argues
-with [ADR-0008](adr/0008-a-credential-stops-the-run.md), which is fail-closed on
-purpose, and §9 already flags that the argument has to be careful. Nothing
-reaches the ceiling today.
+Re-measured before anything was built, a run held **1.9x** what it read, not
+the 1.3x this repository had recorded for months. Nothing had noticed, because
+`tools/scaling.py` prints and no test compared.
+
+#80 named three causes, all read off the code: the accumulated artefact lists,
+the staging ADR-0008 requires, and `Source.read()` handing back whole units. It
+concluded a fix meant a careful argument about fail-closed promotion.
+
+**The peak was in none of them.**
+
+```text
+  after run (all staged)    peak  595,598   0.56x
+  after render(manifest)    peak 2,008,425  1.89x     <- here
+```
+
+Rendering the manifest added 1.33x of the whole input, transiently, to build a
+269 kB file, because `json.dumps` builds every piece and then joins them.
+Streaming it out took the run to **0.8x**, and ADR-0008 was never touched
+([ADR-0045](adr/0045-the-peak-was-the-manifest-and-nobody-had-looked.md)).
+
+`tests/test_memory_ceiling.py` is now the gate, so the number cannot drift
+silently again. It was checked against the old behaviour first and fails at
+2.04x.
+
+It stays open because the growth is still **linear** — the accumulated lists
+are real — so the shelf ADR-0007 describes still has a ceiling. The constant
+fell by 2.4x and the cause is now known, which is a different position to be in.
+
+Re-derive: `uv run python tools/scaling.py --only memory`.
 
 ### Why #57 is outside the order
 

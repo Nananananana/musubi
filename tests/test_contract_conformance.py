@@ -31,7 +31,7 @@ from jsonschema import Draft202012Validator
 
 from musubi import __version__
 from musubi.application.pipeline import Settings, run
-from musubi.domain.manifest import render
+from musubi.domain.manifest import chunks
 from musubi.domain.trace import Kind
 from musubi.infrastructure.converters import converter_for
 from musubi.infrastructure.emitters import DOCUMENTS, MANIFEST, TRACES, DocumentEmitter
@@ -92,7 +92,7 @@ def corpus(tmp_path: Path) -> Path:
         created_at="2026-08-30T00:00:00+00:00",
     )
     outcome = run(ObsidianSource(root), settings, emitter, write=True)
-    emitter.stage_manifest(render(outcome.manifest))
+    emitter.stage_manifest(chunks(outcome.manifest))
     emitter.promote()
     return destination
 

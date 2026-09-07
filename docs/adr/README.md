@@ -59,6 +59,7 @@ later ADR supersedes it and says so.
 | [0042](0042-two-columns-and-a-table-are-the-same-page-and-opposite-readings.md) | Two columns and a table are the same page and opposite readings |
 | [0043](0043-a-segment-is-a-row-of-numbers-and-the-tiling-supplies-the-rest.md) | A segment is a row of numbers, and the tiling supplies the rest |
 | [0044](0044-a-second-opinion-from-the-same-detector-is-not-a-second-opinion.md) | A second opinion from the same detector is not a second opinion |
+| [0045](0045-the-peak-was-the-manifest-and-nobody-had-looked.md) | The peak was the manifest, and nobody had looked |
 
 [0004](0004-a-conversion-carries-a-map-back-to-its-source.md) is the one to read
 first. The rest of the design is arranged around it, and

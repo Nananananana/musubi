@@ -20,6 +20,7 @@ alternative is an artefact that cannot be appealed.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from dataclasses import dataclass
 
 from .hashing import Canonical, hash_of
@@ -338,13 +339,39 @@ class Manifest:
 
 
 def render(manifest: Manifest) -> str:
-    """The manifest as the document it is ([ADR-0002]).
+    """The manifest as the document it is, as one string ([ADR-0002]).
 
     A stable key order and a trailing newline, so two runs over the same input
     produce the same bytes. Indented rather than minified: this is the file a
     reviewer opens, and the id is computed over the canonical form rather than
     over this, so the formatting is free.
+
+    **`chunks()` is what a sync uses.** Building the whole document as one
+    string was the largest thing a run held: 1.51x the size of the input, to
+    produce a 269 kB file ([ADR-0045]). This stays for the callers that
+    genuinely want a string -- `musubi plan` prints one -- and for tests.
     """
+    return "".join(chunks(manifest))
+
+
+def chunks(manifest: Manifest) -> Iterator[str]:
+    """The same document, a piece at a time.
+
+    `json.dumps` builds every piece and then joins them, so the join and the
+    pieces are both resident at the moment it returns. `iterencode` yields the
+    pieces, and a caller writing each one to a file never holds the whole.
+
+    The document itself -- the nested dict `document()` builds -- is still
+    built whole, and that is the 0.53x this does not fix. Streaming that too
+    would mean writing JSON by hand around a generator of artefacts, and the
+    manifest is the one document here whose exact bytes are a contract.
+    """
+    yield from json.JSONEncoder(ensure_ascii=False, indent=2).iterencode(document(manifest))
+    yield "\n"
+
+
+def document(manifest: Manifest) -> Canonical:
+    """The manifest as data, before anything has decided how to write it."""
     coverage = manifest.coverage
     body: Canonical = {
         "contract": CONTRACT,
@@ -438,4 +465,4 @@ def render(manifest: Manifest) -> str:
         },
         "limits": list(manifest.limits),
     }
-    return json.dumps(body, ensure_ascii=False, indent=2) + "\n"
+    return body
