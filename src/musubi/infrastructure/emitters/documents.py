@@ -71,7 +71,7 @@ from typing import Any
 from ...domain.frontmatter import FrontMatter, replacements, title_of
 from ...domain.hashing import content_hash
 from ...domain.journal import Entry
-from ...domain.manifest import Artefact
+from ...domain.manifest import Artefact, published_artefact_fields
 from ...domain.removal import RemovalRecord
 from ...domain.screening import Finding
 from ...domain.span import Span
@@ -358,7 +358,19 @@ class DocumentEmitter:
             if isinstance(trace, str) and trace:
                 written.add(trace)
             artefact = _artefact_from(entry)
-            if artefact is not None and artefact.source_hash:
+            # **And every field the manifest publishes.** Reading a record that
+            # is missing one is fine -- `_artefact_from` fills a default and
+            # `verify` carries on, because absent is not wrong. **Republishing
+            # one is not**: a default written back into a new manifest stops
+            # being an absence and becomes a claim. A Shift-JIS vault read
+            # entirely by detection came out of an upgrade recorded as `utf-8`,
+            # declared, on every document ([ADR-0048]).
+            #
+            # The same gate `source_hash` already was: a record musubi cannot
+            # reuse whole is a reason to convert, not a reason to stop. It
+            # costs one full sync after a field is added.
+            complete = published_artefact_fields() <= set(entry)
+            if artefact is not None and artefact.source_hash and complete:
                 retained[artefact.unit_key] = Retained(
                     artefact=artefact,
                     removals=removals.get(artefact.unit_key, ()),

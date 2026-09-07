@@ -22,6 +22,8 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from dataclasses import dataclass
+from functools import cache
+from typing import Any, cast
 
 from .hashing import Canonical, hash_of
 from .removal import RemovalRecord
@@ -36,6 +38,7 @@ __all__ = [
     "Manifest",
     "Skip",
     "SourceRecord",
+    "published_artefact_fields",
     "render",
 ]
 
@@ -466,3 +469,33 @@ def document(manifest: Manifest) -> Canonical:
         "limits": list(manifest.limits),
     }
     return body
+
+
+@cache
+def published_artefact_fields() -> frozenset[str]:
+    """Every key `render` writes for an artefact, taken from the renderer.
+
+    Not a list beside it. The point is that a field added to `render` becomes
+    a field a **reused** record must already have, without anybody remembering
+    to say so ([ADR-0048]).
+
+    `facts` is absent because it is written only when there are any, which is
+    what makes it optional in the contract too.
+    """
+    sample = Artefact(
+        path="",
+        content_hash="",
+        trace_path="",
+        source_id="",
+        unit_key="",
+        converter="",
+        traceable_characters=0,
+        characters=0,
+        layer="fact",
+    )
+    body = cast(
+        "dict[str, Any]", document(Manifest(kind="sync", musubi_version="0", artefacts=(sample,)))
+    )
+    (only,) = body["artefacts"]
+    assert isinstance(only, dict), "an artefact record is no longer an object"
+    return frozenset(only)
