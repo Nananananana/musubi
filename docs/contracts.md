@@ -444,6 +444,16 @@ only be written `title: "gear: a list"` — and the quote marks used to arrive
 with it. An *unterminated* quote is repeated as written rather than guessed at:
 this is not a YAML parser and does not become one.
 
+**It is not bounded.** A title is the document's front-matter `title` or its
+first heading, whatever length that is: a 200,000-character heading produces a
+200,000-character title, and the manifest carries it verbatim. musubi does not
+truncate it, because the field is *what the document calls itself, repeated*,
+and a shortened name is not what it said.
+
+A consumer putting one on a screen should clamp it. So should one holding a
+manifest in memory: a manifest parses to about 3.1× its size, so a pathological
+heading is paid for on every command that opens the corpus.
+
 The heading rule is the consumer's own: `tsumugi` takes a title from the first
 heading when front matter does not give one, so a corpus and its reader name
 the same document the same way by agreement rather than by coincidence.
