@@ -50,6 +50,36 @@ CONTRACTS = Path(__file__).resolve().parent / "contracts"
 
 TRACE_MAP = path_to("musubi.trace-map/1")
 SYNC_MANIFEST = path_to("musubi.sync-manifest/1")
+ERRORS = path_to("musubi.errors/1")
+
+#: A constant whose name says it is one: `CONTRACT`, `TRACE_CONTRACT`,
+#: `ERRORS_CONTRACT`. The convention is the population.
+_DECLARES = re.compile(r'^[A-Z_]*CONTRACT[A-Z_]*(?::[^=]+)? = "(musubi\.[^"]+)"', re.M)
+
+#: Anything shaped like a draft contract, whether or not it is named like one.
+#: The second rule below uses this to catch a contract declared outside the
+#: convention -- otherwise the convention would be guarding itself.
+_LOOKS_LIKE = re.compile(r'"(musubi\.[a-z-]+/\d+-draft)"')
+
+
+def _sources() -> list[Path]:
+    return sorted((ROOT / "src" / "musubi").rglob("*.py"))
+
+
+def declared() -> dict[str, str]:
+    """Contract identifier -> the file that declares it.
+
+    Read out of the source. **`musubi.sync/1` is deliberately not here**: it is
+    `frontmatter.PRODUCER`, what musubi calls itself in a document's metadata,
+    and its own comment says it is contract-shaped and not a version. A guard
+    that swept up every contract-shaped string demanded a schema for it.
+    """
+    found: dict[str, str] = {}
+    for source in _sources():
+        for name in _DECLARES.findall(source.read_text("utf-8")):
+            found.setdefault(name, source.relative_to(ROOT).as_posix())
+    return found
+
 
 #: A note with everything a document can have: its own front matter, a heading,
 #: CJK text whose characters are not its bytes, a tracking parameter to remove,
@@ -100,16 +130,23 @@ def corpus(tmp_path: Path) -> Path:
 # -- the schemas themselves -------------------------------------------------
 
 
-@pytest.mark.parametrize("schema", [TRACE_MAP, SYNC_MANIFEST], ids=lambda p: p.name)
-def test_the_schema_is_a_schema(schema: Path) -> None:
-    validator(schema)
+@pytest.mark.parametrize("contract", sorted(declared()), ids=lambda c: c)
+def test_the_schema_is_a_schema(contract: str) -> None:
+    """Reached through `path_to`, which is the published way in, so the
+    registry a consumer calls is exercised rather than bypassed."""
+    validator(path_to(contract))
 
 
-@pytest.mark.parametrize("schema", [TRACE_MAP, SYNC_MANIFEST], ids=lambda p: p.name)
-def test_the_schema_says_it_describes_shape_only(schema: Path) -> None:
+@pytest.mark.parametrize("contract", sorted(declared()), ids=lambda c: c)
+def test_the_schema_says_it_describes_shape_only(contract: str) -> None:
     """A schema handed over as "the contract" is read as the whole of it, and
-    the most important invariant of each of these is not in it."""
-    body = json.loads(schema.read_text(encoding="utf-8"))
+    the most important invariant of each of these is not in it.
+
+    Parametrised over every contract the code declares. It used to name two of
+    four by hand, so the journal's compliance was luck and `musubi.errors`
+    shipped without the sentence at all ([ADR-0047]).
+    """
+    body = json.loads(path_to(contract).read_text(encoding="utf-8"))
     assert "SHAPE ONLY" in body["description"]
     assert "docs/contracts.md" in body["description"]
 
@@ -202,6 +239,7 @@ def test_a_removal_in_the_real_manifest_carries_a_hash_and_not_a_value(tmp_path:
         # their owners their maps were invalid.
         ("trace-map-valid-objects.json", TRACE_MAP),
         ("sync-manifest-valid.json", SYNC_MANIFEST),
+        ("errors-valid.json", ERRORS),
     ],
 )
 def test_the_published_example_conforms(fixture: str, schema: Path) -> None:
@@ -363,6 +401,28 @@ def test_a_trace_map_counter_example_is_refused(fixture: Path) -> None:
     assert not validator(TRACE_MAP).is_valid(body), f"{fixture.name} should not validate"
 
 
+@pytest.mark.parametrize("fixture", _refusals("errors"), ids=lambda p: p.stem)
+def test_an_errors_counter_example_is_refused(fixture: Path) -> None:
+    body: Any = json.loads(fixture.read_text(encoding="utf-8"))
+    assert not validator(ERRORS).is_valid(body), f"{fixture.name} should not validate"
+
+
+def test_the_catalogue_the_command_printed_conforms(
+    capsysbinary: pytest.CaptureFixture[bytes],
+) -> None:
+    """Real output, not the committed example. The fixture is for a third party
+    writing a consumer; this is what actually leaves the process.
+
+    `tsumugi` shipped a frozen contract whose real output had never been
+    validated against its own schema, and the first run against genuine output
+    found a genuine bug. That is why every contract here is checked this way.
+    """
+    from musubi.interfaces.cli import main
+
+    assert main(["errors", "--json"]) == 0
+    validator(ERRORS).validate(json.loads(capsysbinary.readouterr().out.decode("utf-8")))
+
+
 @pytest.mark.parametrize("fixture", _refusals("sync-manifest"), ids=lambda p: p.stem)
 def test_a_sync_manifest_counter_example_is_refused(fixture: Path) -> None:
     body: Any = json.loads(fixture.read_text(encoding="utf-8"))
@@ -390,17 +450,74 @@ def test_the_layers_musubi_will_emit_have_not_drifted_apart() -> None:
     assert "interpretation" not in declared
 
 
-def test_the_contract_strings_in_the_code_are_the_ones_the_schemas_accept() -> None:
-    from musubi.domain.manifest import CONTRACT
-    from musubi.infrastructure.emitters import TRACE_CONTRACT
+#: Every `musubi.<name>/<n>-draft` string the package declares, read out of the
+#: source. The population, and the reason it is read rather than listed: the
+#: guard this replaced named **two** contracts by hand, out of four. It could
+#: not have noticed the journal contract, and it did not notice `musubi.errors`
+#: shipping with no schema and no line in `docs/contracts.md` ([ADR-0047]).
+def test_no_contract_is_declared_outside_the_naming_convention() -> None:
+    """Otherwise `declared()` is a convention checking itself, and a contract
+    assigned to a differently named constant is invisible to every guard below.
+    """
+    loose: dict[str, str] = {}
+    for source in _sources():
+        for name in _LOOKS_LIKE.findall(source.read_text("utf-8")):
+            loose.setdefault(name, source.relative_to(ROOT).as_posix())
+    missing = sorted(set(loose) - set(declared()))
+    assert not missing, (
+        f"{missing} look like draft contracts and are not assigned to a constant whose "
+        f"name ends in CONTRACT: {[loose[name] for name in missing]}. Nothing below "
+        f"checks them."
+    )
 
-    manifest_schema = json.loads(SYNC_MANIFEST.read_text(encoding="utf-8"))
-    trace_schema = json.loads(TRACE_MAP.read_text(encoding="utf-8"))
 
-    import re
+def test_there_are_contracts_to_check() -> None:
+    """The population guard's own population. A regex that stops matching
+    leaves every test below iterating over nothing and passing."""
+    assert len(declared()) >= 4, f"found only {sorted(declared())}"
 
-    assert re.match(manifest_schema["properties"]["contract"]["pattern"], CONTRACT)
-    assert re.match(trace_schema["properties"]["contract"]["pattern"], TRACE_CONTRACT)
+
+@pytest.mark.parametrize("contract", sorted(declared()), ids=lambda c: c)
+def test_every_contract_the_code_declares_ships_a_schema(contract: str) -> None:
+    """A contract is a promise to somebody outside this repository, and a
+    promise with no schema beside it is one they have to infer from output.
+
+    `musubi.errors/1-draft` shipped without one and nothing said so, because
+    the guard here started from the schemas that existed rather than from the
+    contracts the code names -- a population read from the wrong end.
+    """
+    stem = contract.split("-draft")[0].replace(".", "-").replace("/", "-")
+    assert (ROOT / "src" / "musubi" / "schemas" / f"{stem}.json").is_file(), (
+        f"{contract} is declared in {declared()[contract]} and ships no schema"
+    )
+
+
+@pytest.mark.parametrize("contract", sorted(declared()), ids=lambda c: c)
+def test_every_contract_the_code_declares_is_in_the_contracts_document(contract: str) -> None:
+    """`docs/contracts.md` is the page a consumer is handed. A contract absent
+    from it is one they find out about by receiving a document they cannot
+    name."""
+    body = (ROOT / "docs" / "contracts.md").read_text(encoding="utf-8")
+    assert contract in body, f"{contract} is declared and `docs/contracts.md` does not mention it"
+
+
+@pytest.mark.parametrize("contract", sorted(declared()), ids=lambda c: c)
+def test_the_contract_string_matches_the_pattern_its_own_schema_accepts(contract: str) -> None:
+    """Checked for all of them rather than for the two somebody remembered."""
+    stem = contract.split("-draft")[0].replace(".", "-").replace("/", "-")
+    schema = json.loads(
+        (ROOT / "src" / "musubi" / "schemas" / f"{stem}.json").read_text(encoding="utf-8")
+    )
+    assert re.match(schema["properties"]["contract"]["pattern"], contract)
+
+
+def test_the_contracts_document_names_no_contract_that_has_gone() -> None:
+    """The other direction. A document describing a contract nothing declares
+    sends a consumer looking for a document musubi never writes."""
+    body = (ROOT / "docs" / "contracts.md").read_text(encoding="utf-8")
+    mentioned = set(re.findall(r"musubi\.[a-z-]+/\d+-draft", body))
+    stale = sorted(mentioned - set(declared()))
+    assert not stale, f"{stale} are documented and nothing declares them"
 
 
 def test_a_source_unit_the_schema_does_not_know_is_refused() -> None:

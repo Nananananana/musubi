@@ -1,7 +1,12 @@
 # Contract fixtures
 
-Worked examples of the two documents musubi writes, and counter-examples that
+Worked examples of the documents musubi produces, and counter-examples that
 must be refused.
+
+Three of the four contracts are documents musubi **writes into a corpus**.
+`musubi.errors/1-draft` is the exception: it is printed by `musubi errors
+--json` and describes musubi rather than a run, so `errors-valid.json` is what
+the real command printed rather than what an emitter wrote.
 
 ## The valid ones came off a disk
 

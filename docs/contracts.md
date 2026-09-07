@@ -14,13 +14,14 @@ tool whose schema lives on somebody else's server is not offline.
 | `musubi.sync-manifest/1-draft` | [`src/musubi/schemas/musubi-sync-manifest-1.json`](../src/musubi/schemas/musubi-sync-manifest-1.json) | `<destination>/manifest.json` |
 | `musubi.trace-map/1-draft` | [`src/musubi/schemas/musubi-trace-map-1.json`](../src/musubi/schemas/musubi-trace-map-1.json) | `<destination>/traces/<unit_key>.json` |
 | `musubi.run-journal/1-draft` | [`src/musubi/schemas/musubi-run-journal-1.json`](../src/musubi/schemas/musubi-run-journal-1.json) | `<destination>/runs.jsonl`, one object per line |
+| `musubi.errors/1-draft` | [`src/musubi/schemas/musubi-errors-1.json`](../src/musubi/schemas/musubi-errors-1.json) | nothing; printed by `musubi errors --json` |
 
 Worked examples, produced by the real emitter and validated on every push, are
 in [`tests/contracts/`](../tests/contracts/README.md).
 
 ## None of them is frozen yet
 
-All three carry `-draft`, and the suffix is the statement: the freeze has not
+All four carry `-draft`, and the suffix is the statement: the freeze has not
 happened. It happens when **a second program has produced and consumed one** —
 not on a date ([ADR-0002](adr/0002-the-sync-manifest-is-a-document.md)). Until
 then a field may change meaning, and a consumer written today may need adjusting.
@@ -46,6 +47,18 @@ Today `musubi.trace-map/1` has a candidate — a resolver written against it
 outside this project, taking an anchor through to a byte range in an original
 file — and `musubi.sync-manifest/1` has none. Neither is scheduled, because a
 date is exactly what this rule refuses.
+
+**`musubi.errors/1` has the strongest candidate of the four, and it is the
+youngest.** `sora` asked for it because it was already folding musubi's failures
+by a name it had to scrape off `stderr`, has it in its own `KNOWN` table, checks
+it in CI the way it checks `iriguchi`'s rules, and has **stopped inferring
+`retryable`** — it uses the value musubi publishes. That is a program that used
+one and found something out, which is the condition; it is not a consumer
+written in order to freeze it, which is the condition run backwards.
+
+Whether that is enough is not musubi's to decide alone. The wording belongs to
+`tsumugi` and the ambiguity below is unresolved, so this is recorded here and
+raised rather than acted on.
 
 One ambiguity is inherited along with the rule: read strictly, *a second program
 has produced and consumed one* asks the same program to do both, which for a
@@ -296,6 +309,55 @@ entry names what moved and *counts* what did not. Listing every untouched
 artefact would make a hundred runs over ten thousand documents a history larger
 than the thing it describes, which is the difference between a feature that
 works on a real corpus and one that only works in a demonstration.
+
+### The error catalogue
+
+The only one of the four that is **not written to a corpus**. It is printed by
+`musubi errors --json`, and it describes musubi rather than a run.
+
+```json
+{
+  "contract": "musubi.errors/1-draft",
+  "by": "musubi/0.4.1",
+  "errors": [
+    { "kind": "EverythingSkippedError", "exit_code": 3, "outcome": "refused",
+      "retryable": false, "detail": "...", "detail_ja": "..." }
+  ],
+  "open_namespaces": []
+}
+```
+
+**`kind` is exactly what musubi prints before the first colon on standard
+error**, and that is the whole of the interface. Everything after the colon is
+for a person and may quote a path or a filename from the machine musubi ran on,
+so a consumer that keeps failures should keep the kind and drop the rest — which
+is what lets it say its own log holds no content of yours.
+
+What a schema cannot check here is the thing the document exists for: **that the
+list is complete.** musubi checks it against its own source — every
+`MusubiError` subclass must appear in the catalogue or be named with a reason as
+one that cannot reach standard error, and every name the command line prints is
+read out of the source of the command line. A kind that can be printed and is
+not listed fails musubi's build. A consumer takes that on the same terms as
+everything else on this page.
+
+Three things follow that a reader should not have to infer:
+
+- **`outcome` is only ever `refused` or `failed`.** `unavailable` and
+  `timed_out` are in the enum because the vocabulary is the family's, and
+  musubi cannot produce them: it reads a folder that is already on the disk
+  ([ADR-0007](adr/0007-musubi-reads-exports-never-services.md)), so there is no
+  service to be unavailable and nothing to wait for.
+- **`retryable` is false for everything except `Unreadable`**, for the same
+  reason. The file system is the one failure that is about the machine rather
+  than the data. A caller that retries a `refused` retries it forever.
+- **`open_namespaces` is empty and the set is closed.** musubi assembles no
+  kind at run time out of anybody else's vocabulary. Empty is an answer; an
+  absent field would be a shrug.
+
+`detail_ja` is written by musubi rather than translated downstream. Two
+sentences written by one hand cannot disagree, and a translation maintained by
+the reader drifts from the thing it describes the first time either changes.
 
 ### `origin`, and why a key is not a filename
 

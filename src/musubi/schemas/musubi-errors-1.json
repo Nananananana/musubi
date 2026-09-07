@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Nananananana/musubi/schemas/musubi-errors-1.json",
+  "title": "musubi.errors/1",
+  "description": "Every way musubi can fail, as the name it prints before the first colon on standard error. Published because a program driving musubi folds failures by that name and keeps nothing else from the line -- a message may quote a path from the machine musubi ran on. The set is closed and checked against the code: a kind that can reach standard error and is not listed fails musubi's own build (ADR-0046). SHAPE ONLY: this describes the document's structure and not the contract. That the list is COMPLETE -- that no kind musubi can print is missing from it -- is the thing the catalogue exists for, and it is a statement about musubi that no schema can express. musubi checks it against its own source; a consumer takes it on the same terms as the rest of docs/contracts.md.",
+  "type": "object",
+  "required": ["contract", "by", "errors", "open_namespaces"],
+  "additionalProperties": false,
+
+  "properties": {
+    "contract": {
+      "description": "The identifier and its version. `-draft` says the freeze has not happened: a field may still change meaning. Once frozen, a field is never removed and never changes meaning, and adding one produces musubi.errors/2 rather than a quietly wider /1 (ADR-0024).",
+      "type": "string",
+      "pattern": "^musubi\\.errors/1(-draft)?$"
+    },
+    "by": {
+      "description": "Which musubi wrote this: `musubi/<version>`. A reader comparing two catalogues needs to know which one is older before deciding that a kind was added.",
+      "type": "string",
+      "pattern": "^musubi/.+$"
+    },
+    "errors": {
+      "description": "One entry per kind, in the order musubi lists them. MAY BE EMPTY: a library that makes no named failure has an empty array as its correct answer, not a missing field.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/kind" }
+    },
+    "open_namespaces": {
+      "description": "Prefixes for kinds assembled at run time out of somebody else's vocabulary, so that a reader can recognise one it has never seen. musubi assembles none and this is empty; empty is an answer, and an absent field is a shrug.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+
+  "$defs": {
+    "kind": {
+      "description": "One way musubi can fail.",
+      "type": "object",
+      "required": ["kind", "exit_code", "outcome", "retryable", "detail", "detail_ja"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "description": "Exactly what is printed before the first colon on standard error. This is the whole of the interface: everything after the colon is for a person and may quote a path, so a reader that keeps failures should keep this and drop the rest.",
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9.]*$"
+        },
+        "exit_code": {
+          "description": "The code that always accompanies this kind. 1 failed, 2 usage, 3 refused. NOT 0: a kind that exits 0 is not a failure.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "outcome": {
+          "description": "What happened, in a word an exit code cannot carry. musubi produces only `refused` and `failed`: it reads a folder that is already on the disk (ADR-0007), so there is no service to be unavailable and nothing to time out. The other two are in the enum because the vocabulary is the family's, not musubi's.",
+          "enum": ["refused", "unavailable", "failed", "timed_out"]
+        },
+        "retryable": {
+          "description": "Whether asking again, unchanged, could do anything. False for everything musubi does except the file system itself, and for the same reason as above: there is no transient failure to wait out. A caller that retries a `refused` retries it forever.",
+          "type": "boolean"
+        },
+        "detail": {
+          "description": "One line in English, to print under the kind. NOT A TEMPLATE: it holds no `{}` and no example path, because a reader with a log in front of it fills those in and then the log has the value in it.",
+          "type": "string",
+          "minLength": 1
+        },
+        "detail_ja": {
+          "description": "The same line in Japanese, written by musubi rather than translated downstream. Two sentences written by one hand cannot disagree; a translation maintained by the reader drifts from the thing it describes the first time either changes.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}
