@@ -117,6 +117,38 @@ after    1.52s     **3.2x**
 | composition | 18% | the quadratic above |
 | `Path.resolve()` in `_inside` | 7% | a syscall per check, twice per artefact |
 
+### The third one came back, and the profile was lying about the second
+
+Re-measured after the trace-map and manifest work, `Path.resolve()` was **12%
+again** — a refactor had routed both writers through one checked helper, which
+was right, and put the syscall back on every write. And the profile said
+composition was 24%, which it is not: `cProfile` charges per call, and
+composition is a few tens of thousands of very small Python calls. Timed
+directly it is about 5%.
+
+**So the counts are the measurement and the clock is the corroboration.**
+Syscalls for the same 300 documents, which are exact and do not move with the
+machine:
+
+```text
+                        before    after
+  _getfinalpathname      3,627      620
+  nt.mkdir               1,206       10
+  nt.stat                3,013    1,216
+  nt.replace               601      601     the real work, untouched
+  _io.open                 903      903
+```
+
+Six thousand syscalls removed, twenty per document. Wall clock, interleaved
+A/B on a laptop noisy to ±15%, three rounds each: **1.49s → 1.19s**, with every
+"after" below every "before".
+
+Both come from the same observation: musubi was asking the filesystem about
+paths **it had just built itself** ([ADR-0052]). The staging area is made fresh
+by `begin()`, so the only thing a resolve defends against there is a key that
+walks out with `..`, which is arithmetic on a string. The two checks that
+*delete* still ask the disk.
+
 The first of those is also part of the map-size problem above: minified, one
 HTML map goes from 36,241 bytes to 16,588, and `traces/` from 10.7× the
 documents to **4.9×**. The reason for indenting was that a reviewer opens these;

@@ -66,6 +66,7 @@ later ADR supersedes it and says so.
 | [0049](0049-a-corpus-belongs-to-the-source-that-wrote-it.md) | A corpus belongs to the source that wrote it |
 | [0050](0050-the-better-reader-was-not-offered-the-setting.md) | The better reader was not offered the setting |
 | [0051](0051-a-title-the-document-actually-wrote.md) | A title the document actually wrote |
+| [0052](0052-a-path-musubi-built-does-not-need-the-disk-to-check-it.md) | A path musubi built does not need the disk to check it |
 
 [0004](0004-a-conversion-carries-a-map-back-to-its-source.md) is the one to read
 first. The rest of the design is arranged around it, and
