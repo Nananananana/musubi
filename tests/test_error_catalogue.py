@@ -199,6 +199,30 @@ def test_only_the_file_system_is_retryable() -> None:
     assert retryable == {"Unreadable"}
 
 
+@pytest.mark.parametrize("kind", CATALOGUE, ids=lambda k: k.kind)
+def test_the_process_exits_with_the_code_the_catalogue_publishes(kind: object) -> None:
+    """The catalogue is not a description of the code; it **is** the code.
+
+    `main` used to decide a refusal from a hand-written tuple of exception
+    classes. It named two of the three refusals the day a third arrived, so
+    `DifferentSourceError` -- which had just stopped a corpus from being
+    deleted -- exited 1, which tells an orchestrator to retry it ([ADR-0049]).
+    """
+    from musubi.interfaces.cli.main import _EXIT_CODES
+
+    entry = KINDS[kind.kind]  # type: ignore[attr-defined]
+    if entry.kind in _EXIT_CODES:
+        assert _EXIT_CODES[entry.kind] == entry.exit_code
+
+
+def test_every_exception_the_process_maps_is_one_the_catalogue_knows() -> None:
+    """And nothing is mapped that the published document does not mention."""
+    from musubi.interfaces.cli.main import _EXIT_CODES
+
+    assert _EXIT_CODES, "the table is empty, so the test above checks nothing"
+    assert set(_EXIT_CODES) <= set(KINDS)
+
+
 # -- the document a program actually reads ----------------------------------
 
 

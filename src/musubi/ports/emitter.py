@@ -60,6 +60,13 @@ class Previous:
     #: leave them in the corpus for ever: the new manifest does not list them,
     #: so no later run would ever consider them again ([ADR-0040]).
     withdrawn: frozenset[str] = frozenset()
+    #: The sources the last run recorded. **What withdrawal is about.** A
+    #: corpus written by one source and synced by another is not a corpus with
+    #: two sources in it: the second run withdraws everything the first wrote,
+    #: because the manifest is an account of one run ([ADR-0002]) and the
+    #: second run's account does not mention the first's documents
+    #: ([ADR-0049]).
+    sources: frozenset[str] = frozenset()
     #: Everything that decided the last run's outputs other than the bytes:
     #: `musubi`, `rulesets`, `screener`, `emitter`, `allowed`, as the manifest
     #: recorded them. A run whose own values differ in any of these converts

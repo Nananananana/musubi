@@ -384,6 +384,14 @@ class DocumentEmitter:
             artefacts=hashes,
             written=frozenset(written),
             withdrawn=frozenset(path for path in (taken or []) if isinstance(path, str) and path),
+            # Read from `sources` rather than from the artefacts, so that a
+            # previous run which emitted nothing still says whose corpus this
+            # is ([ADR-0049]).
+            sources=frozenset(
+                str(record.get("source_id"))
+                for record in body.get("sources") or []
+                if isinstance(record, Mapping) and record.get("source_id")
+            ),
             decided_by={
                 "musubi": body.get("musubi_version"),
                 "rulesets": [

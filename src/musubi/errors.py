@@ -26,6 +26,7 @@ __all__ = [
     "ContractError",
     "ConversionError",
     "CredentialFoundError",
+    "DifferentSourceError",
     "EmptySourceError",
     "EverythingSkippedError",
     "Kind",
@@ -139,6 +140,28 @@ class EverythingSkippedError(MusubiError):
     """
 
 
+class DifferentSourceError(MusubiError):
+    """This corpus was written by a different source than the one syncing it.
+
+    A destination belongs to the source that wrote it, because the manifest is
+    an account of **one run** ([ADR-0002]) and withdrawal deletes whatever the
+    previous manifest recorded that this one does not. So a second source
+    pointed at the same folder does not add to the corpus; it **replaces** it,
+    and the documents the first source wrote are deleted.
+
+    Measured: a vault synced into a corpus, then a second folder synced into
+    the same corpus, and the vault's documents were gone. Exit 0, nothing said,
+    `musubi verify` passing afterwards because the corpus really was consistent
+    with the manifest that had just replaced it.
+
+    Not a threshold and not a guess. The two readings -- *I am replacing this
+    corpus* and *I meant a different folder* -- are indistinguishable from
+    here, and one of them destroys work. `--withdraw-all` is the operator
+    saying they have looked, which is the same gesture the other two refusals
+    take ([ADR-0049]).
+    """
+
+
 # -- what a program driving musubi can be told, and where it is written down --
 
 
@@ -212,6 +235,20 @@ CATALOGUE: tuple[Kind, ...] = (
         "同期しようとしたデータの中に認証情報の形をしたものが見つかったため、"
         "run 全体を停止し、何も書いていない。人が見る必要がある。"
         "見た上で許すなら `--allow rule:unit_key`。",
+    ),
+    Kind(
+        "DifferentSourceError",
+        REFUSED,
+        "refused",
+        False,
+        "This corpus was written by a different source than the one syncing it. "
+        "A destination belongs to one source, so this run would take out every "
+        "document the other one wrote. Sync into a different folder, or pass "
+        "`--withdraw-all` to replace the corpus.",
+        "このコーパスを書いたのは、今 sync している source とは別の source。"
+        "1 つの宛先は 1 つの source のものなので、このまま進めると"
+        "もう一方が書いた文書が全部消える。別のフォルダに sync するか、"
+        "置き換えてよいなら `--withdraw-all`。",
     ),
     Kind(
         "EmptySourceError",

@@ -22,7 +22,12 @@ from dataclasses import dataclass, replace
 
 from ..domain.journal import Entry, changes
 from ..domain.manifest import Manifest, chunks
-from ..errors import CredentialFoundError, EmptySourceError, EverythingSkippedError
+from ..errors import (
+    CredentialFoundError,
+    DifferentSourceError,
+    EmptySourceError,
+    EverythingSkippedError,
+)
 from ..ports.emitter import Emitter
 from ..ports.source import Source
 from .pipeline import Settings, run
@@ -68,6 +73,17 @@ def empties_the_corpus(held: frozenset[str] | set[str], manifest: Manifest) -> b
     sentence with a different fix ([ADR-0046]).
     """
     return not manifest.artefacts and not manifest.coverage.units_read and bool(held)
+
+
+def wrong_source(before: frozenset[str], syncing: str) -> bool:
+    """Whether this corpus was written by a source other than this one.
+
+    Empty `before` is a destination nothing has written, which is every first
+    run. A corpus written by more than one source cannot arise once this
+    refuses, and is treated as wrong here for the same reason it would be:
+    the run about to happen accounts for one of them ([ADR-0049]).
+    """
+    return bool(before) and before != {syncing}
 
 
 def skipped_everything(manifest: Manifest) -> bool:
@@ -116,6 +132,17 @@ def sync(
         )
 
     withdrawn = withdrawals(held, outcome.manifest)
+
+    if wrong_source(before.sources, source.source_id) and not withdraw_all:
+        emitter.discard()
+        raise DifferentSourceError(
+            f"this corpus was written by {', '.join(sorted(before.sources))} and is being "
+            f"synced by {source.source_id!r}. A destination belongs to one source: the "
+            f"manifest is an account of one run, so this run would take out every "
+            f"document the other source wrote ({len(withdrawn)} file(s)). Nothing was "
+            f"written and nothing was deleted. Pass --withdraw-all to replace the corpus, "
+            f"or sync into a different folder."
+        )
 
     if skipped_everything(outcome.manifest) and not withdraw_all:
         emitter.discard()

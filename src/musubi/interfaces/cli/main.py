@@ -32,6 +32,7 @@ from ...application.sync import (
     skipped_everything,
     sync,
     withdrawals,
+    wrong_source,
 )
 from ...application.trace import Resolution, as_document, resolve
 from ...application.verify import Verified, verify
@@ -51,9 +52,6 @@ from ...errors import (
     REFUSED,
     USAGE,
     ContractError,
-    CredentialFoundError,
-    EmptySourceError,
-    EverythingSkippedError,
     MusubiError,
     TraceError,
 )
@@ -89,10 +87,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         return USAGE
     try:
         return COMMANDS[arguments.command](arguments)
-    except (CredentialFoundError, EmptySourceError, EverythingSkippedError) as refusal:
-        return _stderr(type(refusal).__name__, str(refusal), REFUSED)
     except MusubiError as error:
-        return _stderr(type(error).__name__, str(error), FAILED)
+        # Which code a kind exits with is read out of the catalogue rather than
+        # from a tuple here. The tuple named two of the three refusals the day
+        # a third arrived, so `DifferentSourceError` -- a refusal that had just
+        # stopped a corpus being deleted -- exited 1, telling an orchestrator to
+        # retry it ([ADR-0049]).
+        kind = type(error).__name__
+        return _stderr(kind, str(error), _EXIT_CODES.get(kind, FAILED))
     except OSError as refused:
         # The machine, not the data, and the only failure here worth retrying:
         # a full disk, a file another process holds, a path that stopped
@@ -107,6 +109,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         _stderr("Unexpected", f"a bug in musubi: {type(bug).__name__}: {bug}", FAILED)
         traceback.print_exception(bug, file=sys.stderr)
         return FAILED
+
+
+#: Kind name to the code it exits with, from the published catalogue. One
+#: table, so that `musubi errors --json` and the process cannot disagree about
+#: what a failure means -- the same reason the converter floors and their
+#: report are one function.
+_EXIT_CODES: dict[str, int] = {kind.kind: kind.exit_code for kind in CATALOGUE}
 
 
 def _stderr(kind: str, message: str, code: int) -> int:
@@ -517,16 +526,20 @@ def _prepare(arguments: argparse.Namespace) -> tuple[Source, Settings, DocumentE
 
 def _plan(arguments: argparse.Namespace) -> int:
     source, settings, emitter = _prepare(arguments)
-    held = emitter.previously_written()
+    before = emitter.previous()
+    held = before.written | before.withdrawn
     outcome = run(source, settings, emitter, write=False)
 
     # A dry run that reports what would be written and stays silent about what
     # would be deleted is not a dry run of the same command.
     taken = withdrawals(held, outcome.manifest)
     # A plan predicts the code a sync would exit with, so it has to predict
-    # both refusals ([ADR-0012]).
+    # **every** refusal ([ADR-0012]). It named two of the three the day a third
+    # arrived, which is the shape a hand-written list of cases always takes.
     stops = (
-        empties_the_corpus(held, outcome.manifest) or skipped_everything(outcome.manifest)
+        empties_the_corpus(held, outcome.manifest)
+        or skipped_everything(outcome.manifest)
+        or wrong_source(before.sources, source.source_id)
     ) and not arguments.withdraw_all
 
     if arguments.json:
