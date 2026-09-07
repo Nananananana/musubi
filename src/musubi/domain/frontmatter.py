@@ -121,6 +121,25 @@ _HEADING = re.compile(r"^#{1,6}[ \t]+(\S.*?)[ \t]*$", re.M)
 _STATED = re.compile(r"^([^:\n]+):[ \t]*(.*?)[ \t]*$", re.M)
 
 
+def _unquoted(value: str) -> str:
+    """A front-matter scalar with the quotes the author had to use taken off.
+
+    **YAML requires quoting for a value containing a colon**, so a note called
+    `設計メモ: 2026` is written `title: "設計メモ: 2026"` and there is no other
+    way to write it. Taken literally, the title came out as
+    `'"設計メモ: 2026"'` -- quote marks and all -- into the manifest, the
+    export, and whatever screen a consumer put it on ([ADR-0051]).
+
+    This is not a YAML parser and does not become one ([ADR-0001] keeps the
+    runtime at zero dependencies). It takes off one matching pair and stops:
+    an unterminated quote is returned as it was written, because guessing at
+    what an author meant by `title: "unclosed` is worse than repeating it.
+    """
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        return value[1:-1]
+    return value
+
+
 def title_of(text: str) -> str | None:
     """What this document calls itself, or ``None``.
 
@@ -147,7 +166,12 @@ def title_of(text: str) -> str | None:
     if block is not None:
         for key, value in _STATED.findall(block.slice(text)):
             if key.strip() == "title":
-                return value or None
+                # `""` and not `None`: the document stated a title and left it
+                # empty, which [ADR-0040] says is a different answer from
+                # saying nothing, and which this returned `None` for -- so the
+                # distinction the contract tells consumers to branch on had
+                # never once arrived ([ADR-0051]).
+                return _unquoted(value)
         body = text[block.end :]
     else:
         body = text

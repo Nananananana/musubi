@@ -202,12 +202,37 @@ def test_a_document_that_says_nothing_has_no_title() -> None:
     assert title_of("") is None
 
 
-def test_an_empty_title_is_none_and_not_the_empty_string() -> None:
+def test_a_stated_empty_title_is_not_the_same_answer_as_saying_nothing() -> None:
     """A document that states `title:` with nothing after it has said
     something; one that says nothing has not. A consumer that cannot tell them
-    apart falls back for the wrong one."""
-    assert title_of("---\ntitle:\n---\n\n# A heading\n") is None
-    assert title_of("---\ntitle:   \n---\n") is None
+    apart falls back for the wrong one.
+
+    **That was this test's docstring while its assertions made both `None`.**
+    `docs/contracts.md` tells consumers the two are different answers and must
+    not be collapsed, and `sora` wrote the branch for it -- for a value musubi
+    had never once produced ([ADR-0051]).
+    """
+    assert title_of("---\ntitle:\n---\n\n# A heading\n") == ""
+    assert title_of("---\ntitle:   \n---\n") == ""
+    assert title_of("---\ntitle: ''\n---\n") == ""
+    assert title_of("just prose\n") is None, "and saying nothing is still None"
+
+
+def test_a_title_the_author_had_to_quote_arrives_unquoted() -> None:
+    """**YAML requires quoting for a value containing a colon**, so a note
+    called `gear: a list` can only be written `title: "gear: a list"`. The
+    quotes came through into the manifest and onto whatever screen showed it.
+    """
+    assert title_of('---\ntitle: "A name"\n---\n') == "A name"
+    assert title_of("---\ntitle: 'A name'\n---\n") == "A name"
+    assert title_of('---\ntitle: "gear: a list"\n---\n') == "gear: a list"
+
+
+def test_an_unterminated_quote_is_repeated_rather_than_guessed_at() -> None:
+    """This is not a YAML parser and does not become one. Repeating what the
+    author wrote is the same standing every other front-matter value has."""
+    assert title_of('---\ntitle: "unclosed\n---\n') == '"unclosed'
+    assert title_of('---\ntitle: say "this"\n---\n') == 'say "this"'
 
 
 def test_a_heading_needs_something_after_the_hashes() -> None:

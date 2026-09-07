@@ -433,6 +433,17 @@ something; a document that says nothing has not. A reader falling back to
 another name — a host name, a filename — should fall back for the second and
 not the first.
 
+**This paragraph was true of the contract and not of musubi until
+[ADR-0051](adr/0051-a-title-the-document-actually-wrote.md).** Both cases
+arrived as `null`, so the branch this asks a consumer to write was for a value
+musubi never produced. It produces it now.
+
+**Quotes the author had to use are not part of the name.** YAML requires
+quoting for a value containing a colon, so a note called `gear: a list` can
+only be written `title: "gear: a list"` — and the quote marks used to arrive
+with it. An *unterminated* quote is repeated as written rather than guessed at:
+this is not a YAML parser and does not become one.
+
 The heading rule is the consumer's own: `tsumugi` takes a title from the first
 heading when front matter does not give one, so a corpus and its reader name
 the same document the same way by agreement rather than by coincidence.
