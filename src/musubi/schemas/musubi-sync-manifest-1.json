@@ -221,7 +221,7 @@
         },
         "converter": { "type": "string", "minLength": 1 },
         "title": {
-          "description": "What the document calls itself: its front-matter `title`, or its first heading, or null. NULL AND NEVER THE EMPTY STRING -- a document that states an empty title has said something and one that says nothing has not, and a consumer that cannot tell them apart falls back for the wrong one. Here so that a citation can carry a name a person reads rather than an artefact path, without the consumer opening every document and guessing at its first line (ADR-0040).",
+          "description": "What the document calls itself: its front-matter `title`, or its first heading, or null. NULL MEANS THE DOCUMENT SAID NOTHING, and the empty string means it stated a title and left it empty -- two different answers a consumer must not collapse. A reader falling back to another name (a host name, a filename) should fall back for null and not for the empty string. Quotes the author had to use are taken off: YAML requires them for a value containing a colon, so `gear: a list` can only be written quoted and the quote marks are not part of the name. Here so that a citation can carry a name a person reads rather than an artefact path, without the consumer opening every document and guessing at its first line (ADR-0040).",
           "type": ["string", "null"],
           "minLength": 1
         },
