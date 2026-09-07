@@ -191,13 +191,62 @@ has them too.
 | `0` | done | the corpus is what the report says; `manifest.json` is current |
 | `1` | failed | something was wrong with the input or the corpus -- a manifest that will not parse, a path outside the layout, an offset past the end. Fix it and run again |
 | `2` | usage | the arguments were wrong. argparse's own value |
-| `3` | refused | **musubi declined on purpose and wrote nothing.** A credential, or a source that emptied under an existing corpus (ADR-0021). Retrying changes nothing; a person has to look, and `plan` predicts this code before `sync` returns it |
+| `3` | refused | **musubi declined on purpose and wrote nothing.** A credential, a source that emptied under an existing corpus (ADR-0021), or a run in which nothing at all became a document (ADR-0046). Retrying changes nothing; a person has to look, and `plan` predicts this code before `sync` returns it |
 
 The one that matters is the last. An orchestrator that retries a `1` must not
 retry a `3`: a feed with a leaked key in it stays refused until somebody reads
 the message and either fixes the feed or passes `--allow`. The family precedent
 is `0 / 2 / 1`; refusal is `3` here because `2` was argparse's before any of
 this was written, and a code that means two things means neither.
+
+### The names on standard error
+
+When musubi exits non-zero, **the first line of standard error begins with the
+kind, before a colon**:
+
+```text
+CredentialFoundError: an AWS access key id in notes/setup.md. Nothing was written.
+EverythingSkippedError: 12 unit(s) were read from 'vault' and not one of them ...
+Unreadable: the file system refused: [Errno 28] No space left on device
+```
+
+The name is a stable identifier and the closed set of them is published:
+
+```bash
+musubi errors --json
+```
+
+```json
+{
+  "contract": "musubi.errors/1-draft",
+  "by": "musubi/0.4.1",
+  "errors": [
+    { "kind": "EverythingSkippedError", "exit_code": 3, "outcome": "refused",
+      "retryable": false, "detail": "...", "detail_ja": "..." }
+  ],
+  "open_namespaces": []
+}
+```
+
+| field | what it is |
+|---|---|
+| `kind` | exactly what is printed before the first colon |
+| `exit_code` | the code that always accompanies it |
+| `outcome` | `refused` or `failed`. musubi never produces `unavailable` or `timed_out`: it reads a folder that is already on the disk ([ADR-0007](adr/0007-musubi-reads-exports-never-services.md)), so there is no service to be unavailable and nothing to wait for |
+| `retryable` | whether asking again, unchanged, could do anything. **`Unreadable` is the only one**, because it is the only failure about the machine rather than the data |
+| `detail`, `detail_ja` | one line each, written here rather than translated downstream |
+
+`open_namespaces` is empty and the set is closed: musubi assembles no kind at
+run time out of anybody else's vocabulary.
+
+**Everything after the colon is for a person**, and it may quote a path or a
+filename from the machine musubi ran on. A reader that keeps failures should
+keep the kind and drop the rest; that is what lets it say its own log holds no
+content of yours.
+
+The catalogue is checked against the code rather than maintained beside it: a
+kind that can reach standard error and is not in it fails musubi's own build
+([ADR-0046](adr/0046-a-failure-that-a-program-can-name.md)).
 
 ### Reading a corpus while it is being written
 

@@ -21,6 +21,7 @@ import pytest
 from musubi import __version__
 from musubi.application.pipeline import Settings
 from musubi.application.sync import sync
+from musubi.errors import EverythingSkippedError
 from musubi.infrastructure.algorithms import chooser
 from musubi.infrastructure.converters import known_converters
 from musubi.infrastructure.corpus import Corpus
@@ -295,12 +296,26 @@ def test_a_declared_encoding_is_not_reported_as_a_guess(tmp_path: Path) -> None:
 
 @available
 def test_the_same_vault_is_skipped_with_a_reason_when_strict(tmp_path: Path) -> None:
-    """And the skip is the actionable one, not `undecodable` alone."""
+    """And the skip is the actionable one, not `undecodable` alone.
+
+    The whole vault skips, so the run also **refuses**: a folder musubi read
+    and could not convert one file of is not a successful sync
+    ([ADR-0046]). `--withdraw-all` is the operator saying they have looked,
+    and it is what makes the manifest available to look at here.
+    """
     vault = tmp_path / "vault"
     vault.mkdir()
     (vault / "old.md").write_bytes((NOTE * 4).encode("cp932"))
 
-    result = sync(FilesystemSource(vault), settings(detect=False), DocumentEmitter(tmp_path / "c"))
+    with pytest.raises(EverythingSkippedError, match="not one of them became a document"):
+        sync(FilesystemSource(vault), settings(detect=False), DocumentEmitter(tmp_path / "c"))
+
+    result = sync(
+        FilesystemSource(vault),
+        settings(detect=False),
+        DocumentEmitter(tmp_path / "c"),
+        withdraw_all=True,
+    )
 
     (skip,) = result.manifest.skipped
     assert skip.reason == "undecodable"

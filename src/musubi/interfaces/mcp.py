@@ -59,7 +59,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import __version__, api
-from ..errors import MusubiError
+from ..errors import MusubiError, SourceError
 
 __all__ = ["PROTOCOL", "OutsideRootError", "Server", "serve"]
 
@@ -92,7 +92,11 @@ class Server:
     def __init__(self, root: Path) -> None:
         self.root = Path(root).expanduser().resolve()
         if not self.root.is_dir():
-            raise MusubiError(f"{self.root} is not a folder; an MCP server is rooted at one")
+            # `SourceError` and not the base class. Raising `MusubiError`
+            # itself put the word `MusubiError` on stderr, which is a kind
+            # meaning "an error with no kind" -- and a reader folding by name
+            # gets a bucket that says nothing ([ADR-0046]).
+            raise SourceError(f"{self.root} is not a folder; an MCP server is rooted at one")
 
     # -- the boundary ------------------------------------------------------
 
