@@ -234,6 +234,46 @@ def test_a_map_measured_in_something_else_stops_the_answer(tmp_path: Path) -> No
         resolve(Corpus(into), "design/gear.md", Span(0, 3))
 
 
+def test_a_corpus_whose_maps_are_objects_still_resolves(tmp_path: Path) -> None:
+    """The whole of [ADR-0043]'s compatibility promise, at the level that
+    matters.
+
+    Corpora written before a segment became a row exist and are synced against
+    for months. `tests/test_trace_format.py` checks the decoder; this checks the
+    thing a person actually does -- open a corpus in the older shape and ask
+    where a phrase came from -- because a decoder that works inside a unit test
+    and a reader that never reaches it would look identical from here.
+    """
+    _, into = built(tmp_path)
+    sidecar = into / TRACES / "design" / "gear.md.json"
+    body = json.loads(sidecar.read_text(encoding="utf-8"))
+
+    # Rewritten into the shape musubi used to emit, from the map it emits now.
+    at = 0
+    older = []
+    for length, source_start, source_end, kind, rule in body["segments"]:
+        segment = {
+            "out": [at, at + length],
+            "src": [source_start, source_end],
+            "kind": body["kinds"][kind],
+        }
+        if rule is not None:
+            segment["rule"] = body["rules"][rule]
+        older.append(segment)
+        at += length
+    for gone in ("segment_fields", "kinds", "rules"):
+        del body[gone]
+    body["segments"] = older
+    sidecar.write_text(json.dumps(body, ensure_ascii=False), encoding="utf-8")
+
+    text = (into / DOCUMENTS / "design" / "gear.md").read_text(encoding="utf-8")
+    where = text.index("2.4kg")
+    found = resolve(Corpus(into), "design/gear.md", Span(where, where + 5))
+
+    assert found.source_excerpt == "2.4kg"
+    assert found.source_path is not None and not found.changed
+
+
 def test_a_map_that_does_not_hold_stops_the_answer(tmp_path: Path) -> None:
     _, into = built(tmp_path)
     sidecar = into / TRACES / "design" / "gear.md.json"
@@ -249,7 +289,7 @@ def test_a_segment_this_cannot_read_stops_the_answer(tmp_path: Path) -> None:
     _, into = built(tmp_path)
     sidecar = into / TRACES / "design" / "gear.md.json"
     body = json.loads(sidecar.read_text(encoding="utf-8"))
-    body["segments"][0]["kind"] = "guessed"
+    body["kinds"][0] = "guessed"  # a kind no reader of this contract knows
     sidecar.write_text(json.dumps(body), encoding="utf-8")
 
     with pytest.raises(ContractError, match="cannot read"):

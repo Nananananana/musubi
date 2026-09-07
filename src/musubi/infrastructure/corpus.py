@@ -24,6 +24,7 @@ from ..domain.trace import CHARACTERS, OPAQUE, Kind, Segment, TraceMap
 from ..errors import ContractError, TraceError
 from ..ports.corpus import Held, SourceReference
 from .emitters.documents import DOCUMENTS, JOURNAL, MANIFEST, TRACES
+from .trace_format import unpacked
 
 __all__ = ["Corpus"]
 
@@ -115,7 +116,7 @@ class Corpus:
                 f"not recognise. Refusing rather than resolving against a guess."
             )
 
-        segments = tuple(_segment(entry, key) for entry in body.get("segments") or [])
+        segments = unpacked(body, key)
         source = body.get("source") or {}
         coverage = body.get("coverage") or {}
         try:

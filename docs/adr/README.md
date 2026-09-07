@@ -57,6 +57,7 @@ later ADR supersedes it and says so.
 | [0040](0040-a-corpus-says-what-it-holds-and-what-it-is-called.md) | A corpus says what it holds, and what it is called |
 | [0041](0041-an-artefact-is-named-for-what-musubi-wrote.md) | An artefact is named for what musubi wrote |
 | [0042](0042-two-columns-and-a-table-are-the-same-page-and-opposite-readings.md) | Two columns and a table are the same page and opposite readings |
+| [0043](0043-a-segment-is-a-row-of-numbers-and-the-tiling-supplies-the-rest.md) | A segment is a row of numbers, and the tiling supplies the rest |
 
 [0004](0004-a-conversion-carries-a-map-back-to-its-source.md) is the one to read
 first. The rest of the design is arranged around it, and

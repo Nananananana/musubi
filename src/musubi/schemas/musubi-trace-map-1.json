@@ -96,9 +96,25 @@
       }
     },
     "segments": {
-      "description": "Ordered by output offset. Source ranges need NOT be monotonic: a two-column page read in reading order produces a map whose source ranges jump, and the jump is information rather than a defect. NOT CHECKED HERE: the ordering, or that the segments tile the artefact.",
+      "description": "Ordered by output offset. Source ranges need NOT be monotonic: a two-column page read in reading order produces a map whose source ranges jump, and the jump is information rather than a defect. Two shapes: a row of numbers (current, ADR-0043) or an object (written before it, and still read). NOT CHECKED HERE: the ordering, that the segments tile the artefact, or that a verbatim row names no rule -- a row's kind is an index into a table this cannot follow.",
       "type": "array",
-      "items": { "$ref": "#/$defs/segment" }
+      "items": { "oneOf": [{ "$ref": "#/$defs/row" }, { "$ref": "#/$defs/segment" }] }
+    },
+    "segment_fields": {
+      "description": "The columns of a segment row, in order. Present when the segments are rows. A reader checks this and refuses a layout it does not know, rather than rearranging: resolving an offset against a guessed column order is a confident wrong answer.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1
+    },
+    "kinds": {
+      "description": "The kind each row's index refers to. In the file rather than remembered by the reader, so that a kind added later cannot silently reinterpret an existing map (ADR-0024).",
+      "type": "array",
+      "items": { "enum": ["verbatim", "transformed", "synthetic", "removal"] }
+    },
+    "rules": {
+      "description": "The rule each row's index refers to. Hoisted out of the segments because the same rule string was repeated once per segment, which was most of what a map cost (#76).",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
     }
   },
 
@@ -117,8 +133,22 @@
       "maxItems": 2
     },
 
+    "row": {
+      "description": "One segment as [out_length, src_start, src_end, kind, rule]. The output START is not stored: the segments tile the artefact exactly once in order (ADR-0004), so each starts where the last ended, and a format with nowhere to put a gap cannot express one. `kind` and `rule` are indices into this file's own tables; `rule` is null where there is none.",
+      "type": "array",
+      "prefixItems": [
+        { "description": "how many characters of the artefact this run is", "type": "integer", "minimum": 0 },
+        { "description": "where the source run starts", "type": "integer", "minimum": 0 },
+        { "description": "where the source run ends", "type": "integer", "minimum": 0 },
+        { "description": "an index into `kinds`", "type": "integer", "minimum": 0 },
+        { "description": "an index into `rules`, or null", "type": ["integer", "null"], "minimum": 0 }
+      ],
+      "minItems": 5,
+      "maxItems": 5
+    },
+
     "segment": {
-      "description": "One run of the artefact, and the run of the source it accounts for.",
+      "description": "One run of the artefact, and the run of the source it accounts for. The shape maps were written in before ADR-0043; still read, never written.",
       "type": "object",
       "required": ["out", "src", "kind"],
       "additionalProperties": false,

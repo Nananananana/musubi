@@ -14,7 +14,7 @@ wrong fix for. That is the falsification section working.
 | Metric | Value | Verdict |
 |---|---|---|
 | Traceable coverage, HTML | 93.5% built-in, **99.7%** via `trafilatura@1` | holds |
-| Trace map size | 10.7× → **4.9× the corpus** | half fixed ([#76](https://github.com/Nananananana/musubi/issues/76)) |
+| Trace map size | 10.7× → **1.5× the corpus** | fixed, and not where the roadmap predicted ([#76](https://github.com/Nananananana/musubi/issues/76)) |
 | Composition | **quadratic** → linear, 33× faster | fixed |
 | Re-read ratio | **0.32**, from 1.01 | falsified, then fixed (ADR-0036) |
 | Archive reads per unit | **O(1)** archives opened | fixed in [#78](https://github.com/Nananananana/musubi/issues/78) |
@@ -24,26 +24,45 @@ wrong fix for. That is the falsification section working.
 
 ---
 
-## Trace map size — 10.7× the documents
+## Trace map size — 10.7× the documents, now 1.5×
 
 ```text
 uv run python tools/scaling.py --only map
 20 generated HTML pages and 20 Markdown notes, one real sync
 
-  documents/    105,720
-  traces/     1,132,820    10.7x the documents
-  manifest       18,606
-  everything  1,257,146    11.9x
+                     filed      minified       now
+  traces/            10.7x         4.9x        1.5x
+  everything         11.9x         6.1x        2.7x
+  one .html map      14.0x         6.4x        1.8x
+  one .md map         7.6x         3.4x        1.1x
 
-  one .html document   2,592  map  36,241 (14.0x)  216 segments,  16,093 minified
-  one .md   document   2,694  map  20,400 ( 7.6x)  124 segments,   8,720 minified
+  a segment            ---       71 bytes   18.9 bytes
 ```
 
 §10 says: *if a map routinely exceeds its document, the guarantee costs more
 storage than the corpus*. It did, by an order of magnitude, and the proposal's
-predicted remedy — *the fix is converter-side* — was **wrong about roughly half
-of it**. Minifying the sidecar took it from 10.7× to **4.9×**; the numbers below
-are the measurement that showed where to look:
+predicted remedy — *the fix is converter-side* — was **wrong twice over**.
+
+Minifying took it to 4.9×, and after that a map was **within 3% of its own
+minified size**: what remained was not whitespace and not the converter, it was
+the segments, at 71 bytes each, nearly all of it five key names and a rule
+string repeated once per segment. Writing a segment as a row of numbers with
+those hoisted into tables took it to **1.5×**
+([ADR-0043](adr/0043-a-segment-is-a-row-of-numbers-and-the-tiling-supplies-the-rest.md)).
+
+At 1.5× a map still exceeds its document, and it is now the same order of
+magnitude as the corpus rather than an order above it. That is what the
+falsification condition was about, and it is a different sentence about the
+project.
+
+**One thing was measured and discarded.** Merging adjacent removals is free —
+a removal has no output, so no query can land inside one — but on the worst
+real case, 68 of 81 segments were zero-length removals and **not one adjacent
+pair shared a rule**: they alternate `markup.tag.a`, `boilerplate.nav`,
+`markup.tag.a`. Merging across rules would drop the attribution ADR-0005 exists
+for. It bought nothing, which is a thing worth knowing before building it.
+
+The numbers below are the measurement that showed where to look:
 
 - **`indent=2`.** The sidecar is written indented on the stated grounds that it
   is *the file a reviewer opens*. The indentation is about as many bytes as the
@@ -96,10 +115,11 @@ after    1.52s     **3.2x**
 | composition | 18% | the quadratic above |
 | `Path.resolve()` in `_inside` | 7% | a syscall per check, twice per artefact |
 
-The first of those is also half of the map-size problem above: minified, one
+The first of those is also part of the map-size problem above: minified, one
 HTML map goes from 36,241 bytes to 16,588, and `traces/` from 10.7× the
 documents to **4.9×**. The reason for indenting was that a reviewer opens these;
-a reviewer can pipe one through `jq`, and nobody gets the disk back.
+a reviewer can pipe one through `jq`, and nobody gets the disk back. The rest of
+that cost was the segments themselves, and rows took `traces/` to 1.5×.
 
 ## Re-read ratio — 0.32, from 1.01
 

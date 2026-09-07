@@ -53,6 +53,7 @@ from musubi.infrastructure.emitters.documents import JOURNAL
 from musubi.infrastructure.rules import CORE
 from musubi.infrastructure.screeners import default_screener
 from musubi.infrastructure.sources import ObsidianSource
+from musubi.infrastructure.trace_format import unpacked
 
 CONTRACTS = Path(__file__).resolve().parent.parent / "docs" / "contracts.md"
 
@@ -147,6 +148,17 @@ def manifest_of(into: Path) -> dict[str, Any]:
     return body
 
 
+def segments_of(body: dict[str, Any]) -> tuple[Segment, ...]:
+    """A map's tiling, whichever shape it was written in.
+
+    Through the reader the corpus itself uses, rather than a second decoder
+    here: two decoders that are supposed to agree and do not is the failure a
+    shared fixture exists to prevent, and this one would show up as invariants
+    passing over segments nothing else ever sees ([ADR-0043]).
+    """
+    return unpacked(body, "a generated corpus")
+
+
 CORPUS = settings(max_examples=25, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 
 
@@ -160,15 +172,24 @@ def test_trace_1_the_segments_cover_every_character_exactly_once(
 ) -> None:
     """The property the map exists for, and the one JSON Schema cannot express
     in any form. A map with a gap answers a query with silence; one with an
-    overlap answers it twice."""
+    overlap answers it twice.
+
+    **Half of this is now unrepresentable rather than checked** ([ADR-0043]). A
+    segment row carries its output *length*, not its start, so the starts are a
+    running sum and a file has nowhere to put a gap or an overlap. Asserting
+    that a derived start equals the running total would be a test of the
+    arithmetic that derived it.
+
+    What can still be wrong is the **total**: a segments array that is short,
+    long, or truncated tiles something that is not the artefact, and that is
+    what this asserts. A map written in the older object form is read in it, and
+    for those `TraceMap` still checks each start as it rebuilds.
+    """
     _, into, _ = build(files)
     try:
         for body in maps(into):
-            at = 0
-            for segment in body["segments"]:
-                assert segment["out"][0] == at, f"a gap or an overlap at {at}"
-                at = segment["out"][1]
-            assert at == body["coverage"]["characters"], "the tiling stops short"
+            covered = sum(s.out.length for s in segments_of(body))
+            assert covered == body["coverage"]["characters"], "the tiling is not the artefact"
     finally:
         shutil.rmtree(into.parent, ignore_errors=True)
 
@@ -177,13 +198,14 @@ def test_trace_1_the_segments_cover_every_character_exactly_once(
 @given(a_vault())
 def test_trace_2_every_span_runs_forwards(files: dict[str, bytes]) -> None:
     """`end >= start`. Not expressible: JSON Schema 2020-12 cannot compare two
-    members of the same array."""
+    members of the same array, and a row's length is not compared to anything
+    at all."""
     _, into, _ = build(files)
     try:
         for body in maps(into):
-            for segment in body["segments"]:
-                assert segment["out"][1] >= segment["out"][0]
-                assert segment["src"][1] >= segment["src"][0]
+            for segment in segments_of(body):
+                assert segment.out.end >= segment.out.start
+                assert segment.src.end >= segment.src.start
     finally:
         shutil.rmtree(into.parent, ignore_errors=True)
 
@@ -201,11 +223,11 @@ def test_trace_3_a_verbatim_segment_reads_the_same_on_both_sides(
         for body in maps(into):
             artefact = (into / body["artefact"]["path"]).read_text(encoding="utf-8")
             source = decode(root.joinpath(*body["source"]["unit_key"].split("/")).read_bytes())
-            for segment in body["segments"]:
-                if segment["kind"] != Kind.VERBATIM.value:
+            for segment in segments_of(body):
+                if segment.kind is not Kind.VERBATIM:
                     continue
-                out = artefact[segment["out"][0] : segment["out"][1]]
-                src = source.text[segment["src"][0] : segment["src"][1]]
+                out = artefact[segment.out.start : segment.out.end]
+                src = source.text[segment.src.start : segment.src.end]
                 assert out == src
     finally:
         shutil.rmtree(into.parent, ignore_errors=True)
@@ -214,15 +236,16 @@ def test_trace_3_a_verbatim_segment_reads_the_same_on_both_sides(
 @CORPUS
 @given(a_vault())
 def test_trace_4_a_removal_occupies_no_output(files: dict[str, bytes]) -> None:
-    """`out[0] == out[1]` — two members of one array, which is exactly what
-    cannot be compared."""
+    """A removal's output length is zero. In the row form that is one number
+    being zero, which a schema still cannot tie to the kind beside it, because
+    the kind is an index into a table the schema cannot follow."""
     _, into, _ = build(files)
     try:
         for body in maps(into):
-            for segment in body["segments"]:
-                if segment["kind"] == Kind.REMOVAL.value:
-                    assert segment["out"][0] == segment["out"][1]
-                    assert segment["src"][1] > segment["src"][0], "and a real stretch of source"
+            for segment in segments_of(body):
+                if segment.kind is Kind.REMOVAL:
+                    assert segment.out.length == 0
+                    assert segment.src.length > 0, "and a real stretch of source"
     finally:
         shutil.rmtree(into.parent, ignore_errors=True)
 
@@ -236,9 +259,9 @@ def test_trace_5_traceable_is_the_sum_of_the_traceable_segments(
     try:
         for body in maps(into):
             traceable = sum(
-                segment["out"][1] - segment["out"][0]
-                for segment in body["segments"]
-                if segment["kind"] in {Kind.VERBATIM.value, Kind.TRANSFORMED.value}
+                segment.out.length
+                for segment in segments_of(body)
+                if segment.kind in {Kind.VERBATIM, Kind.TRANSFORMED}
             )
             assert traceable == body["coverage"]["traceable"]
             assert traceable <= body["coverage"]["characters"]
@@ -328,21 +351,13 @@ def test_trace_7_straddling_is_the_normal_case_in_a_real_corpus(
     _, into, _ = build(files)
     try:
         for body in maps(into):
-            segments = body["segments"]
+            segments = segments_of(body)
             if len(segments) < 2:
                 continue
             trace = TraceMap(
                 artefact_length=body["coverage"]["characters"],
-                source_length=max((s["src"][1] for s in segments), default=0),
-                segments=tuple(
-                    Segment(
-                        out=Span(*s["out"]),
-                        src=Span(*s["src"]),
-                        kind=Kind(s["kind"]),
-                        rule=s.get("rule"),
-                    )
-                    for s in segments
-                ),
+                source_length=max((s.src.end for s in segments), default=0),
+                segments=segments,
             )
             resolvable = [s for s in trace.segments if s.kind in {Kind.VERBATIM, Kind.TRANSFORMED}]
             if not resolvable:

@@ -97,19 +97,51 @@ in the trace map is in that category.
 Everything below is part of the contract and is **not** checked by either
 schema. A consumer that needs it checks it.
 
+### How a segment is written
+
+**A segment is a row of numbers**, and the names and rule strings live in tables
+the file carries ([ADR-0043](adr/0043-a-segment-is-a-row-of-numbers-and-the-tiling-supplies-the-rest.md)):
+
+```json
+"segment_fields": ["out_length", "src_start", "src_end", "kind", "rule"],
+"kinds": ["verbatim", "transformed", "synthetic", "removal"],
+"rules": ["line_ending"],
+"segments": [[3, 0, 3, 0, null], [1, 3, 5, 1, 0]]
+```
+
+`kind` and `rule` are indices into **this file's own tables**, and a reader must
+use them rather than an order it remembers: a kind added later would otherwise
+reinterpret every map already written. `rule` is `null` where there is none.
+A file whose `segment_fields` names a different layout is to be **refused**, not
+rearranged.
+
+**The output start is not stored.** Invariant 1 below is what supplies it: each
+segment starts where the last one ended, so the starts are a running sum of the
+lengths. A file has nowhere to put a gap or an overlap.
+
+**The older shape is still valid.** Before this, a segment was an object —
+`{"out": [0, 3], "src": [0, 3], "kind": "verbatim"}` — and corpora written that
+way exist. Both validate, and every musubi reader takes either. A consumer that
+reads maps directly should do the same: an element that is an object is the
+older form. `tests/contracts/trace-map-valid.json` and
+`tests/contracts/trace-map-valid-objects.json` are one of each.
+
 ### The trace map
 
 1. **The segments cover every character of the artefact exactly once.** In
    order, no gap, no overlap, ending exactly at `coverage.characters`. This is
    the property the map exists for; a map with a gap answers a query with
    silence, and one with an overlap answers it twice. It is not expressible in
-   JSON Schema in any form.
-2. **Every span runs forwards.** `end >= start`, for both `out` and `src`, in
-   every segment.
+   JSON Schema in any form. In the row shape the first half of it is
+   **structural** — there is nowhere to write a gap — and what remains checkable
+   is that the lengths total `coverage.characters`.
+2. **Every span runs forwards.** `end >= start` for `src`, and a non-negative
+   `out_length`, in every segment.
 3. **A verbatim segment reads the same on both sides.** Checking it needs the
    artefact *and* the source; a schema has neither.
-4. **A removal occupies no output.** `out[0] == out[1]` — two members of one
-   array, which is exactly what cannot be compared.
+4. **A removal occupies no output.** Its `out_length` is zero, and a schema
+   cannot tie that to the kind beside it because the kind is an index into a
+   table the schema cannot follow.
 5. **`coverage.traceable` is the sum of the `verbatim` and `transformed`
    segments' output lengths**, and is at most `coverage.characters`.
 6. **`src` ranges need not be monotonic**, and a reader must not assume they

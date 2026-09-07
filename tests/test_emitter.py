@@ -26,6 +26,7 @@ from musubi.domain.trace import Kind
 from musubi.errors import ConversionError
 from musubi.infrastructure.converters import MarkdownConverter, PlainTextConverter
 from musubi.infrastructure.emitters import DOCUMENTS, STAGING, TRACES, DocumentEmitter
+from musubi.infrastructure.trace_format import unpacked
 from musubi.ports.converter import Converted
 from musubi.ports.emitter import Artefact, Document, Emitter
 
@@ -170,8 +171,9 @@ def test_the_front_matter_is_synthetic_in_the_map(tmp_path: Path) -> None:
     it -- the number would otherwise flatter every short document."""
     emitter, (artefact,) = emit(tmp_path, document("a.md", "body\n"))
     trace = json.loads((emitter.staging / TRACES / "a.md.json").read_text(encoding="utf-8"))
-    assert trace["segments"][0]["kind"] == Kind.SYNTHETIC.value
-    assert trace["segments"][0]["rule"] == "front_matter"
+    first = unpacked(trace, "a.md")[0]
+    assert first.kind is Kind.SYNTHETIC
+    assert first.rule == "front_matter"
     assert artefact.traceable_characters == len("body\n")
     assert artefact.characters > artefact.traceable_characters
 
@@ -186,9 +188,11 @@ def test_the_owners_text_still_resolves_after_the_block_was_added(tmp_path: Path
     trace = json.loads((tmp_path / TRACES / "a.md.json").read_text(encoding="utf-8"))
     at = written.index("2.4kg")
     segment = next(
-        s for s in trace["segments"] if s["out"][0] <= at < s["out"][1] and s["kind"] == "verbatim"
+        s
+        for s in unpacked(trace, "a.md")
+        if s.out.start <= at < s.out.end and s.kind is Kind.VERBATIM
     )
-    offset = segment["src"][0] + (at - segment["out"][0])
+    offset = segment.src.start + (at - segment.out.start)
     assert source[offset : offset + 5] == "2.4kg"
 
 
