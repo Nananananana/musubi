@@ -19,6 +19,7 @@ wrong fix for. That is the falsification section working.
 | Re-read ratio | **0.32**, from 1.01 | falsified, then fixed (ADR-0036) |
 | Archive reads per unit | **O(1)** archives opened | fixed in [#78](https://github.com/Nananananana/musubi/issues/78) |
 | Screener precision, synthetic | **0.00%** false stops after ADR-0026 | holds |
+| What a run holds | 1.9× → **0.8× of what it read** | cause found, still linear ([#80](https://github.com/Nananananana/musubi/issues/80)) |
 | Encoding detection | 17 of 19 recovered; **the confidence cannot tell which two** | recorded, not fixed ([#82](https://github.com/Nananananana/musubi/issues/82)) |
 | Cleansing precision | not measured | owed |
 | Screener recall | not measured | owed |
@@ -261,17 +262,45 @@ bug report. And it says nothing at all about recall.
 uv run python tools/scaling.py --only memory
 
    notes      input         peak  peak/input
-     100    273,200      405,205        1.5x
-     200    546,400      733,355        1.3x
-     400  1,092,800    1,384,353        1.3x
+     100    273,200      256,086        0.9x
+     200    546,400      429,301        0.8x
+     400  1,092,800      820,399        0.8x
 ```
 
-**Linear, and the ratio does not fall.** A run holds roughly the whole corpus at
-once, so the folder has to fit in memory. That is fine for a vault and not for
-the "everything you have ever written" case [ADR-0007] describes. It is a
-ceiling rather than a defect, and it is filed as
-[#80](https://github.com/Nananananana/musubi/issues/80) so that it is a known
-one.
+**Still linear, and the constant is 2.4x smaller than it was.** A run held 1.9x
+of what it read; it now holds 0.8x, which is less than the corpus rather than
+more.
+
+### The cause was in none of the three places it was filed under
+
+[#80](https://github.com/Nananananana/musubi/issues/80) named the accumulated
+artefact lists, the staging that ADR-0008 requires, and `Source.read()` handing
+back whole units. Measured phase by phase through a 400-note run:
+
+```text
+  after previous + begin    peak    2,053   0.00x
+  after run (all staged)    peak  595,598   0.56x
+  after render(manifest)    peak 2,008,425  1.89x     <- here
+  after promote             peak 2,008,425  1.89x
+```
+
+The accumulation is real and it is 0.56x. The peak is **rendering the
+manifest** — 1.33x of the whole input, transiently, to produce a 269 kB file,
+because `json.dumps` builds every piece and then joins them. Streaming it out
+instead fixed it, and ADR-0008 was never touched
+([ADR-0045](adr/0045-the-peak-was-the-manifest-and-nobody-had-looked.md)).
+
+### And the number had drifted, with nothing watching
+
+This section said 1.5x, 1.3x, 1.3x. By the time anybody looked again it was
+1.8x, 1.7x, 1.7x, and no test and no report could have said so — `tools/` prints
+and nothing compares, which is #84's finding in a second place.
+`tests/test_memory_ceiling.py` is now the gate, sized above the measurement with
+the headroom written down, and checked against the old behaviour before being
+trusted.
+
+**What is still true**: the growth is linear, so the "everything you have ever
+written" case [ADR-0007] describes still has a ceiling. #80 stays open for it.
 
 ## What an export holds, and where its time goes
 

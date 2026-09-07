@@ -39,7 +39,7 @@ from musubi.domain.journal import (
     run_named,
     touching,
 )
-from musubi.domain.manifest import render
+from musubi.domain.manifest import chunks
 from musubi.errors import ContractError, CredentialFoundError
 from musubi.infrastructure.converters import converter_for
 from musubi.infrastructure.corpus import Corpus
@@ -834,7 +834,7 @@ def test_a_corpus_with_no_journal_has_no_history_and_is_not_broken(tmp_path: Pat
     emitter = DocumentEmitter(destination)
     emitter.begin()
     outcome = run(ObsidianSource(root), settings(), emitter, write=True)
-    emitter.stage_manifest(render(outcome.manifest))
+    emitter.stage_manifest(chunks(outcome.manifest))
     emitter.promote()
 
     assert Corpus(destination).journal() == ()

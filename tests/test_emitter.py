@@ -274,7 +274,7 @@ def test_beginning_again_throws_away_what_a_crashed_run_left(tmp_path: Path) -> 
 
 def test_the_manifest_is_staged_and_promoted_with_the_rest(tmp_path: Path) -> None:
     emitter, _ = emit(tmp_path, document("a.md", "x\n"))
-    emitter.stage_manifest('{"contract": "musubi.sync-manifest/1-draft"}\n')
+    emitter.stage_manifest(['{"contract": "musubi.sync-manifest/1-draft"}', "\n"])
     emitter.promote()
     assert (tmp_path / "manifest.json").is_file()
 

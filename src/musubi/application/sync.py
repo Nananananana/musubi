@@ -21,7 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from ..domain.journal import Entry, changes
-from ..domain.manifest import Manifest, render
+from ..domain.manifest import Manifest, chunks
 from ..errors import CredentialFoundError, EmptySourceError
 from ..ports.emitter import Emitter
 from ..ports.source import Source
@@ -113,7 +113,7 @@ def sync(
     # Assembled before the manifest is staged, so that the document says what
     # the run did rather than what it did minus the last step.
     manifest = replace(outcome.manifest, withdrawn=withdrawn)
-    emitter.stage_manifest(render(manifest))
+    emitter.stage_manifest(chunks(manifest))
     promoted = emitter.promote()
 
     # After the promotion, never before it. Deleting first and failing to
