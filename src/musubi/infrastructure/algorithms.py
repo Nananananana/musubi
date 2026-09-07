@@ -40,6 +40,7 @@ from ..errors import ContractError
 from ..ports.converter import Converter
 from ..ports.screener import Screener
 from .converters import STREAM, PdfConverter, converter_for, known_converters
+from .converters.external import PagedConverter
 from .decoding import Decoding
 from .rules import CORE
 from .screeners import default_screener
@@ -119,6 +120,12 @@ def chooser(
                 word_gap=found.word_gap if word_gap is None else word_gap,
                 reading_order_name=pdf_reading_order,
             )
+        # And the optional reader, which has its own extraction and its own
+        # geometry. It was left out when `pdf-reading-order` arrived, so the
+        # setting was silently ignored by the converter an owner installs
+        # *because* their PDFs need a better reader ([ADR-0050]).
+        elif isinstance(found, PagedConverter) and pdf_reading_order != STREAM:
+            found = found.reading(pdf_reading_order)
         # Wrapped whichever converter it is, so the encoding policy is one
         # decision in one place rather than a parameter every converter has to
         # remember to honour (ADR-0031).

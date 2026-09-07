@@ -425,10 +425,11 @@ read numbers.
 uv run python tools/reading_order.py
 fixtures whose correct reading is written down
 
-  fixture                  pdf_text@1  pdfium@1  +columns  +rows
-  two columns                 0.70       0.70      1.00     0.70
-  a table                     0.67       0.67      0.67     1.00
-  one line, out of order      0.67       1.00      1.00     1.00
+  fixture                 default      +columns        +rows
+                        text  pdfium   text  pdfium   text  pdfium
+  two columns           0.70    0.70   1.00    1.00   0.70    0.70
+  a table               0.67    0.67   0.67    0.67   1.00    1.00
+  one line, out of...   0.67    1.00   1.00    1.00   1.00    1.00
 ```
 
 The ratio is how much of the known answer the reading is, by word. The first
@@ -441,9 +442,13 @@ A producer laying out by baseline writes the left cell of a line and then the
 right cell of the same line; reading order is column by column. A table emitted
 cell by cell down each column pairs `Item` with `Tent` rather than with `Mass`.
 
-The last two columns are `pdf-reading-order`, and each reads the layout it is
-for exactly. **No setting reads both**, and that is the finding rather than a
-gap: two columns of prose and a table can be the same geometry with opposite
+The last four columns are `pdf-reading-order`, and each reads the layout it is
+for exactly — **in both readers**. `pdfium@1` was left out when the setting
+arrived and ignored it for three days, which is the reader an owner installs
+*because* their PDFs need a better one
+([ADR-0050](adr/0050-the-better-reader-was-not-offered-the-setting.md)).
+
+**No setting reads both layouts**, and that is the finding rather than a gap: two columns of prose and a table can be the same geometry with opposite
 correct readings, so what separates them is what the words mean and that is not
 in the file
 ([ADR-0042](adr/0042-two-columns-and-a-table-are-the-same-page-and-opposite-readings.md)).

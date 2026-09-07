@@ -187,6 +187,12 @@ Two things follow from that, and both are deliberate:
 left edge is one column, and one column read down is the same answer stream
 order gives.
 
+**Both PDF readers honour it.** `pdf_text@1` tracks the text matrix as it walks
+the content stream; `pdfium@1` asks pdfium for the text rectangles it found, so
+neither invents a threshold for grouping characters into runs. A reader that
+cannot say where its text sits keeps the file's own order whatever is asked
+for, and says so by keeping its plain name.
+
 ## Reading notes that are not UTF-8
 
 musubi reads UTF-8 and UTF-16-with-a-mark. Everything else is refused, because a
