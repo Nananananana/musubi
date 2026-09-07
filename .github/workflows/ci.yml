@@ -76,6 +76,29 @@ jobs:
       - name: Layering
         run: lint-imports
 
+  floors:
+    name: the converter floors
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      # With the extras: an uninstalled converter is measured by nothing, and
+      # the whole point of the floors is that `trafilatura@1` and `pdfium@1`
+      # are held to what they were taken for (ADR-0028).
+      - name: Install with every extra
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev,html,pdf,encoding]"
+
+      # `pytest` gates on the same register. This step prints the table, and
+      # that is its reason: a gate that only speaks when it fails hides a
+      # number that went up, and a floor with less headroom than somebody
+      # thinks is a floor about to become a target (#84).
+      - name: Floors
+        run: python tools/floors.py
+
   contracts:
     name: the schemas ship inside the wheel
     runs-on: ubuntu-latest
