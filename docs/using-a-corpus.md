@@ -191,13 +191,35 @@ has them too.
 | `0` | done | the corpus is what the report says; `manifest.json` is current |
 | `1` | failed | something was wrong with the input or the corpus -- a manifest that will not parse, a path outside the layout, an offset past the end. Fix it and run again |
 | `2` | usage | the arguments were wrong. argparse's own value |
-| `3` | refused | **musubi declined on purpose and wrote nothing.** A credential, a source that emptied under an existing corpus (ADR-0021), or a run in which nothing at all became a document (ADR-0046). Retrying changes nothing; a person has to look, and `plan` predicts this code before `sync` returns it |
+| `3` | refused | **musubi declined on purpose and wrote nothing.** A credential, a source that emptied under an existing corpus (ADR-0021), a run in which nothing at all became a document (ADR-0046), or a destination that belongs to a different source (ADR-0049). Retrying changes nothing; a person has to look, and `plan` predicts this code before `sync` returns it |
 
 The one that matters is the last. An orchestrator that retries a `1` must not
 retry a `3`: a feed with a leaked key in it stays refused until somebody reads
 the message and either fixes the feed or passes `--allow`. The family precedent
 is `0 / 2 / 1`; refusal is `3` here because `2` was argparse's before any of
 this was written, and a code that means two things means neither.
+
+### One destination, one source
+
+**A corpus belongs to the source that wrote it.** The manifest is an account of
+one run, and withdrawal takes out whatever the previous manifest recorded that
+this one does not — so a second source pointed at the same folder does not add
+to a corpus, it **replaces** one.
+
+```bash
+musubi sync ~/notes --into ~/corpus     # fine
+musubi sync ~/feed  --into ~/corpus     # refused: this is ~/notes's corpus
+```
+
+That used to happen silently, with exit 0, and `musubi verify` passed
+afterwards because the corpus really was consistent with the manifest that had
+just replaced it. It is now `DifferentSourceError` and exit 3; `--withdraw-all`
+is the operator saying they meant to replace it.
+
+Sync each source into its own destination. A reader wanting one index over
+several corpora joins them at its end — `musubi export` gives it a line per
+document from each, and the `corpus` field on every line says which it came
+from.
 
 ### The names on standard error
 
