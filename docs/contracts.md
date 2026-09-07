@@ -310,6 +310,50 @@ artefact would make a hundred runs over ten thousand documents a history larger
 than the thing it describes, which is the difference between a feature that
 works on a real corpus and one that only works in a demonstration.
 
+### Why a file did not become a document
+
+`skipped[].reason` is **a stable token a reader can count and filter on**, and
+the set is closed. It reaches the manifest from three places: a source's
+discovery, the pipeline itself, and any converter's refusal.
+
+`detail` beside it is the sentence a person needs and may quote a path or a
+media type; the token is the part to branch on.
+
+| reason | from | what it means |
+|---|---|---|
+| `unknown_format` | source | the suffix is not one musubi maps to a media type. Reported rather than passed over, so a folder says what it holds |
+| `machinery` | source | a directory that is tooling rather than writing: `.git`, `node_modules` |
+| `too_large` | source | the file is past the source's size cap. The cap is in the manifest under the source's `caps` |
+| `too_deep` | source | a Notion export nests archives; past the depth bound musubi stops rather than recursing |
+| `directory_symlink` | source | a link to a directory, which is where a walk becomes a loop |
+| `outside_the_root` | source | a link pointing out of the folder musubi was given ([ADR-0007](adr/0007-musubi-reads-exports-never-services.md)) |
+| `duplicate` | source | two fetch records name the same canonical URL, so one page is carried and the other is said to be the same page |
+| `bad_fetch_record` | source | the `.fetch.json` beside a page could not be read as one ([ADR-0037](adr/0037-a-fetch-record-beside-the-page-is-a-fact-musubi-may-state.md)) |
+| `no_page_id` | source | a Notion file with no page id in its name. The key is the page id, so a unit without one has no stable identity ([`sources.md`](sources.md)) |
+| `unreadable_archive` | source | the zip could not be opened as one |
+| `credential` | pipeline | the screener matched. **The whole run refuses**; this is how the account names which unit ([ADR-0008](adr/0008-a-credential-stops-the-run.md)) |
+| `no_converter` | pipeline | nothing claims that media type. `detail` is the media type, and `musubi config` lists what is claimed and what is merely offered |
+| `undecodable` | converter | not UTF-8 and not detectable. `detail` names what the file looks like and which setting reads it ([ADR-0031](adr/0031-a-guess-with-its-uncertainty-attached-is-not-the-guess-that-was-forbidden.md)) |
+| `not_a_pdf` | converter | the file does not begin with a PDF header |
+| `no_pages` | converter | no page objects were found. On a PDF 1.5 this is `pdf_text@1` being honest about a compressed object stream, and `musubi[pdf]` reads it |
+| `no_text_layer` | converter | pages, none with extractable text: a scan. OCR belongs to a program run **before** musubi ([ADR-0007](adr/0007-musubi-reads-exports-never-services.md)) |
+| `composite_font` | converter | the text is set in a `Type0` font, whose bytes are glyph indices rather than characters. This is how every PDF holding Japanese encodes its text; `musubi[pdf]` reads the CMap ([ADR-0039](adr/0039-a-fixture-whose-answer-is-known-and-the-two-things-it-found.md)) |
+| `stream_too_large` | converter | a content stream inflated past the bound. A few hundred bytes of compressed zeroes should not end a run |
+| `unparseable_html` | converter | the markup could not be parsed at all |
+| `no_main_content` | converter | an extractor ran and found no article in the page: navigation and boilerplate and nothing else |
+| `extractor_missing` | converter | an optional extra was named and is not installed. `detail` says what to install |
+| `unreadable` | converter | an extractor raised on the file. The blame is the library's, and `detail` says which |
+
+**A skip is not a failure.** A run that skipped some files exits 0 and the
+manifest accounts for each one. A run that skipped **all** of them does not
+([ADR-0046](adr/0046-a-failure-that-a-program-can-name.md)): that is
+`EverythingSkippedError` and exit 3, because a corpus with nothing in it read
+as success is the shape this project keeps finding.
+
+The list is checked against the code rather than maintained beside it: a reason
+that can reach a manifest and is not in the table above fails musubi's own
+build.
+
 ### The error catalogue
 
 The only one of the four that is **not written to a corpus**. It is printed by
