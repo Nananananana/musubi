@@ -265,6 +265,23 @@ artefact would make a hundred runs over ten thousand documents a history larger
 than the thing it describes, which is the difference between a feature that
 works on a real corpus and one that only works in a demonstration.
 
+### `origin`, and why a key is not a filename
+
+A trace map's `source.origin` is **how the source finds the unit again** — a
+path relative to the source root for a folder, an entry name for an archive.
+Opaque: only the source that produced it may parse it.
+
+It is there because a `unit_key` is the unit's *identity* and a source may
+derive one. `FetchedSource` names its artefacts `.md` whatever the page was
+([ADR-0041](adr/0041-an-artefact-is-named-for-what-musubi-wrote.md)), so a
+reader that resolved the source file by joining the key to the root would ask
+for a page that does not exist — and a missing source degrades rather than
+fails, so it would do it silently.
+
+**A consumer opening the original follows `origin`**, and falls back to
+`unit_key` only for a map written before the field existed, where the two were
+the same thing. `key_derivation` in the manifest says which sources derive.
+
 ### `title`, and why `null` is not `""`
 
 An artefact's `title` is the document's own front-matter `title`, or its first

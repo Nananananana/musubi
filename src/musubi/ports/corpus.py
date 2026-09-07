@@ -32,6 +32,9 @@ class SourceReference:
     media_type: str
     encoding: str
     bom_bytes: int
+    #: How the source finds the file, when the map says. Empty on a map
+    #: written before it did, where the key was the filename ([ADR-0041]).
+    origin: str = ""
 
 
 @dataclass(frozen=True, slots=True)

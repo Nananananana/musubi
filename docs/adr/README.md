@@ -55,6 +55,7 @@ later ADR supersedes it and says so.
 | [0038](0038-the-number-that-goes-up-when-the-guarantee-stops-holding.md) | The number that goes up when the guarantee stops holding |
 | [0039](0039-a-fixture-whose-answer-is-known-and-the-two-things-it-found.md) | A fixture whose answer is known, and the two things it found |
 | [0040](0040-a-corpus-says-what-it-holds-and-what-it-is-called.md) | A corpus says what it holds, and what it is called |
+| [0041](0041-an-artefact-is-named-for-what-musubi-wrote.md) | An artefact is named for what musubi wrote |
 
 [0004](0004-a-conversion-carries-a-map-back-to-its-source.md) is the one to read
 first. The rest of the design is arranged around it, and

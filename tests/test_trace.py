@@ -491,7 +491,10 @@ def test_a_key_naming_a_directory_that_is_not_there_gives_no_file(tmp_path: Path
     corpus, key, span = where(into, "deep/a.md", "2.4kg")
     sidecar = into / TRACES / "deep" / "a.md.json"
     body = json.loads(sidecar.read_text(encoding="utf-8"))
-    body["source"]["unit_key"] = "nowhere/a.md"
+    # `origin` and not `unit_key`: the key is the unit's identity and a source
+    # may derive it, so the map records where the source finds the file and
+    # that is what the lookup follows ([ADR-0041]).
+    body["source"]["origin"] = "nowhere/a.md"
     sidecar.write_text(json.dumps(body), encoding="utf-8")
 
     assert resolve(corpus, key, span).source_path is None
@@ -530,7 +533,7 @@ def test_a_key_whose_folder_is_actually_a_file_gives_no_file(tmp_path: Path) -> 
     _, into = built(tmp_path)
     sidecar = into / TRACES / "design" / "gear.md.json"
     body = json.loads(sidecar.read_text(encoding="utf-8"))
-    body["source"]["unit_key"] = "design/gear.md/deeper.md"
+    body["source"]["origin"] = "design/gear.md/deeper.md"
     sidecar.write_text(json.dumps(body), encoding="utf-8")
 
     assert resolve(Corpus(into), "design/gear.md", Span(0, 3)).source_path is None
