@@ -22,7 +22,7 @@ from dataclasses import dataclass, replace
 
 from ..domain.journal import Entry, changes
 from ..domain.manifest import Manifest, chunks
-from ..errors import CredentialFoundError, EmptySourceError
+from ..errors import CredentialFoundError, EmptySourceError, EverythingSkippedError
 from ..ports.emitter import Emitter
 from ..ports.source import Source
 from .pipeline import Settings, run
@@ -55,12 +55,29 @@ def withdrawals(held: frozenset[str] | set[str], manifest: Manifest) -> tuple[st
 
 
 def empties_the_corpus(held: frozenset[str] | set[str], manifest: Manifest) -> bool:
-    """Whether this run read nothing and would delete a corpus that exists.
+    """Whether this run read **nothing at all** and would delete a corpus.
 
     The ambiguous case, and only that one: see
     :class:`~musubi.errors.EmptySourceError`.
+
+    `units_read` is the part that was missing. Without it this also fired when
+    two hundred files were read and every one of them was skipped -- a corpus
+    refused with the words *produced no units*, which sent its owner to look at
+    whether the folder could be read at all. It could. That case is
+    :class:`~musubi.errors.EverythingSkippedError` and it is a different
+    sentence with a different fix ([ADR-0046]).
     """
-    return not manifest.artefacts and bool(held)
+    return not manifest.artefacts and not manifest.coverage.units_read and bool(held)
+
+
+def skipped_everything(manifest: Manifest) -> bool:
+    """Whether units were read and not one of them became a document.
+
+    Independent of whether a corpus exists: a first run over a folder musubi
+    cannot read is the same event as a later one, and it was silent in both
+    ([ADR-0046]).
+    """
+    return bool(manifest.coverage.units_read) and not manifest.artefacts
 
 
 def sync(
@@ -99,6 +116,21 @@ def sync(
         )
 
     withdrawn = withdrawals(held, outcome.manifest)
+
+    if skipped_everything(outcome.manifest) and not withdraw_all:
+        emitter.discard()
+        also = (
+            f" and {len(withdrawn)} file(s) in the corpus would be taken back out"
+            if withdrawn
+            else ""
+        )
+        raise EverythingSkippedError(
+            f"{outcome.manifest.coverage.units_read} unit(s) were read from "
+            f"{source.source_id!r} and not one of them became a document{also}. The "
+            f"folder can be read; nothing in it could be converted. The report lists a "
+            f"reason per file -- an optional extra may be what is missing. Nothing was "
+            f"written and nothing was deleted. Pass --withdraw-all if this is right."
+        )
 
     if empties_the_corpus(held, outcome.manifest) and not withdraw_all:
         emitter.discard()

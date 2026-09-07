@@ -24,6 +24,7 @@ from musubi.application.pipeline import Settings
 from musubi.application.sync import sync
 from musubi.application.trace import STATUSES, as_document, resolve
 from musubi.domain.span import Span
+from musubi.errors import DONE, FAILED, REFUSED, USAGE
 from musubi.infrastructure.converters import converter_for
 from musubi.infrastructure.corpus import Corpus
 from musubi.infrastructure.emitters import DOCUMENTS, DocumentEmitter
@@ -31,7 +32,6 @@ from musubi.infrastructure.rules import CORE
 from musubi.infrastructure.screeners import default_screener
 from musubi.infrastructure.sources import ObsidianSource
 from musubi.interfaces.cli import main
-from musubi.interfaces.cli.main import DONE, FAILED, REFUSED, USAGE
 from musubi.interfaces.mcp import serve
 
 NOTE = "# テント設計メモ\n\nテントは 2.4kg。\n"
@@ -120,6 +120,75 @@ def test_an_emptied_source_is_a_refusal_too(
 
     assert main(["sync", str(root), "--into", str(into)]) == REFUSED
     assert main(["sync", str(root), "--into", str(into), "--withdraw-all"]) == DONE
+
+
+def test_a_run_that_converted_nothing_is_a_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The question `sora` asked musubi to answer: is a run that skipped
+    everything a success?
+
+    It is not. The owner pointed musubi at a folder, musubi read every file in
+    it and wrote none of them, and the only thing that said so was a count of
+    skips in a report no program reads. Exiting 0 there is the same shape as
+    `0 of 0 characters traceable (100.0%)` at the one place every caller looks
+    ([ADR-0046]).
+
+    A skip list is not this. Some files failing is reported and is normal;
+    **not one file succeeding** is the count at which "musubi read your folder"
+    and "musubi read nothing of it" cannot be told apart from outside.
+    """
+    monkeypatch.chdir(tmp_path)
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    # Read as a unit, converted by nothing: a text file musubi cannot decode.
+    (vault / "notes.md").write_bytes("テントは 2.4kg。".encode("cp932"))
+    into = tmp_path / "corpus"
+
+    assert main(["sync", str(vault), "--into", str(into), "--as", "filesystem"]) == REFUSED
+    assert not (into / DOCUMENTS).exists(), "a refusal writes nothing"
+    assert (
+        main(["sync", str(vault), "--into", str(into), "--as", "filesystem", "--withdraw-all"])
+        == DONE
+    )
+
+
+def test_some_files_failing_is_still_a_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The other side, and what stops the refusal above from being a nuisance.
+
+    A vault of notes beside a folder of images is the ordinary case, and every
+    image is a skip. One emitted document proves the run did something, which
+    is the whole distinction.
+    """
+    monkeypatch.chdir(tmp_path)
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "good.md").write_text(NOTE, encoding="utf-8")
+    (vault / "bad.md").write_bytes("テントは 2.4kg。".encode("cp932"))
+
+    assert main(["sync", str(vault), "--into", str(tmp_path / "c"), "--as", "filesystem"]) == DONE
+
+
+def test_the_error_catalogue_is_the_names_an_orchestrator_will_see(
+    capsysbinary: pytest.CaptureFixture[bytes],
+) -> None:
+    """`sora` folds incidents by the word before the first colon on stderr and
+    keeps nothing else from the line. That makes the set of words an interface,
+    and `musubi errors --json` is where it is written down rather than
+    discovered by being surprised."""
+    assert main(["errors", "--json"]) == DONE
+    body = json.loads(capsysbinary.readouterr().out.decode("utf-8"))
+
+    names = {one["kind"] for one in body["errors"]}
+    assert {"CredentialFoundError", "EverythingSkippedError", "Usage", "Unexpected"} <= names
+    # The two an orchestrator branches on, stated rather than inferred.
+    refusals = {one["kind"] for one in body["errors"] if one["exit_code"] == REFUSED}
+    assert all(one["outcome"] == "refused" for one in body["errors"] if one["kind"] in refusals)
+    assert not any(one["retryable"] for one in body["errors"] if one["kind"] in refusals), (
+        "a refusal that says retrying may help is the one mistake this table exists to stop"
+    )
 
 
 def test_a_plan_predicts_the_code_a_sync_would_exit_with(

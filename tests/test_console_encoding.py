@@ -343,6 +343,34 @@ def test_blame_as_a_document_is_utf8_whatever_the_console_is(
     assert any("𩸽" in one["path"] for one in body)
 
 
+def test_the_error_catalogue_prints_to_a_narrow_console(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`musubi errors` carries a Japanese line per kind, which a `cp932`
+    console can show and an ASCII one cannot.
+
+    The catalogue is what a program reads to learn musubi's failure names, so a
+    console that cannot print it is a reader that cannot be told -- and
+    [ADR-0020]'s promise is that the console never fails the run either way.
+    """
+    console = narrow_console(monkeypatch)
+    assert main(["errors"]) == 0
+    shown = console.written().decode("cp932", errors="replace")
+    assert "CredentialFoundError" in shown
+    assert "EverythingSkippedError" in shown
+
+
+def test_the_error_catalogue_as_a_document_is_utf8_whatever_the_console_is(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`--json` is for a program, so it goes out as UTF-8 through the buffer
+    ([ADR-0020]). The Japanese lines are the part that would not survive
+    otherwise, and they are the half `sora` displays."""
+    console = narrow_console(monkeypatch)
+    assert main(["errors", "--json"]) == 0
+    body = json.loads(console.written().decode("utf-8"))
+    assert body["contract"] == "musubi.errors/1-draft"
+    assert any("認証情報" in one["detail_ja"] for one in body["errors"])
+
+
 def test_every_command_the_parser_knows_is_exercised_here() -> None:
     """The drift guard, and the reason this file needs one.
 

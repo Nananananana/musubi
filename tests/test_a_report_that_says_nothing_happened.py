@@ -1,4 +1,4 @@
-"""Two ways a run that achieved nothing read as a run that went well.
+"""Three ways a run that achieved nothing read as a run that went well.
 
 Both are the same shape as the `answer_width` finding, and it is the shape this
 repository keeps meeting: **the number a reader trusts, maximised by total
@@ -19,6 +19,12 @@ cannot change what a folder builds. The cost is that somebody installs
 `musubi[pdf]` *because* their PDFs came back `no_pages`, runs it again, and gets
 `no_pages` — with the converter that would read them sitting installed and
 unmentioned.
+
+The third was found by `sora` asking whether a run that skipped everything is a
+success, and it is the same shape again at the one place every program looks:
+**the exit code was 0**. Both fixes above are for a person reading a report,
+and neither reaches a caller. `EverythingSkippedError` is the third
+([ADR-0046]), and it is why the plans below refuse.
 """
 
 from __future__ import annotations
@@ -30,6 +36,7 @@ import pytest
 from musubi import __version__
 from musubi.application.pipeline import Settings, run
 from musubi.domain.manifest import Manifest
+from musubi.errors import REFUSED
 from musubi.infrastructure.converters import converter_for
 from musubi.infrastructure.converters.external import available
 from musubi.infrastructure.emitters import DocumentEmitter
@@ -93,7 +100,11 @@ def test_the_coverage_block_says_so_too(
     (vault / "report.pdf").write_bytes(modern())
     monkeypatch.chdir(tmp_path)
 
-    assert main(["plan", str(vault), "--as", "filesystem"]) == 0
+    # REFUSED, and not 0. The report below was the fix for a **person** reading
+    # it; the exit code is the same finding for a program, and a run that
+    # converted nothing exiting 0 was the loudest metric of all maximised by
+    # total failure ([ADR-0046]). A plan predicts the code a sync would use.
+    assert main(["plan", str(vault), "--as", "filesystem"]) == REFUSED
     printed = capsys.readouterr().out
 
     assert "0 of 0 characters traceable" not in printed
@@ -119,7 +130,7 @@ def test_a_refusal_names_the_installed_converter_that_could_read_it(
     (vault / "report.pdf").write_bytes(modern())
     monkeypatch.chdir(tmp_path)
 
-    assert main(["plan", str(vault), "--as", "filesystem"]) == 0
+    assert main(["plan", str(vault), "--as", "filesystem"]) == REFUSED
     printed = capsys.readouterr().out
 
     assert "no_pages" in printed

@@ -15,17 +15,24 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import traceback
 from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 from ... import __version__
 from ...application.export import SHAPES, documents, write, write_parquet
 from ...application.pipeline import Outcome, Settings, run
-from ...application.sync import Synced, empties_the_corpus, sync, withdrawals
+from ...application.sync import (
+    Synced,
+    empties_the_corpus,
+    skipped_everything,
+    sync,
+    withdrawals,
+)
 from ...application.trace import Resolution, as_document, resolve
 from ...application.verify import Verified, verify
 from ...config import SOURCES, Configuration, describe, destination, settings_from, source_from
@@ -36,9 +43,17 @@ from ...domain.manifest import Coverage, Manifest, render
 from ...domain.span import Span
 from ...domain.trace import CHARACTERS
 from ...errors import (
+    CATALOGUE,
+    DONE,
+    ERRORS_CONTRACT,
+    FAILED,
+    OPEN_NAMESPACES,
+    REFUSED,
+    USAGE,
     ContractError,
     CredentialFoundError,
     EmptySourceError,
+    EverythingSkippedError,
     MusubiError,
     TraceError,
 )
@@ -59,19 +74,10 @@ __all__ = ["main"]
 #: fourth was added and `tests/test_console_encoding.py` did not notice.
 COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {}
 
-#: What the process says when it exits, and what a caller may conclude.
-#:
-#: ``REFUSED`` is the one an orchestrator has to be able to tell apart: musubi
-#: declined on purpose -- a credential, or a source that emptied -- and
-#: nothing was written. Retrying changes nothing; a person has to look. Under
-#: ``FAILED`` something was wrong with the input or the corpus, and a retry
-#: after fixing it is the right move. ``USAGE`` is argparse's own value and
-#: is why refusal is not 2: the family precedent is 0/2/1, and 2 was taken
-#: here by the argument parser before any of this was written.
-DONE = 0
-FAILED = 1
-USAGE = 2
-REFUSED = 3
+#: Re-exported. The codes and the catalogue that quotes them live together in
+#: `musubi.errors`, because they are musubi's contract with whatever runs it
+#: and not a detail of this interface -- and because a code defined in one
+#: place and described in another is two places to change.
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -83,12 +89,37 @@ def main(argv: Sequence[str] | None = None) -> int:
         return USAGE
     try:
         return COMMANDS[arguments.command](arguments)
-    except (CredentialFoundError, EmptySourceError) as refusal:
-        print(f"musubi: {refusal}", file=sys.stderr)
-        return REFUSED
+    except (CredentialFoundError, EmptySourceError, EverythingSkippedError) as refusal:
+        return _stderr(type(refusal).__name__, str(refusal), REFUSED)
     except MusubiError as error:
-        print(f"musubi: {error}", file=sys.stderr)
+        return _stderr(type(error).__name__, str(error), FAILED)
+    except OSError as refused:
+        # The machine, not the data, and the only failure here worth retrying:
+        # a full disk, a file another process holds, a path that stopped
+        # resolving mid-run. Caught by name rather than swallowed with
+        # everything else, so that a bug still arrives as a bug.
+        return _stderr("Unreadable", f"the file system refused: {refused}", FAILED)
+    except Exception as bug:
+        # A bug. The traceback still goes to the person who has to fix it; what
+        # this adds is a **first line with a name on it**, so that a program
+        # folding failures by kind gets one bucket called `Unexpected` rather
+        # than one per line of Python it happened to see first ([ADR-0046]).
+        _stderr("Unexpected", f"a bug in musubi: {type(bug).__name__}: {bug}", FAILED)
+        traceback.print_exception(bug, file=sys.stderr)
         return FAILED
+
+
+def _stderr(kind: str, message: str, code: int) -> int:
+    """One line, beginning with the kind, and then the code.
+
+    **The name comes first because that is the whole interface.** It used to
+    be `musubi: ...`, so a reader folding incidents by the word before the
+    colon put every failure musubi has into one bucket called `musubi`
+    ([ADR-0046]). Everything after the colon is for a person and may quote a
+    path, so nothing downstream should keep it.
+    """
+    print(f"{kind}: {message}", file=sys.stderr)
+    return code
 
 
 def _readable() -> None:
@@ -122,10 +153,24 @@ def _document(body: str) -> None:
     sys.stdout.buffer.flush()
 
 
+class _Parser(argparse.ArgumentParser):
+    """An `ArgumentParser` whose refusals begin with a name.
+
+    argparse writes `usage: ...` first, so a reader taking the word before the
+    first colon recorded every bad command line under a kind called `usage`
+    ([ADR-0046]). The usage block still follows, for the person.
+    """
+
+    def error(self, message: str) -> NoReturn:
+        print(f"Usage: {message}", file=sys.stderr)
+        self.print_usage(sys.stderr)
+        raise SystemExit(USAGE)
+
+
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="musubi", description=__doc__.splitlines()[0])
+    parser = _Parser(prog="musubi", description=__doc__.splitlines()[0])
     parser.add_argument("--version", action="version", version=f"musubi {__version__}")
-    commands = parser.add_subparsers(dest="command")
+    commands = parser.add_subparsers(dest="command", parser_class=_Parser)
 
     plan = commands.add_parser(
         "plan",
@@ -357,6 +402,18 @@ def _parser() -> argparse.ArgumentParser:
     )
     setting.add_argument("--json", action="store_true", help="print the settings as a document")
 
+    failures = commands.add_parser(
+        "errors",
+        help="print every way musubi can fail, and what each means",
+        description=(
+            "The closed set of names musubi prints before the first colon on standard "
+            "error, with the exit code, whether asking again could help, and one line "
+            "in English and in Japanese. For a program that folds failures by name: a "
+            "kind it has never been told about is an incident it cannot name."
+        ),
+    )
+    failures.add_argument("--json", action="store_true", help="print the catalogue as a document")
+
     return parser
 
 
@@ -415,7 +472,8 @@ def _shared(command: argparse.ArgumentParser) -> None:
     command.add_argument(
         "--withdraw-all",
         action="store_true",
-        help="proceed when the source is empty and the whole corpus would be taken back out",
+        help="proceed when a run produces no documents at all: an empty source, or one "
+        "whose every unit was skipped",
     )
     command.add_argument("--json", action="store_true", help="print the manifest instead")
 
@@ -465,7 +523,11 @@ def _plan(arguments: argparse.Namespace) -> int:
     # A dry run that reports what would be written and stays silent about what
     # would be deleted is not a dry run of the same command.
     taken = withdrawals(held, outcome.manifest)
-    stops = empties_the_corpus(held, outcome.manifest) and not arguments.withdraw_all
+    # A plan predicts the code a sync would exit with, so it has to predict
+    # both refusals ([ADR-0012]).
+    stops = (
+        empties_the_corpus(held, outcome.manifest) or skipped_everything(outcome.manifest)
+    ) and not arguments.withdraw_all
 
     if arguments.json:
         _document(render(replace(outcome.manifest, withdrawn=taken)))
@@ -493,7 +555,17 @@ def _verify(arguments: argparse.Namespace) -> int:
         _document(json.dumps(_checked(checked), ensure_ascii=False, indent=2) + "\n")
     else:
         _report_verify(checked)
-    return 0 if checked.holds else 1
+    if checked.holds:
+        return DONE
+    # The report on standard output names each fault. This adds the one line a
+    # program reads: a corpus that does not verify is a named condition, and
+    # exiting 1 with nothing on stderr left a reader guessing at the word
+    # ([ADR-0046]).
+    return _stderr(
+        "Unverified",
+        f"{len(checked.faults)} check(s) did not hold against {checked.destination}",
+        FAILED,
+    )
 
 
 def _checked(checked: Verified) -> dict[str, Any]:
@@ -1146,6 +1218,59 @@ def _config(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _errors(arguments: argparse.Namespace) -> int:
+    """The catalogue, for a program that folds failures by name.
+
+    `sora` keeps an incident log and folds by the word before the first colon
+    on `stderr`, keeping **nothing else from the line** -- because a message
+    may quote a path from somebody's own machine. That makes the set of names
+    an interface, and an interface nobody published is one every reader has to
+    discover by being surprised.
+
+    Printed rather than served, and on demand rather than streamed: reporting
+    is still `exit, and print` ([ADR-0046]).
+    """
+    if arguments.json:
+        _document(
+            json.dumps(
+                {
+                    "contract": ERRORS_CONTRACT,
+                    "by": f"musubi/{__version__}",
+                    "errors": [
+                        {
+                            "kind": kind.kind,
+                            "exit_code": kind.exit_code,
+                            "outcome": kind.outcome,
+                            "retryable": kind.retryable,
+                            "detail": kind.detail,
+                            "detail_ja": kind.detail_ja,
+                        }
+                        for kind in CATALOGUE
+                    ],
+                    "open_namespaces": list(OPEN_NAMESPACES),
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n"
+        )
+        return DONE
+
+    print(f"musubi {__version__} — every way it can fail")
+    print()
+    print(f"  {'kind':24s} {'exit':>4s}  {'outcome':10s} {'retry':>5s}  what it means")
+    for kind in CATALOGUE:
+        print(
+            f"  {kind.kind:24s} {kind.exit_code:>4d}  {kind.outcome:10s} "
+            f"{('yes' if kind.retryable else 'no'):>5s}  {kind.detail.splitlines()[0]}"
+        )
+    print()
+    print("  The name is what is printed before the first colon on standard error.")
+    print("  Everything after it is for a person and may quote a path, so a reader")
+    print("  folding failures by kind should keep the name and drop the rest.")
+    return DONE
+
+
 COMMANDS.update(
     {
         "plan": _plan,
@@ -1158,5 +1283,6 @@ COMMANDS.update(
         "diff": _diff,
         "mcp": _mcp,
         "config": _config,
+        "errors": _errors,
     }
 )
